@@ -7,14 +7,16 @@
  * to the preview /import/<token>. Bilingual (de default) like the other
  * marketing-facing surfaces, see src/lib/i18n/locale.ts.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ClipboardPaste, FileText, Loader2, ShieldCheck, Upload } from 'lucide-react'
+import { ClipboardPaste, Loader2, ShieldCheck, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useUiLocale, UiLocaleSwitcher } from '@/lib/i18n/client'
 import { pick } from '@/lib/i18n/locale'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { formatHint, type Hint } from '@/lib/script-import/format-hints'
+import { FileDropzone } from '@/components/import/file-dropzone'
 
 interface Challenge {
   salt: string
@@ -24,78 +26,6 @@ interface Challenge {
 }
 
 const MAX_MB = 20
-
-type Locale = 'de' | 'en'
-/** proceed: the file is still accepted (PDF), the hint is advice only. */
-type Hint = { title: string; body: string; steps: string[]; proceed?: boolean }
-
-/**
- * Hints per file extension. .docx/.odt/.rtf: none. .doc and .pdf: accepted,
- * with a non-blocking hint (proceed). .pages and anything else: rejected with
- * instructions. .doc/.odt/.rtf are converted to .docx server-side by
- * LibreOffice (src/lib/script-import/libreoffice.ts), which also turns old
- * Equation Editor formulas into Word formulas (some Symbol-font glyphs come
- * out wrong; cleanup.ts asks the model to fix them).
- */
-function formatHint(ext: string, locale: Locale): Hint | null {
-  const de = locale === 'de'
-  const resave = de
-    ? [
-        'Word: Datei → Speichern unter → Dateityp «Word-Dokument (*.docx)»',
-        'LibreOffice: Datei → Speichern unter → Dateityp «Word 2007–365 (.docx)»',
-        'Pages: Ablage → Exportieren → Word',
-      ]
-    : [
-        'Word: File → Save As → type "Word Document (*.docx)"',
-        'LibreOffice: File → Save As → type "Word 2007–365 (.docx)"',
-        'Pages: File → Export To → Word',
-      ]
-  switch (ext) {
-    case 'doc':
-      // Accepted (LibreOffice converts it server-side); the hint is just a smile.
-      return de
-        ? {
-            title: 'Oh, eine .doc-Datei – die ist älter als manche Ihrer Schülerinnen und Schüler 😄',
-            body: 'Kein Problem, wir wandeln sie um. Formeln aus dem alten Formel-Editor werden dabei zu echten Formeln; bitte danach kurz prüfen.',
-            steps: [],
-            proceed: true,
-          }
-        : {
-            title: 'Oh, a .doc file – older than some of your students 😄',
-            body: "No problem, we'll convert it. Formulas from the old equation editor become real formulas along the way; please check them afterwards.",
-            steps: [],
-            proceed: true,
-          }
-    case 'odt':
-    case 'rtf':
-      return null
-    case 'pages':
-      return de
-        ? { title: 'Pages-Dateien können wir (noch) nicht lesen.', body: 'Exportieren Sie sie als Word-Datei:', steps: [resave[2]] }
-        : { title: "We can't read Pages files (yet).", body: 'Export it as a Word file:', steps: [resave[2]] }
-    case 'pdf':
-      // Not blocking: the PDF is imported (convert-pdf.ts), but the original is better.
-      return de
-        ? {
-            title: 'PDF geht – aber haben Sie die Originaldatei?',
-            body: 'Aus der Originaldatei gelingt das Skript meist genauer, weil Formeln, Tabellen und Bilder direkt übernommen werden können: eine Word-Datei hochladen oder LaTeX- bzw. Markdown-Text einfügen. Aus einem PDF liest die KI den Inhalt vom Seitenbild ab und schneidet Abbildungen aus – das klappt oft gut, aber nicht immer.',
-            steps: [],
-            proceed: true,
-          }
-        : {
-            title: 'PDF works – but do you have the original file?',
-            body: 'The original file usually gives a more accurate skript, because formulas, tables and images can be taken over directly: upload a Word file or paste LaTeX or Markdown text. From a PDF the AI reads the content off the page images and cuts out figures – this often works well, but not always.',
-            steps: [],
-            proceed: true,
-          }
-    case 'docx':
-      return null
-    default:
-      return de
-        ? { title: 'Dieses Format können wir nicht lesen.', body: 'Bitte laden Sie eine Word-Datei (.docx) hoch.', steps: [] }
-        : { title: "We can't read this format.", body: 'Please upload a Word file (.docx).', steps: [] }
-  }
-}
 
 function zeroBits(bytes: Uint8Array): number {
   let bits = 0
@@ -124,9 +54,7 @@ export function ImportUpload() {
   const locale = useUiLocale()
   const t = (de: string, en: string) => pick(locale, { de, en })
   const router = useRouter()
-  const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
-  const [dragging, setDragging] = useState(false)
   const [pow, setPow] = useState<{ challenge: Challenge; nonce: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -270,41 +198,14 @@ export function ImportUpload() {
               )}
             </div>
           ) : (
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => inputRef.current?.click()}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && inputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragging(true)
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setDragging(false)
-              pickFile(e.dataTransfer.files[0])
-            }}
-            className={`flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-10 cursor-pointer transition-colors ${
-              dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-            }`}
-          >
-            {file ? <FileText className="w-10 h-10 text-primary" /> : <Upload className="w-10 h-10 text-muted-foreground" />}
-            <span className="font-medium text-center break-all">
-              {file ? file.name : t('Word-Datei oder PDF hierher ziehen oder klicken', 'Drop a Word file or PDF here or click')}
-            </span>
-            <span className="text-sm text-muted-foreground">
-              {t(`.docx, .doc, .odt, .rtf oder .pdf, bis ${MAX_MB} MB, bis 30 Seiten`, `.docx, .doc, .odt, .rtf or .pdf, up to ${MAX_MB} MB, up to 30 pages`)}
-            </span>
-            <input
-              ref={inputRef}
-              type="file"
-              // Old/other formats are selectable on purpose: picking one shows formatHint.
-              accept=".docx,.doc,.odt,.rtf,.pdf,.pages,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              className="hidden"
-              onChange={(e) => pickFile(e.target.files?.[0])}
-            />
-          </div>
+          <FileDropzone
+            // Old/other formats are selectable on purpose: picking one shows formatHint.
+            accept=".docx,.doc,.odt,.rtf,.pdf,.pages,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onFile={pickFile}
+            fileName={file?.name}
+            prompt={t('Word-Datei oder PDF hierher ziehen oder klicken', 'Drop a Word file or PDF here or click')}
+            hint={t(`.docx, .doc, .odt, .rtf oder .pdf, bis ${MAX_MB} MB, bis 30 Seiten`, `.docx, .doc, .odt, .rtf or .pdf, up to ${MAX_MB} MB, up to 30 pages`)}
+          />
           )}
 
           <div className="flex gap-3 rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">

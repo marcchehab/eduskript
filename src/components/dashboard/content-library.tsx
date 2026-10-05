@@ -26,6 +26,7 @@ import { SkriptAuthor, User, Collection, Skript } from "@prisma/client";
 import { checkSkriptPermissions } from "@/lib/permissions";
 import { api, handleJsonResponse } from "@/lib/api-error-handler";
 import { CreateSkriptModal } from "./create-skript-modal";
+import { ImportModal } from "./import-modal";
 import { HelpVideoLink } from "@/components/help-video/help-video-link";
 import { AlertDialogModal } from "@/components/ui/alert-dialog-modal";
 import { useAlertDialog } from "@/hooks/use-alert-dialog";
@@ -281,15 +282,7 @@ export function ContentLibrary({
                 }
               />
             </div>
-            <Button
-              variant="outline"
-              className="items-center justify-center gap-1 h-10 shrink-0 whitespace-nowrap text-xs"
-              onClick={() => setCreateCollectionOpen(true)}
-              title="Create a collection — a group with an accent color that bundles several skripts in the sidebar of your page"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Collection
-            </Button>
+            <ImportModal onImported={fetchContent} />
           </div>
           <HelpVideoLink topic="create-skript" className="text-xs self-start" />
         </CardHeader>
@@ -358,23 +351,35 @@ export function ContentLibrary({
           )}
 
           {/* Collections Section */}
-          {filteredCollections.length > 0 && (
+          {(filteredCollections.length > 0 || !searchTerm) && (
             <div>
-              <button
-                type="button"
-                onClick={() => setCollectionsExpanded((v) => !v)}
-                className="w-full flex items-center justify-between text-sm font-medium text-muted-foreground mb-3 hover:text-foreground"
-              >
-                <span className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4" />
-                  Collections ({filteredCollections.length})
-                </span>
-                {collectionsExpanded ? (
-                  <ChevronDown className="w-4 h-4" />
-                ) : (
-                  <ChevronRight className="w-4 h-4" />
-                )}
-              </button>
+              <div className="flex items-center gap-1 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setCollectionsExpanded((v) => !v)}
+                  className="flex-1 flex items-center justify-between text-sm font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <span className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" />
+                    Collections ({filteredCollections.length})
+                  </span>
+                  {collectionsExpanded ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0 text-muted-foreground"
+                  onClick={() => setCreateCollectionOpen(true)}
+                  title="Create a collection — a group with an accent color that bundles several skripts in the sidebar of your page"
+                  aria-label="Create collection"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
               {collectionsExpanded && (
                 <Droppable
                   droppableId="library-collections"

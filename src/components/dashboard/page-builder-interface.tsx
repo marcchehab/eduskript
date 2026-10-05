@@ -4,7 +4,6 @@ import { DragDropContext, DropResult, DragStart } from '@hello-pangea/dnd'
 import { useState, useEffect } from 'react'
 import { ContentLibrary } from './content-library'
 import { PageBuilder } from './page-builder'
-import { ImportExportSettings } from './import-export-settings'
 import { EmptyPageDragHint } from './empty-page-drag-hint'
 import { useSession } from 'next-auth/react'
 import { checkSkriptPermissions } from '@/lib/permissions'
@@ -876,8 +875,6 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             context={context}
           />
 
-          {/* Import/Export - under page builder */}
-          <ImportExportSettings />
         </div>
 
         {/* Content Library - Right Side */}

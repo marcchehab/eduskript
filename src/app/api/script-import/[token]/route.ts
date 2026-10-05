@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server'
 import { getImportByToken, IMPORT_COOKIE } from '@/lib/script-import/service'
 
-/** Status poll for the preview page. The token is the only credential. */
+/**
+ * Status poll for the preview page and the dashboard import modal. The token
+ * is the only credential; title/warnings are what the preview shows anyway.
+ */
 export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const row = await getImportByToken(token)
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(
-    { status: row.status, error: row.error, claimed: Boolean(row.claimedAt) },
+    { status: row.status, error: row.error, claimed: Boolean(row.claimedAt), title: row.title, pages: row.pages.length, warnings: row.warnings },
     { headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' } }
   )
 }

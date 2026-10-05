@@ -18,6 +18,7 @@ import { useUiLocale, UiLocaleSwitcher } from '@/lib/i18n/client'
 import { pick } from '@/lib/i18n/locale'
 import { ThemeToggle } from '@/components/theme-toggle'
 import type { ImportWarnings } from '@/lib/script-import/service'
+import { importNotices } from '@/lib/script-import/format-hints'
 
 interface Props {
   token: string
@@ -131,57 +132,7 @@ export function ImportPreview(props: Props) {
   }
 
   const page = pages[Math.min(active, pages.length - 1)]
-  const w = props.warnings
-  const notices = [
-    w?.source === 'pdf'
-      ? t(
-          `Aus PDF gelesen: Text und Formeln hat die KI vom Seitenbild abgelesen${w.pdfFigures ? `, ${w.pdfFigures} Abbildungen wurden ausgeschnitten` : ''}. Bitte prüfen – aus der Word-Datei wäre es genauer.`,
-          `Read from PDF: the AI read text and formulas off the page images${w.pdfFigures ? `, ${w.pdfFigures} figures were cut out` : ''}. Please check – the Word file would be more accurate.`
-        )
-      : null,
-    w?.pagesAsImages
-      ? t(
-          `${w.pagesAsImages} Seiten konnten nicht gelesen werden und erscheinen als Bild.`,
-          `${w.pagesAsImages} pages could not be read and are shown as pictures.`
-        )
-      : null,
-    w?.formulasTranscribed
-      ? t(
-          `${w.formulasTranscribed} Formeln lagen im alten Word-Formeleditor vor und wurden automatisch abgelesen. Bitte stichprobenartig prüfen.`,
-          `${w.formulasTranscribed} formulas used Word's old equation editor and were read automatically. Please spot-check them.`
-        )
-      : null,
-    w?.formulasAsImages
-      ? t(
-          `${w.formulasAsImages} Formeln konnten nicht abgelesen werden und erscheinen als Bild.`,
-          `${w.formulasAsImages} formulas could not be read and are shown as pictures.`
-        )
-      : null,
-    w?.imagesDropped
-      ? t(
-          `${w.imagesDropped} Grafiken liegen als Word-Vektorgrafik vor und fehlen. Sie sind im Text markiert.`,
-          `${w.imagesDropped} graphics are Word vector graphics and are missing. They are marked in the text.`
-        )
-      : null,
-    w?.drawingsRendered
-      ? t(
-          `${w.drawingsRendered} Zeichnungen aus Word-Formen wurden als Bild nachgezeichnet. Kleine Abweichungen (Schrift, Abstände) sind möglich.`,
-          `${w.drawingsRendered} drawings made from Word shapes were redrawn as pictures. Small differences (fonts, spacing) are possible.`
-        )
-      : null,
-    w?.drawingsDropped
-      ? t(
-          `${w.drawingsDropped} Zeichnungen aus Word-Formen (Pfeile, Kästchen mit Beschriftung) konnten nicht übernommen werden. Sie sind im Text markiert.`,
-          `${w.drawingsDropped} drawings made from Word shapes (arrows, labelled boxes) could not be taken over. They are marked in the text.`
-        )
-      : null,
-    w?.chunksUncleaned
-      ? t(
-          `${w.chunksUncleaned} Abschnitte wurden nur umgewandelt, nicht aufbereitet (Kästen, Formeln).`,
-          `${w.chunksUncleaned} sections were only converted, not tidied up (boxes, formulas).`
-        )
-      : null,
-  ].filter(Boolean)
+  const notices = importNotices(props.warnings, locale)
   const expires = new Date(props.expiresAt).toLocaleDateString(locale === 'de' ? 'de-CH' : 'en-GB')
 
   return (

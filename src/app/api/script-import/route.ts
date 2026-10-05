@@ -7,7 +7,11 @@
  * conversion runs after the response (next/server after()) and the preview
  * page polls GET /api/script-import/<token>.
  */
+import { randomUUID } from 'crypto'
 import { after, NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { getClientIdentifier } from '@/lib/rate-limit'
 import { verifySolution, type PowChallenge } from '@/lib/script-import/pow'
 import { checkLimits, hashIp, MAX_FILE_BYTES, MAX_MARKDOWN_CHARS } from '@/lib/script-import/limits'
@@ -39,18 +43,31 @@ export async function POST(request: NextRequest) {
     if (file.size > MAX_FILE_BYTES) return bad(`The file is larger than ${MAX_FILE_BYTES / 1024 / 1024} MB.`)
   }
 
-  let challenge: PowChallenge
-  try {
-    challenge = JSON.parse(String(form.get('challenge') ?? ''))
-  } catch {
-    return bad('Missing verification. Please reload the page.')
-  }
-  if (!verifySolution(challenge, String(form.get('nonce') ?? ''))) {
-    return bad('Verification failed. Please reload the page.', 403)
+  // Signed-in teachers (dashboard import modal) skip the proof of work and the
+  // per-IP cap; anonymous uploads (/import) need both.
+  const session = await getServerSession(authOptions)
+  const teacher = session?.user?.id
+    ? (await prisma.user.findUnique({ where: { id: session.user.id }, select: { accountType: true } }))?.accountType === 'teacher'
+    : false
+
+  let powSalt: string
+  if (teacher) {
+    powSalt = `session:${randomUUID()}` // powSalt is unique; no challenge to consume
+  } else {
+    let challenge: PowChallenge
+    try {
+      challenge = JSON.parse(String(form.get('challenge') ?? ''))
+    } catch {
+      return bad('Missing verification. Please reload the page.')
+    }
+    if (!verifySolution(challenge, String(form.get('nonce') ?? ''))) {
+      return bad('Verification failed. Please reload the page.', 403)
+    }
+    powSalt = challenge.salt
   }
 
   const ipHash = hashIp(getClientIdentifier(request))
-  const limited = await checkLimits(ipHash)
+  const limited = await checkLimits(ipHash, { skipPerIp: teacher })
   if (limited) return bad(limited, 429)
 
   let input: ImportInput
@@ -86,7 +103,7 @@ export async function POST(request: NextRequest) {
 
   let job: { id: string; token: string }
   try {
-    job = await createImport({ fileName, ipHash, powSalt: challenge.salt })
+    job = await createImport({ fileName, ipHash, powSalt })
   } catch {
     // Unique violation on powSalt: challenge already used.
     return bad('Verification already used. Please reload the page.', 403)

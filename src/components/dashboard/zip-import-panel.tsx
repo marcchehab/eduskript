@@ -1,12 +1,17 @@
 'use client'
 
-import { useRef, useState } from 'react'
+/**
+ * Import of an Eduskript export ZIP (manifest.json + skript folders), shown in
+ * the dashboard import modal (import-modal.tsx) once a .zip is dropped.
+ * Runs entirely in the browser (src/lib/skript-import-client.ts): parse →
+ * preview (new vs. existing) → create structure via server action, then
+ * upload attachments/videos directly. Existing slugs are skipped, not
+ * overwritten. Formerly the "Import" card below the page builder.
+ */
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
-import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { HardDriveUpload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle } from 'lucide-react'
+import { HardDriveUpload, Loader2, FileArchive, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import {
   parseImportZip,
   previewImport,
@@ -24,44 +29,49 @@ const STAGE_LABELS: Record<ImportProgress['stage'], string> = {
   done: 'Done'
 }
 
-export function ImportExportSettings() {
-  const [file, setFile] = useState<File | null>(null)
+interface ZipImportPanelProps {
+  file: File
+  /** Back to the file picker (cancel, or after a parse error / finished import). */
+  onReset: () => void
+  /** Called once content was created, so the library can reload. */
+  onImported?: () => void
+  /** True while the import runs; the modal blocks closing meanwhile. */
+  onBusyChange?: (busy: boolean) => void
+}
+
+export function ZipImportPanel({ file, onReset, onImported, onBusyChange }: ZipImportPanelProps) {
   const [parsed, setParsed] = useState<ParsedImport | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
-  const [parsing, setParsing] = useState(false)
+  const [parsing, setParsing] = useState(true)
+  const [parseError, setParseError] = useState('')
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const alert = useAlertDialog()
+  const reset = onReset
 
-  const reset = () => {
-    setFile(null)
-    setParsed(null)
-    setPreview(null)
-    setProgress(null)
-    setOutcome(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
+  useEffect(() => {
+    onBusyChange?.(importing)
+  }, [importing, onBusyChange])
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0]
-    if (!selected) return
-
-    reset()
-    setFile(selected)
-    setParsing(true)
-    try {
-      const parsedZip = await parseImportZip(selected)
-      setParsed(parsedZip)
-      setPreview(await previewImport(parsedZip))
-    } catch (error) {
-      alert.showError(error instanceof Error ? error.message : 'Could not read this file')
-      reset()
-    } finally {
-      setParsing(false)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const parsedZip = await parseImportZip(file)
+        const p = await previewImport(parsedZip)
+        if (cancelled) return
+        setParsed(parsedZip)
+        setPreview(p)
+      } catch (error) {
+        if (!cancelled) setParseError(error instanceof Error ? error.message : 'Could not read this file')
+      } finally {
+        if (!cancelled) setParsing(false)
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-  }
+  }, [file])
 
   const handleImport = async () => {
     if (!parsed) return
@@ -70,17 +80,9 @@ export function ImportExportSettings() {
     try {
       const result = await importParsedZip(parsed, setProgress)
       setOutcome(result)
-      const failed = result.errors.filter(e => e.type === 'error').length
-      if (failed > 0) {
-        alert.showError(`Imported with ${failed} error(s) — see details below.`)
-      } else {
-        alert.showSuccess(
-          `Imported ${result.collectionsCreated} collections, ${result.skriptsCreated} skripts, ` +
-          `${result.pagesCreated} pages, ${result.filesImported} attachments, ${result.videosImported} videos.`
-        )
-      }
+      onImported?.()
     } catch (error) {
-      alert.showError(error instanceof Error ? error.message : 'Import failed')
+      setParseError(error instanceof Error ? error.message : 'Import failed')
       setProgress(null)
     } finally {
       setImporting(false)
@@ -90,57 +92,35 @@ export function ImportExportSettings() {
   const hasBlockingErrors = preview?.errors.some(e => e.type === 'error') ?? false
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Package className="w-5 h-5" />
-          <CardTitle>Import</CardTitle>
-        </div>
-        <CardDescription>
-          Import content from another Eduskript instance. The zip is read and uploaded directly from
-          your browser — the server isn&rsquo;t involved.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium">Import Content</h3>
+    <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Upload a zip file exported from Eduskript to import content. Existing content with the same slug will be skipped.
+            Eduskript export (.zip): collections, skripts, pages, attachments and videos are restored. Existing content with the same slug is skipped.
           </p>
 
-          {!file && (
-            <div className="flex items-center gap-4">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".zip"
-                onChange={handleFileSelect}
-                className="hidden"
-                id="import-file"
-              />
-              <Button onClick={() => fileInputRef.current?.click()} disabled={parsing} variant="outline">
-                {parsing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Reading…
-                  </>
-                ) : (
-                  <>
-                    <HardDriveUpload className="w-4 h-4 mr-2" />
-                    Select File
-                  </>
-                )}
-              </Button>
+          {parsing && (
+            <div className="flex items-center gap-2 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Reading {file.name}…
+            </div>
+          )}
+
+          {parseError && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive space-y-2">
+              <p>{parseError}</p>
+              <Button variant="outline" size="sm" onClick={reset}>Choose another file</Button>
             </div>
           )}
 
           {/* Progress */}
           {importing && progress && (
             <div className="border rounded-lg p-4 space-y-2 bg-muted/30">
-              <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                {STAGE_LABELS[progress.stage]}
-                {progress.label ? ` — ${progress.label}` : ''}
+              <div className="flex items-start gap-2 text-sm">
+                <Loader2 className="mt-0.5 w-4 h-4 shrink-0 animate-spin text-blue-500" />
+                {/* Fixed 3-line box so the panel height doesn't change per file name. */}
+                <span className="min-w-0 h-[3lh] line-clamp-3 break-words">
+                  {STAGE_LABELS[progress.stage]}
+                  {progress.label ? ` — ${progress.label}` : ''}
+                </span>
               </div>
               {progress.total > 1 && <Progress value={(progress.current / progress.total) * 100} />}
             </div>
@@ -285,19 +265,10 @@ export function ImportExportSettings() {
                 </ul>
               )}
               <Button variant="outline" size="sm" className="mt-3" onClick={reset}>
-                Dismiss
+                Import another file
               </Button>
             </div>
           )}
-        </div>
-      </CardContent>
-      <AlertDialogModal
-        open={alert.open}
-        onOpenChange={alert.setOpen}
-        type={alert.type}
-        title={alert.title}
-        message={alert.message}
-      />
-    </Card>
+    </div>
   )
 }

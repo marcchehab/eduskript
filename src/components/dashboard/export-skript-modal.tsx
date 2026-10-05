@@ -117,10 +117,13 @@ export function ExportSkriptModal({ skriptId, skriptTitle }: ExportSkriptModalPr
 
         {busy && progress && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {STAGE_LABELS[progress.stage]}
-              {progress.label ? ` — ${progress.label}` : ''}
+            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+              {/* Fixed 3-line box: a file name wrapping or not would otherwise change the dialog height per file. */}
+              <span className="min-w-0 h-[3lh] line-clamp-3 break-words">
+                {STAGE_LABELS[progress.stage]}
+                {progress.label ? ` — ${progress.label}` : ''}
+              </span>
             </div>
             {progress.total > 1 && (
               <Progress value={(progress.current / progress.total) * 100} />

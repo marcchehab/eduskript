@@ -31,11 +31,15 @@ export function hashIp(ip: string): string {
     .digest('hex')
 }
 
-/** Returns an English error message if a new import is not allowed, else null. */
-export async function checkLimits(ipHash: string): Promise<string | null> {
+/**
+ * Returns an English error message if a new import is not allowed, else null.
+ * `skipPerIp`: signed-in teachers (dashboard import) are not capped per IP —
+ * the global count and USD budget still apply to everyone.
+ */
+export async function checkLimits(ipHash: string, opts: { skipPerIp?: boolean } = {}): Promise<string | null> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
   const [perIp, global, cost] = await Promise.all([
-    prisma.scriptImport.count({ where: { ipHash, createdAt: { gte: since } } }),
+    opts.skipPerIp ? 0 : prisma.scriptImport.count({ where: { ipHash, createdAt: { gte: since } } }),
     prisma.scriptImport.count({ where: { createdAt: { gte: since } } }),
     prisma.scriptImport.aggregate({ where: { createdAt: { gte: since } }, _sum: { costUsd: true } }),
   ])
