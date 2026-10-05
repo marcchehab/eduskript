@@ -95,7 +95,7 @@ export const SKRIPT_FILES_TAG = 'skript-files'
  *
  * Call with the skript id where it is known, without it where it is not. Every
  * writer of File or Video rows must call this — see the list in the callers:
- * upload confirm, file delete, files/import, import, import-actions,
+ * upload confirm, file delete, files/import,
  * file-storage, videos upload-url, videos import, video delete, admin videos,
  * Mux webhook.
  */

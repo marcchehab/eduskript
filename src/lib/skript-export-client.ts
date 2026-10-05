@@ -9,8 +9,8 @@
  * src/app/api/export/route.ts, no longer wired to any UI).
  *
  * Zip layout matches the server export's manifest format (version 2) so
- * the existing import flow (src/lib/import-actions.ts) can read it back,
- * plus a videos/ folder that import does not yet consume.
+ * the import (src/lib/skript-import-client.ts) can read it back, including
+ * the videos/ folder.
  */
 
 export interface ExportPage {

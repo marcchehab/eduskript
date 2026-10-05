@@ -9,9 +9,8 @@
  * routes the dashboard's file/video upload UI already uses — the server
  * never buffers the zip or the media it contains.
  *
- * Supersedes the whole-zip-upload flow in import-actions.ts / api/import
- * (still present, no longer wired to any UI — see skript-export-client.ts
- * for the export-side precedent).
+ * Replaced the earlier whole-zip-upload flow (server-side api/import,
+ * removed 2026-10). UI: src/components/dashboard/zip-import-panel.tsx.
  */
 
 import type JSZip from 'jszip'

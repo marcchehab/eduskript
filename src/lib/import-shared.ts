@@ -1,6 +1,6 @@
 /**
  * Pure helpers shared between the client-side importer
- * (skript-import-client.ts, runs in the browser) and the server actions
+ * (skript-import-client.ts, runs in the browser) and its server actions
  * (import-actions.ts). No 'use client'/'use server' directive and no
  * prisma/fs/S3 imports, so both sides can import it directly.
  */
@@ -81,16 +81,6 @@ export function validateMarkdownSyntax(content: string, location: string): Impor
       type: 'warning',
       location,
       message: `Found ${wikiLinks.length} wiki-links that may need conversion: ${wikiLinks.slice(0, 3).join(', ')}${wikiLinks.length > 3 ? '...' : ''}`
-    })
-  }
-
-  // Check for unclosed callouts
-  const calloutStart = content.match(/>\s*\[![\w-]+\]/g) || []
-  if (calloutStart.length > 10) {
-    errors.push({
-      type: 'warning',
-      location,
-      message: `Found ${calloutStart.length} callouts - verify they render correctly`
     })
   }
 
