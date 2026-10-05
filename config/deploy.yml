@@ -49,9 +49,9 @@ builder:
     NEXTAUTH_URL: https://eduskript.org
     NEXT_PUBLIC_CUSTOM_DOMAIN_TARGET: sites.eduskript.org
     NEXT_PUBLIC_KARA_TILESET_URL: https://s3.fr-par.scw.cloud/eduskript-teacher-files/kara/scifi-v1
-    NEXT_PUBLIC_GIT_COMMIT_SHA: <%= ENV["GIT_SHA"] %>
-    NEXT_PUBLIC_GIT_COMMIT_MESSAGE: <%= ENV["GIT_MESSAGE"] %>
-    NEXT_PUBLIC_BUILD_TIME: <%= ENV["BUILD_TIME"] %>
+    NEXT_PUBLIC_GIT_COMMIT_SHA: <%= ENV["GIT_SHA"].to_s.to_json %>
+    NEXT_PUBLIC_GIT_COMMIT_MESSAGE: <%= ENV["GIT_MESSAGE"].to_s.to_json %>
+    NEXT_PUBLIC_BUILD_TIME: <%= ENV["BUILD_TIME"].to_s.to_json %>
   secrets:
     - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
 
