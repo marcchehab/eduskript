@@ -20,10 +20,28 @@ export const PLUGIN_SDK_SOURCE = `
   var _fullscreenCallback = null;
   var _pendingRequests = {};
   var _requestId = 0;
+  var _readySent = false;
 
   function sendMessage(msg) {
     window.parent.postMessage(msg, '*');
   }
+
+  // Report uncaught errors to the host: the plugin editor shows them in a
+  // banner ("Ask AI to fix"); embeds only log them. Message + line only.
+  window.addEventListener('error', function(e) {
+    sendMessage({ type: 'plugin:error', message: String(e.message || 'Script error'), line: e.lineno || 0 });
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    var r = e.reason;
+    sendMessage({ type: 'plugin:error', message: String((r && r.message) || r || 'Unhandled promise rejection'), line: 0 });
+  });
+
+  // Plugins that never call onReady (plain HTML/JS that ignores the SDK) would
+  // otherwise time out in the host as "failed to load". Announce readiness
+  // after load in that case; host:init then has no callback and is ignored.
+  window.addEventListener('load', function() {
+    if (!_readySent) sendMessage({ type: 'plugin:ready' });
+  });
 
   function request(type, payload) {
     return new Promise(function(resolve) {
@@ -76,6 +94,7 @@ export const PLUGIN_SDK_SOURCE = `
       return {
         onReady: function(cb) {
           _readyCallback = cb;
+          _readySent = true;
           // Tell host we're ready — it will respond with host:init
           sendMessage({ type: 'plugin:ready' });
         },

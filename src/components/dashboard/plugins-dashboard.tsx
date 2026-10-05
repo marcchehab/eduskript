@@ -1,17 +1,13 @@
 'use client'
 
-import { PAYWALL_COPY } from '@/components/dashboard/upgrade-prompt'
-import { useUiLocale } from '@/lib/i18n/client'
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useTheme } from 'next-themes'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
-import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
-import { Plus, Pencil, Trash2, Copy, Search, ArrowLeft, Eye, Sparkles, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Copy, Search, Eye, Check, GitFork, User, Globe, FileText } from 'lucide-react'
 
 interface Plugin {
   id: string
@@ -37,136 +33,61 @@ interface PluginsDashboardProps {
   userPageSlug: string
 }
 
-type View = 'list' | 'editor'
+interface UsageRow {
+  pageId: string
+  title: string
+  pageSlug: string
+  skriptSlug: string
+  skriptTitle: string
+  canEdit: boolean
+}
 
-export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps) {
-  const isFreePlan = useIsFreeTeacher()
-  const paywall = PAYWALL_COPY[useUiLocale()]
+const editHref = (p: Plugin) =>
+  `/dashboard/plugins/edit/${encodeURIComponent(p.author.pageSlug || '')}/${encodeURIComponent(p.slug)}`
+
+/**
+ * Plugin library: own plugins and everyone's (tabs like the Insert → Plugin
+ * picker). Creating/editing happens in PluginEditor on its own route
+ * (/dashboard/plugins/new, /dashboard/plugins/edit/<owner>/<slug>).
+ */
+export function PluginsDashboard({ userId }: PluginsDashboardProps) {
+  const router = useRouter()
   const dialog = useAlertDialog()
   const [plugins, setPlugins] = useState<Plugin[]>([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<View>('list')
   const [search, setSearch] = useState('')
-  const [showAll, setShowAll] = useState(false)
-
-  // Editor state
-  const [editingPlugin, setEditingPlugin] = useState<Plugin | null>(null)
-  const [editorName, setEditorName] = useState('')
-  const [editorSlug, setEditorSlug] = useState('')
-  const [editorDescription, setEditorDescription] = useState('')
-  const [editorHtml, setEditorHtml] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
-  // AI generation state
-  const [aiPrompt, setAiPrompt] = useState('')
-  const [aiGenerating, setAiGenerating] = useState(false)
-  const [aiElapsed, setAiElapsed] = useState(0)
-  const [aiError, setAiError] = useState<string | null>(null)
-
-  // Embed-link copy feedback (plugin id whose link was just copied)
+  const [tab, setTab] = useState<'mine' | 'all'>('mine')
+  const [usage, setUsage] = useState<Record<string, UsageRow[]>>({})
   const [copiedPluginId, setCopiedPluginId] = useState<string | null>(null)
-
-  // Preview
-  const { resolvedTheme } = useTheme()
-  const previewRef = useRef<HTMLIFrameElement>(null)
-  const [previewSrcdoc, setPreviewSrcdoc] = useState<string>('')
 
   const fetchPlugins = useCallback(async () => {
     setLoading(true)
     try {
-      const url = showAll ? '/api/plugins' : `/api/plugins?author=${encodeURIComponent(userPageSlug)}`
-      const res = await fetch(url)
+      const res = await fetch('/api/plugins')
       const json = await res.json()
-      setPlugins(json.plugins || [])
+      const list: Plugin[] = json.plugins || []
+      setPlugins(list)
+      const mine = list.filter((p) => p.author.id === userId).map((p) => p.slug)
+      if (mine.length) {
+        const u = await fetch(`/api/plugins/usage?slugs=${encodeURIComponent(mine.join(','))}`).then((r) => r.json())
+        setUsage(u.usage || {})
+      }
     } catch (err) {
       console.error('Failed to fetch plugins:', err)
     } finally {
       setLoading(false)
     }
-  }, [userPageSlug, showAll])
+  }, [userId])
 
   useEffect(() => { fetchPlugins() }, [fetchPlugins])
 
-  // Update preview when HTML or theme changes
-  useEffect(() => {
-    if (editorHtml) {
-      setPreviewSrcdoc(buildPluginSrcdoc(editorHtml, resolvedTheme))
-    }
-  }, [editorHtml, resolvedTheme])
-
-  const openEditor = (plugin?: Plugin) => {
-    if (plugin) {
-      setEditingPlugin(plugin)
-      setEditorName(plugin.name)
-      setEditorSlug(plugin.slug)
-      setEditorDescription(plugin.description || '')
-      setEditorHtml(plugin.entryHtml)
-    } else {
-      setEditingPlugin(null)
-      setEditorName('')
-      setEditorSlug('')
-      setEditorDescription('')
-      setEditorHtml(DEFAULT_PLUGIN_HTML)
-    }
-    setSaveError(null)
-    setView('editor')
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    setSaveError(null)
-
-    try {
-      if (editingPlugin && editingPlugin.author.id === userId) {
-        // Update existing
-        const res = await fetch(
-          `/api/plugins/${encodeURIComponent(editingPlugin.author.pageSlug || '')}/${encodeURIComponent(editingPlugin.slug)}`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: editorName,
-              description: editorDescription || null,
-              entryHtml: editorHtml,
-            }),
-          },
-        )
-        if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error || 'Failed to update')
-        }
-      } else {
-        // Create new
-        const res = await fetch('/api/plugins', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            slug: editorSlug,
-            name: editorName,
-            description: editorDescription || null,
-            manifest: {},
-            entryHtml: editorHtml,
-          }),
-        })
-        if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error || 'Failed to create')
-        }
-      }
-
-      await fetchPlugins()
-      setView('list')
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handleDelete = (plugin: Plugin) => {
+    const pages = usage[plugin.slug] || []
+    const where = pages.length
+      ? `It is used on ${pages.length} ${pages.length === 1 ? 'page' : 'pages'}: ${pages.slice(0, 5).map((p) => `"${p.title}" (${p.skriptTitle})`).join(', ')}${pages.length > 5 ? ', …' : ''}. Students will see "not available" there instead.`
+      : 'It is not used on any page.'
     dialog.showConfirm(
-      `Delete plugin "${plugin.name}"? This cannot be undone.`,
+      `Delete plugin "${plugin.name}"? ${where} This cannot be undone.`,
       async () => {
         try {
           await fetch(
@@ -193,9 +114,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
         throw new Error(err.error || 'Failed to fork')
       }
       const json = await res.json()
-      await fetchPlugins()
-      // Open forked plugin in editor
-      openEditor(json.plugin)
+      router.push(editHref(json.plugin))
     } catch (err) {
       console.error('Failed to fork:', err)
     }
@@ -216,40 +135,9 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
     }
   }
 
-  const handleAiGenerate = async () => {
-    if (!aiPrompt.trim()) return
-    setAiGenerating(true)
-    setAiError(null)
-    setAiElapsed(0)
-    // Elapsed seconds on the button; the server caps a generation at ~2 min.
-    const started = Date.now()
-    const ticker = setInterval(() => setAiElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
-
-    try {
-      const res = await fetch('/api/plugins/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: aiPrompt, currentHtml: editorHtml || undefined }),
-      })
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Generation failed')
-      }
-
-      const json = await res.json()
-      if (json.entryHtml) {
-        setEditorHtml(json.entryHtml)
-      }
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'Generation failed')
-    } finally {
-      clearInterval(ticker)
-      setAiGenerating(false)
-    }
-  }
-
+  const myCount = plugins.filter((p) => p.author.id === userId).length
   const filteredPlugins = plugins.filter((p) => {
+    if (tab === 'mine' && p.author.id !== userId) return false
     if (!search) return true
     const q = search.toLowerCase()
     return (
@@ -260,7 +148,119 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
     )
   })
 
-  const alertModal = (
+  const tabClass = (active: boolean) =>
+    `flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+      active ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+    }`
+
+  return (
+    <>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Search plugins..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <Button size="sm" asChild>
+          <Link href="/dashboard/plugins/new"><Plus className="h-4 w-4 mr-1" /> New Plugin</Link>
+        </Button>
+      </div>
+
+      <div className="flex gap-1 border-b">
+        <button onClick={() => setTab('mine')} className={tabClass(tab === 'mine')}>
+          <User className="w-3.5 h-3.5" /> Mine ({myCount})
+        </button>
+        <button onClick={() => setTab('all')} className={tabClass(tab === 'all')}>
+          <Globe className="w-3.5 h-3.5" /> All ({plugins.length})
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-muted-foreground text-sm py-8 text-center">Loading...</p>
+      ) : filteredPlugins.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>{search ? 'No plugins match your search' : tab === 'mine' ? 'No plugins yet' : 'No plugins available'}</p>
+          {!search && tab === 'mine' && (
+            <>
+              <p className="mt-1 text-sm">Describe a game, quiz or simulation and the AI builds it — no coding needed.</p>
+              <Button variant="outline" className="mt-4" asChild>
+                <Link href="/dashboard/plugins/new"><Plus className="h-4 w-4 mr-1" /> Create your first plugin</Link>
+              </Button>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {filteredPlugins.map((plugin) => {
+            const isOwner = plugin.author.id === userId
+            const authorLabel = plugin.author.pageName || plugin.author.name || plugin.author.pageSlug || 'Unknown'
+            const used = usage[plugin.slug] || []
+
+            return (
+              <div key={plugin.id} className="flex items-center justify-between rounded-lg border p-4 hover:bg-muted/50 transition-colors">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Link href={editHref(plugin)} className="font-medium truncate hover:underline">{plugin.name}</Link>
+                    <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {plugin.author.pageSlug}/{plugin.slug}
+                    </code>
+                  </div>
+                  {plugin.description && (
+                    <p className="text-sm text-muted-foreground mt-1 truncate">{plugin.description}</p>
+                  )}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    {isOwner ? (
+                      <span className="inline-flex items-center gap-1" title={used.map((p) => `${p.title} (${p.skriptTitle})`).join('\n') || undefined}>
+                        <FileText className="h-3.5 w-3.5" />
+                        {used.length ? `Used on ${used.length} ${used.length === 1 ? 'page' : 'pages'}` : 'Not used on any page yet'}
+                      </span>
+                    ) : (
+                      <span>by {authorLabel}</span>
+                    )}
+                    {plugin.author.pageSlug && (
+                      <span className="inline-flex items-center gap-1">
+                        <a href={`/embed/${plugin.author.pageSlug}/${plugin.slug}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-mono" title="Public URL (for other websites)">
+                          /embed/{plugin.author.pageSlug}/{plugin.slug}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyEmbedLink(plugin)}
+                          title="Copy public URL"
+                          className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted hover:text-foreground transition-colors"
+                        >
+                          {copiedPluginId === plugin.id ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 ml-3">
+                  {isOwner ? (
+                    <>
+                      <Button variant="ghost" size="sm" asChild title="Edit plugin">
+                        <Link href={editHref(plugin)}><Pencil className="h-4 w-4 mr-1" /> Edit</Link>
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(plugin)} title="Delete plugin">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="ghost" size="sm" asChild title="Look at this plugin">
+                        <Link href={editHref(plugin)}><Eye className="h-4 w-4 mr-1" /> View</Link>
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleFork(plugin)} title="Copy into your own plugins to change it">
+                        <GitFork className="h-4 w-4 mr-1" /> Copy
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
     <AlertDialogModal
       open={dialog.open} onOpenChange={dialog.setOpen}
       type={dialog.type} title={dialog.title} message={dialog.message}
@@ -268,324 +268,6 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
       confirmText={dialog.confirmText} cancelText={dialog.cancelText}
       destructive={dialog.destructive}
     />
-  )
-
-  // === LIST VIEW ===
-  if (view === 'list') {
-    return (
-      <>
-      <div className="space-y-4">
-        {/* Controls */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search plugins..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAll(!showAll)}
-          >
-            {showAll ? 'My Plugins' : 'All Plugins'}
-          </Button>
-          <Button size="sm" onClick={() => openEditor()}>
-            <Plus className="h-4 w-4 mr-1" /> New Plugin
-          </Button>
-        </div>
-
-        {/* Plugin list */}
-        {loading ? (
-          <p className="text-muted-foreground text-sm py-8 text-center">Loading...</p>
-        ) : filteredPlugins.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <p>{search ? 'No plugins match your search' : 'No plugins yet'}</p>
-            {!search && (
-              <Button variant="outline" className="mt-4" onClick={() => openEditor()}>
-                <Plus className="h-4 w-4 mr-1" /> Create your first plugin
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {filteredPlugins.map((plugin) => {
-              const isOwner = plugin.author.id === userId
-              const authorLabel = plugin.author.pageName || plugin.author.name || plugin.author.pageSlug || 'Unknown'
-
-              return (
-                <div
-                  key={plugin.id}
-                  className="flex items-center justify-between rounded-lg border p-4 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{plugin.name}</span>
-                      <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                        {plugin.author.pageSlug}/{plugin.slug}
-                      </code>
-                    </div>
-                    {plugin.description && (
-                      <p className="text-sm text-muted-foreground mt-1 truncate">{plugin.description}</p>
-                    )}
-                    {plugin.author.pageSlug && (
-                      <div className="mt-1.5 flex items-center gap-2 text-xs">
-                        <span className="font-medium text-muted-foreground">Public URL:</span>
-                        <a
-                          href={`/embed/${plugin.author.pageSlug}/${plugin.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline truncate font-mono"
-                        >
-                          /embed/{plugin.author.pageSlug}/{plugin.slug}
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyEmbedLink(plugin)}
-                          title="Copy public URL"
-                          className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {copiedPluginId === plugin.id ? (
-                            <Check className="h-3.5 w-3.5 text-green-600" />
-                          ) : (
-                            <Copy className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      by {authorLabel} · v{plugin.version}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 ml-3">
-                    {isOwner ? (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={() => openEditor(plugin)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(plugin)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={() => openEditor(plugin)} title="View code">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleFork(plugin)} title="Fork to your library">
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-      {alertModal}
-      </>
-    )
-  }
-
-  // === EDITOR VIEW ===
-  const isNewPlugin = !editingPlugin
-  const isOwner = editingPlugin?.author.id === userId
-  const canEdit = isNewPlugin || isOwner
-
-  return (
-    <>
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => setView('list')}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
-        </Button>
-        <h2 className="text-lg font-semibold flex-1">
-          {isNewPlugin ? 'New Plugin' : `Edit: ${editingPlugin.name}`}
-        </h2>
-        {canEdit && (
-          <Button size="sm" onClick={handleSave} disabled={saving || !editorName || !editorSlug}>
-            {saving ? 'Saving...' : editingPlugin ? 'Update' : 'Create'}
-          </Button>
-        )}
-      </div>
-
-      {saveError && (
-        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">
-          {saveError}
-        </div>
-      )}
-
-      {/* Metadata fields */}
-      <div className="grid grid-cols-3 gap-3">
-        <div>
-          <label className="text-sm font-medium mb-1 block">Name</label>
-          <Input
-            value={editorName}
-            onChange={(e) => setEditorName(e.target.value)}
-            placeholder="Periodic Table Explorer"
-            disabled={!canEdit}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium mb-1 block">Slug</label>
-          <Input
-            value={editorSlug}
-            onChange={(e) => setEditorSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-            placeholder="periodic-table"
-            disabled={!!editingPlugin}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium mb-1 block">Description</label>
-          <Input
-            value={editorDescription}
-            onChange={(e) => setEditorDescription(e.target.value)}
-            placeholder="Optional description"
-            disabled={!canEdit}
-          />
-        </div>
-      </div>
-
-      {/* AI Generation */}
-      {canEdit && !isFreePlan && (
-        <div className="flex gap-2">
-          <Input
-            value={aiPrompt}
-            onChange={(e) => setAiPrompt(e.target.value)}
-            placeholder="Prompt AI to create or change your plugin..."
-            onKeyDown={(e) => e.key === 'Enter' && !aiGenerating && handleAiGenerate()}
-            className="flex-1"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAiGenerate}
-            disabled={aiGenerating || !aiPrompt.trim()}
-          >
-            <Sparkles className="h-4 w-4 mr-1" />
-            {aiGenerating ? `Generating... ${aiElapsed}s` : 'Generate'}
-          </Button>
-        </div>
-      )}
-      {canEdit && isFreePlan && (
-        <div className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2 flex items-center gap-2">
-          <Sparkles className="h-3 w-3" />
-          {paywall.aiPlugins}{' '}
-          <Link href="/dashboard/billing" className="underline hover:text-foreground">
-            {paywall.upgrade}
-          </Link>
-        </div>
-      )}
-      {aiError && (
-        <p className="text-sm text-destructive">{aiError}</p>
-      )}
-
-      {/* Usage hint */}
-      {editingPlugin && (
-        <div className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
-          Use in markdown: <code className="bg-muted px-1 rounded">{`<plugin src="${editingPlugin.author.pageSlug}/${editingPlugin.slug}" />`}</code>
-        </div>
-      )}
-
-      {/* Code editor + Preview side by side */}
-      <div className="grid grid-cols-2 gap-4" style={{ height: 'calc(100vh - 400px)', minHeight: 400 }}>
-        {/* Code editor */}
-        <div className="flex flex-col">
-          <label className="text-sm font-medium mb-1">HTML</label>
-          <textarea
-            value={editorHtml}
-            onChange={(e) => setEditorHtml(e.target.value)}
-            disabled={!canEdit}
-            className="flex-1 rounded-md border bg-muted/30 p-3 font-mono text-sm resize-none focus:outline-hidden focus:ring-2 focus:ring-ring"
-            spellCheck={false}
-          />
-        </div>
-
-        {/* Live preview */}
-        <div className="flex flex-col">
-          <label className="text-sm font-medium mb-1">Preview</label>
-          <div className="flex-1 rounded-md border overflow-hidden bg-background">
-            {previewSrcdoc ? (
-              <iframe
-                ref={previewRef}
-                sandbox="allow-scripts allow-same-origin"
-                srcDoc={previewSrcdoc}
-                className="w-full h-full border-0"
-                title="Plugin preview"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                Write some HTML to see a preview
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-    {alertModal}
     </>
   )
 }
-
-const DEFAULT_PLUGIN_HTML = `<style>
-  body {
-    font-family: system-ui, sans-serif;
-    padding: 16px;
-    margin: 0;
-  }
-  .counter {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 18px;
-  }
-  button {
-    padding: 8px 16px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    background: #f5f5f5;
-    cursor: pointer;
-    font-size: 16px;
-  }
-  button:hover { background: #e8e8e8; }
-</style>
-
-<div class="counter">
-  <button id="dec">−</button>
-  <span id="count">0</span>
-  <button id="inc">+</button>
-</div>
-
-<script>
-  var plugin = eduskript.init();
-  var count = 0;
-
-  plugin.onReady(function(ctx) {
-    if (ctx.data && ctx.data.state) {
-      count = ctx.data.state.count || 0;
-    }
-    document.getElementById('count').textContent = count;
-    document.body.style.color = ctx.theme === 'dark' ? '#e0e0e0' : '#222';
-    document.body.style.background = ctx.theme === 'dark' ? '#1a1a1a' : '#fff';
-  });
-
-  plugin.onThemeChange(function(theme) {
-    document.body.style.color = theme === 'dark' ? '#e0e0e0' : '#222';
-    document.body.style.background = theme === 'dark' ? '#1a1a1a' : '#fff';
-  });
-
-  function update(delta) {
-    count += delta;
-    document.getElementById('count').textContent = count;
-    plugin.setData({ state: { count: count }, updatedAt: Date.now() });
-  }
-
-  document.getElementById('inc').addEventListener('click', function() { update(1); });
-  document.getElementById('dec').addEventListener('click', function() { update(-1); });
-<\/script>`

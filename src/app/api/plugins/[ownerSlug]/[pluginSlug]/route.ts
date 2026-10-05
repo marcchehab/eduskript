@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { siteHasOrHadSlug } from '@/lib/site-slugs'
+import { expandPluginHtml } from '@/lib/plugin-templates/server'
 import { updatePluginForUser } from '@/lib/services/plugins'
 import { NotFoundError, PermissionDeniedError } from '@/lib/services/pages'
 
@@ -12,7 +13,9 @@ interface RouteParams {
 
 /**
  * GET /api/plugins/[ownerSlug]/[pluginSlug] — Get plugin HTML for rendering.
- * Public endpoint (needed for iframe srcdoc on public pages).
+ * Public endpoint (needed for iframe srcdoc on public pages). entryHtml comes
+ * back with <es-template> tags already inlined (src/lib/plugin-templates);
+ * editors load the raw HTML elsewhere.
  */
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
@@ -36,6 +39,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const plugin = {
       ...pluginRaw,
+      entryHtml: await expandPluginHtml(pluginRaw.entryHtml),
       author: {
         id: pluginRaw.author.id,
         name: pluginRaw.author.name,
@@ -53,7 +57,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
 /**
  * PUT /api/plugins/[ownerSlug]/[pluginSlug] — Update plugin (author only).
- * Body: { name?, description?, manifest?, entryHtml?, version? }
+ * Body: { name?, description?, manifest?, entryHtml?, version?, changeLog? }
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
@@ -75,8 +79,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Plugin not found' }, { status: 404 })
     }
 
-    const { name, description, manifest, entryHtml, version } = await request.json()
-    const updated = await updatePluginForUser(session.user.id, plugin.id, { name, description, manifest, entryHtml, version }, ownerSlug)
+    const { name, description, manifest, entryHtml, version, changeLog } = await request.json()
+    const updated = await updatePluginForUser(
+      session.user.id, plugin.id,
+      { name, description, manifest, entryHtml, version, changeLog: typeof changeLog === 'string' ? changeLog.slice(0, 300) : undefined },
+      ownerSlug,
+    )
 
     return NextResponse.json({ plugin: updated })
   } catch (error) {

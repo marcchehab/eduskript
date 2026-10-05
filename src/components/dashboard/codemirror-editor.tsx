@@ -5,6 +5,7 @@ import { useUiLocale } from '@/lib/i18n/client'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTheme } from 'next-themes'
 import { useSession } from 'next-auth/react'
+import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
@@ -21,6 +22,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Sketch } from '@uiw/react-color'
 import { ExcalidrawEditor } from './excalidraw-editor'
 import { PluginPicker } from './plugin-picker'
+import { PLUGIN_INSERT_KEY, type PluginInsertRequest } from './plugin-editor'
 import { GeogebraDialog } from './geogebra-dialog'
 import { PhetPicker } from './phet-picker'
 import { PictureDialog } from './picture-dialog'
@@ -182,6 +184,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   flush = false,
 }: CodeMirrorEditorProps) {
   const { data: session } = useSession()
+  const pathname = usePathname()
   const paywall = PAYWALL_COPY[useUiLocale()]
   const editorRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
@@ -1056,6 +1059,18 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         })
 
         editorViewRef.current = view
+        // Coming back from Insert → Plugin → "New plugin with AI" (plugin
+        // editor's "Save & insert"): insert the new plugin where the cursor was.
+        try {
+          const pending = JSON.parse(sessionStorage.getItem(PLUGIN_INSERT_KEY) || 'null') as PluginInsertRequest | null
+          if (pending?.src && pending.returnTo === window.location.pathname) {
+            sessionStorage.removeItem(PLUGIN_INSERT_KEY)
+            const len = view.state.doc.length
+            const pos = pending.pos >= 0 && pending.pos <= len ? pending.pos : len
+            view.dispatch({ selection: { anchor: pos } })
+            setTimeout(() => insertPlugin(pending.src!, ''), 0)
+          }
+        } catch { /* storage blocked */ }
         aiCmRef.current = {
           merge: aiMergeCompartment,
           readOnly: aiReadOnlyCompartment,
@@ -2532,6 +2547,14 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         onOpenChange={setPluginPickerOpen}
         onSelect={insertPlugin}
         userId={session?.user?.id}
+        newPluginHref={pageId ? `/dashboard/plugins/new?returnTo=${encodeURIComponent(pathname)}` : '/dashboard/plugins/new'}
+        onNewPlugin={() => {
+          // Remember where to insert once the new plugin is saved (see PluginEditor "Save & insert").
+          const pos = editorViewRef.current && !useSimpleEditor ? editorViewRef.current.state.selection.main.head : -1
+          try {
+            sessionStorage.setItem(PLUGIN_INSERT_KEY, JSON.stringify({ returnTo: pathname, pos } satisfies PluginInsertRequest))
+          } catch { /* storage blocked: falls back to inserting at the end */ }
+        }}
       />
 
       <PhetPicker

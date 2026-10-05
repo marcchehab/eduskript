@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
+import { useSession } from 'next-auth/react'
 import { useUserData } from '@/lib/userdata/hooks'
 import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
 
@@ -51,8 +52,14 @@ export function PluginContainer({
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'unresponsive'>('loading')
   const [pluginHtml, setPluginHtml] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  // Bumped by Retry so the fetch effect runs again.
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   const { resolvedTheme } = useTheme()
+  // Teachers get technical details + an edit link when a plugin fails;
+  // students only a neutral note (QA decision 2026-10-05).
+  const { data: session } = useSession()
+  const isTeacher = session?.user?.accountType === 'teacher'
 
   // Parse src into ownerSlug/pluginSlug — format: "ownerPageSlug/pluginSlug"
   const slashIndex = src.indexOf('/')
@@ -99,7 +106,7 @@ export function PluginContainer({
       })
 
     return () => { cancelled = true }
-  }, [validSrc, ownerSlug, pluginSlug, src, heightProp])
+  }, [validSrc, ownerSlug, pluginSlug, src, heightProp, loadAttempt])
 
   // Extract config from remaining props (filter out internal/React props and data-* attributes)
   const config = Object.fromEntries(
@@ -241,6 +248,12 @@ export function PluginContainer({
           break
         }
 
+        case 'plugin:error': {
+          const err = msg as PluginMessage & { message?: string; line?: number }
+          console.warn(`Plugin ${src}: ${err.message}${err.line ? ` (line ${err.line})` : ''}`)
+          break
+        }
+
         case 'plugin:exitFullscreen': {
           if (document.fullscreenElement) {
             document.exitFullscreen().catch(() => {})
@@ -316,21 +329,41 @@ export function PluginContainer({
 
   // Error/loading states
   if (fetchError || status === 'error') {
+    if (!isTeacher) {
+      return (
+        <div className="my-4 rounded-lg border border-muted bg-muted/30 p-4 text-sm text-muted-foreground">
+          This interactive element is not available right now.
+        </div>
+      )
+    }
     return (
       <div className="my-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-        <p className="font-medium">Plugin failed to load: {src}</p>
-        {fetchError && <p className="mt-1 text-xs opacity-75">{fetchError}</p>}
-        <button
-          onClick={() => {
-            setFetchError(null)
-            setStatus('loading')
-            setPluginHtml(null)
-            readyReceived.current = false
-          }}
-          className="mt-2 text-xs underline hover:no-underline"
-        >
-          Retry
-        </button>
+        <p className="font-medium">Plugin &quot;{src}&quot; could not be shown</p>
+        <p className="mt-1 text-xs opacity-75">
+          {fetchError
+            ? 'It does not exist (deleted or renamed?).'
+            : 'It did not finish loading within 5 seconds, probably because of an error in its code.'}{' '}
+          Students see &quot;This interactive element is not available right now.&quot;
+        </p>
+        <div className="mt-2 flex gap-3 text-xs">
+          {!fetchError && (
+            <a href={`/dashboard/plugins/edit/${encodeURIComponent(ownerSlug)}/${encodeURIComponent(pluginSlug)}`} className="underline hover:no-underline">
+              Edit plugin
+            </a>
+          )}
+          <button
+            onClick={() => {
+              setFetchError(null)
+              setStatus('loading')
+              setPluginHtml(null)
+              readyReceived.current = false
+              setLoadAttempt((n) => n + 1)
+            }}
+            className="underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     )
   }

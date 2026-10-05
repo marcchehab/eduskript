@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { expandPluginHtml } from '@/lib/plugin-templates/server'
 import { prisma } from '@/lib/prisma'
 import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { buildStandaloneEmbedHtml } from '@/lib/plugin-sdk'
@@ -34,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     })
   }
 
-  return new NextResponse(buildStandaloneEmbedHtml(plugin.entryHtml, plugin.name), {
+  return new NextResponse(buildStandaloneEmbedHtml(await expandPluginHtml(plugin.entryHtml), plugin.name), {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',

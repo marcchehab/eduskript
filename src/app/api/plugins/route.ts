@@ -59,9 +59,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { slug, name, description, manifest, entryHtml } = await request.json()
+    const { slug, name, description, manifest, entryHtml, changeLog } = await request.json()
 
-    const plugin = await createPluginForUser(session.user.id, { slug, name, description, manifest, entryHtml })
+    const plugin = await createPluginForUser(session.user.id, {
+      slug, name, description, manifest, entryHtml,
+      changeLog: typeof changeLog === 'string' ? changeLog.slice(0, 300) : undefined,
+    })
 
     return NextResponse.json({ plugin }, { status: 201 })
   } catch (error) {

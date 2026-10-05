@@ -205,6 +205,7 @@ model User {
 
   @@unique([oauthProvider, oauthProviderId]) // Students identified by OAuth provider
   @@map("users")
+  pluginTemplates PluginTemplate[]
 }
 
 // A public page/site. Owned polymorphically by either a User (a teacher's
@@ -1407,10 +1408,49 @@ model Plugin {
   entryHtml   String   @db.Text // Self-contained HTML (rendered in sandboxed iframe)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  versions    PluginVersion[]
 
   @@unique([authorId, slug])
   @@index([authorId])
   @@map("plugins")
+}
+
+// Snapshot of a plugin's HTML, written on every save that changes entryHtml
+// (create = version 1). Saves stay live immediately; versions only make an
+// earlier state restorable, like PageVersion for pages.
+model PluginVersion {
+  id        String   @id @default(cuid())
+  pluginId  String
+  version   Int
+  entryHtml String   @db.Text
+  // Short note, e.g. the AI's one-sentence summary of the step or "Restored v3".
+  changeLog String?
+  createdAt DateTime @default(now())
+
+  plugin Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@unique([pluginId, version])
+  @@map("plugin_versions")
+}
+
+// Templates teachers added for plugins (SVG maps, diagrams). Shared by
+// everyone: the central template list = built-ins (public/plugin-templates,
+// src/lib/plugin-templates/builtin.json) + these rows. A plugin references one
+// with <es-template name="slug"> and gets the SVG inlined at render time.
+model PluginTemplate {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String?  @db.Text
+  svg         String   @db.Text // sanitized (src/lib/plugin-templates/sanitize.ts)
+  // { shapes: [{ id, name }], points: [{ of, name }] } — what the AI is told
+  meta        Json
+  sourceUrl   String?  @map("source_url")
+  createdById String?  @map("created_by_id")
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@map("plugin_templates")
 }
 
 /// Per-user inbound-email hook. A generic primitive: inbound email (via

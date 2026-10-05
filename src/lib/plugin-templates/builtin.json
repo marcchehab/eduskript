@@ -1,0 +1,1345 @@
+[
+{
+"slug": "europe",
+"builtIn": true,
+"shapes": [
+{
+"id": "va",
+"name": "Vatikanstadt"
+},
+{
+"id": "gb",
+"name": "Vereinigtes Königreich"
+},
+{
+"id": "ua",
+"name": "Ukraine"
+},
+{
+"id": "tr",
+"name": "Türkei"
+},
+{
+"id": "ch",
+"name": "Schweiz"
+},
+{
+"id": "se",
+"name": "Schweden"
+},
+{
+"id": "es",
+"name": "Spanien"
+},
+{
+"id": "sk",
+"name": "Slowakei"
+},
+{
+"id": "si",
+"name": "Slowenien"
+},
+{
+"id": "rs",
+"name": "Serbien"
+},
+{
+"id": "sm",
+"name": "San Marino"
+},
+{
+"id": "ru",
+"name": "Russische Föderation"
+},
+{
+"id": "ro",
+"name": "Rumänien"
+},
+{
+"id": "pt",
+"name": "Portugal"
+},
+{
+"id": "pl",
+"name": "Polen"
+},
+{
+"id": "no",
+"name": "Norwegen"
+},
+{
+"id": "nl",
+"name": "Niederlande"
+},
+{
+"id": "me",
+"name": "Montenegro"
+},
+{
+"id": "md",
+"name": "Moldawien"
+},
+{
+"id": "mc",
+"name": "Monaco"
+},
+{
+"id": "mt",
+"name": "Malta"
+},
+{
+"id": "mk",
+"name": "Nordmazedonien"
+},
+{
+"id": "lu",
+"name": "Luxemburg"
+},
+{
+"id": "lt",
+"name": "Litauen"
+},
+{
+"id": "li",
+"name": "Liechtenstein"
+},
+{
+"id": "lv",
+"name": "Lettland"
+},
+{
+"id": "xk",
+"name": "Kosovo"
+},
+{
+"id": "it",
+"name": "Italien"
+},
+{
+"id": "ie",
+"name": "Irland"
+},
+{
+"id": "is",
+"name": "Island"
+},
+{
+"id": "hu",
+"name": "Ungarn"
+},
+{
+"id": "gr",
+"name": "Griechenland"
+},
+{
+"id": "de",
+"name": "Deutschland"
+},
+{
+"id": "ge",
+"name": "Georgien"
+},
+{
+"id": "fr",
+"name": "Frankreich"
+},
+{
+"id": "fi",
+"name": "Finnland"
+},
+{
+"id": "ee",
+"name": "Estland"
+},
+{
+"id": "dk",
+"name": "Dänemark"
+},
+{
+"id": "cz",
+"name": "Tschechische Republik"
+},
+{
+"id": "cy",
+"name": "Zypern"
+},
+{
+"id": "hr",
+"name": "Kroatien"
+},
+{
+"id": "bg",
+"name": "Bulgarien"
+},
+{
+"id": "ba",
+"name": "Bosnien und Herzegowina"
+},
+{
+"id": "be",
+"name": "Belgien"
+},
+{
+"id": "by",
+"name": "Belarus"
+},
+{
+"id": "az",
+"name": "Aserbaidschan"
+},
+{
+"id": "at",
+"name": "Österreich"
+},
+{
+"id": "am",
+"name": "Armenien"
+},
+{
+"id": "ad",
+"name": "Andorra"
+},
+{
+"id": "al",
+"name": "Albanien"
+}
+],
+"points": [
+{
+"of": "al",
+"name": "Tirana"
+},
+{
+"of": "ad",
+"name": "Andorra la Vella"
+},
+{
+"of": "at",
+"name": "Wien"
+},
+{
+"of": "by",
+"name": "Minsk"
+},
+{
+"of": "be",
+"name": "Brüssel"
+},
+{
+"of": "ba",
+"name": "Sarajevo"
+},
+{
+"of": "bg",
+"name": "Sofia"
+},
+{
+"of": "hr",
+"name": "Zagreb"
+},
+{
+"of": "cy",
+"name": "Nikosia"
+},
+{
+"of": "cz",
+"name": "Prag"
+},
+{
+"of": "dk",
+"name": "Kopenhagen"
+},
+{
+"of": "ee",
+"name": "Tallinn"
+},
+{
+"of": "fi",
+"name": "Helsinki"
+},
+{
+"of": "fr",
+"name": "Paris"
+},
+{
+"of": "de",
+"name": "Berlin"
+},
+{
+"of": "gr",
+"name": "Athen"
+},
+{
+"of": "hu",
+"name": "Budapest"
+},
+{
+"of": "is",
+"name": "Reykjavík"
+},
+{
+"of": "ie",
+"name": "Dublin"
+},
+{
+"of": "it",
+"name": "Rom"
+},
+{
+"of": "xk",
+"name": "Pristina"
+},
+{
+"of": "lv",
+"name": "Riga"
+},
+{
+"of": "li",
+"name": "Vaduz"
+},
+{
+"of": "lt",
+"name": "Vilnius"
+},
+{
+"of": "lu",
+"name": "Luxemburg"
+},
+{
+"of": "mt",
+"name": "Valletta"
+},
+{
+"of": "md",
+"name": "Chișinău"
+},
+{
+"of": "mc",
+"name": "Monaco"
+},
+{
+"of": "me",
+"name": "Podgorica"
+},
+{
+"of": "nl",
+"name": "Amsterdam"
+},
+{
+"of": "mk",
+"name": "Skopje"
+},
+{
+"of": "no",
+"name": "Oslo"
+},
+{
+"of": "pl",
+"name": "Warschau"
+},
+{
+"of": "pt",
+"name": "Lissabon"
+},
+{
+"of": "ro",
+"name": "Bukarest"
+},
+{
+"of": "ru",
+"name": "Moskau"
+},
+{
+"of": "sm",
+"name": "San Marino"
+},
+{
+"of": "rs",
+"name": "Belgrad"
+},
+{
+"of": "sk",
+"name": "Bratislava"
+},
+{
+"of": "si",
+"name": "Ljubljana"
+},
+{
+"of": "es",
+"name": "Madrid"
+},
+{
+"of": "se",
+"name": "Stockholm"
+},
+{
+"of": "ch",
+"name": "Bern"
+},
+{
+"of": "tr",
+"name": "Ankara"
+},
+{
+"of": "ua",
+"name": "Kiew"
+},
+{
+"of": "gb",
+"name": "London"
+},
+{
+"of": "va",
+"name": "Vatikanstadt"
+},
+{
+"of": "ge",
+"name": "Tiflis"
+},
+{
+"of": "am",
+"name": "Jerewan"
+},
+{
+"of": "az",
+"name": "Baku"
+}
+],
+"title": "Europa (Länder + Hauptstädte)",
+"description": "Europakarte mit echten Landesgrenzen (Natural Earth 1:50m) und Hauptstädten als Punkte. Keywords: Europa, Europe, Länder, Hauptstädte, Karte, map, Geografie.",
+"source": "Natural Earth via world-atlas 2.0.2",
+"license": "Public domain (Natural Earth)"
+},
+{
+"slug": "world",
+"builtIn": true,
+"shapes": [
+{
+"id": "fj",
+"name": "Fidschi"
+},
+{
+"id": "tz",
+"name": "Tansania, Vereinigte Republik"
+},
+{
+"id": "eh",
+"name": "Westsahara"
+},
+{
+"id": "ca",
+"name": "Kanada"
+},
+{
+"id": "us",
+"name": "Vereinigte Staaten von Amerika"
+},
+{
+"id": "kz",
+"name": "Kasachstan"
+},
+{
+"id": "uz",
+"name": "Usbekistan"
+},
+{
+"id": "pg",
+"name": "Papua-Neuguinea"
+},
+{
+"id": "id",
+"name": "Indonesien"
+},
+{
+"id": "ar",
+"name": "Argentinien"
+},
+{
+"id": "cl",
+"name": "Chile"
+},
+{
+"id": "cd",
+"name": "Kongo"
+},
+{
+"id": "so",
+"name": "Somalia"
+},
+{
+"id": "ke",
+"name": "Kenia"
+},
+{
+"id": "sd",
+"name": "Sudan"
+},
+{
+"id": "td",
+"name": "Tschad"
+},
+{
+"id": "ht",
+"name": "Haiti"
+},
+{
+"id": "do",
+"name": "Dominikanische Republik"
+},
+{
+"id": "ru",
+"name": "Russische Föderation"
+},
+{
+"id": "bs",
+"name": "Bahamas"
+},
+{
+"id": "fk",
+"name": "Falklandinseln"
+},
+{
+"id": "no",
+"name": "Norwegen"
+},
+{
+"id": "gl",
+"name": "Grönland"
+},
+{
+"id": "tf",
+"name": "Französische Süd- und Antarktisgebiete"
+},
+{
+"id": "tl",
+"name": "Osttimor"
+},
+{
+"id": "za",
+"name": "Südafrika"
+},
+{
+"id": "ls",
+"name": "Lesotho"
+},
+{
+"id": "mx",
+"name": "Mexiko"
+},
+{
+"id": "uy",
+"name": "Uruguay"
+},
+{
+"id": "br",
+"name": "Brasilien"
+},
+{
+"id": "bo",
+"name": "Bolivien"
+},
+{
+"id": "pe",
+"name": "Peru"
+},
+{
+"id": "co",
+"name": "Kolumbien"
+},
+{
+"id": "pa",
+"name": "Panama"
+},
+{
+"id": "cr",
+"name": "Costa Rica"
+},
+{
+"id": "ni",
+"name": "Nicaragua"
+},
+{
+"id": "hn",
+"name": "Honduras"
+},
+{
+"id": "sv",
+"name": "El Salvador"
+},
+{
+"id": "gt",
+"name": "Guatemala"
+},
+{
+"id": "bz",
+"name": "Belize"
+},
+{
+"id": "ve",
+"name": "Venezuela"
+},
+{
+"id": "gy",
+"name": "Guyana"
+},
+{
+"id": "sr",
+"name": "Suriname"
+},
+{
+"id": "fr",
+"name": "Frankreich"
+},
+{
+"id": "ec",
+"name": "Ecuador"
+},
+{
+"id": "pr",
+"name": "Puerto Rico"
+},
+{
+"id": "jm",
+"name": "Jamaika"
+},
+{
+"id": "cu",
+"name": "Kuba"
+},
+{
+"id": "zw",
+"name": "Simbabwe"
+},
+{
+"id": "bw",
+"name": "Botswana"
+},
+{
+"id": "na",
+"name": "Namibia"
+},
+{
+"id": "sn",
+"name": "Senegal"
+},
+{
+"id": "ml",
+"name": "Mali"
+},
+{
+"id": "mr",
+"name": "Mauretanien"
+},
+{
+"id": "bj",
+"name": "Benin"
+},
+{
+"id": "ne",
+"name": "Niger"
+},
+{
+"id": "ng",
+"name": "Nigeria"
+},
+{
+"id": "cm",
+"name": "Kamerun"
+},
+{
+"id": "tg",
+"name": "Togo"
+},
+{
+"id": "gh",
+"name": "Ghana"
+},
+{
+"id": "ci",
+"name": "Elfenbeinküste"
+},
+{
+"id": "gn",
+"name": "Guinea"
+},
+{
+"id": "gw",
+"name": "Guinea-Bissau"
+},
+{
+"id": "lr",
+"name": "Liberia"
+},
+{
+"id": "sl",
+"name": "Sierra Leone"
+},
+{
+"id": "bf",
+"name": "Burkina Faso"
+},
+{
+"id": "cf",
+"name": "Zentralafrikanische Republik"
+},
+{
+"id": "cg",
+"name": "Republik Kongo"
+},
+{
+"id": "ga",
+"name": "Gabun"
+},
+{
+"id": "gq",
+"name": "Äquatorialguinea"
+},
+{
+"id": "zm",
+"name": "Sambia"
+},
+{
+"id": "mw",
+"name": "Malawi"
+},
+{
+"id": "mz",
+"name": "Mosambik"
+},
+{
+"id": "sz",
+"name": "Eswatini"
+},
+{
+"id": "ao",
+"name": "Angola"
+},
+{
+"id": "bi",
+"name": "Burundi"
+},
+{
+"id": "il",
+"name": "Israel"
+},
+{
+"id": "lb",
+"name": "Libanon"
+},
+{
+"id": "mg",
+"name": "Madagaskar"
+},
+{
+"id": "ps",
+"name": "Staat Palästina"
+},
+{
+"id": "gm",
+"name": "Gambia"
+},
+{
+"id": "tn",
+"name": "Tunesien"
+},
+{
+"id": "dz",
+"name": "Algerien"
+},
+{
+"id": "jo",
+"name": "Jordanien"
+},
+{
+"id": "ae",
+"name": "Vereinigte Arabische Emirate"
+},
+{
+"id": "qa",
+"name": "Katar"
+},
+{
+"id": "kw",
+"name": "Kuwait"
+},
+{
+"id": "iq",
+"name": "Irak"
+},
+{
+"id": "om",
+"name": "Oman"
+},
+{
+"id": "vu",
+"name": "Vanuatu"
+},
+{
+"id": "kh",
+"name": "Kambodscha"
+},
+{
+"id": "th",
+"name": "Thailand"
+},
+{
+"id": "la",
+"name": "Laos"
+},
+{
+"id": "mm",
+"name": "Myanmar"
+},
+{
+"id": "vn",
+"name": "Vietnam"
+},
+{
+"id": "kp",
+"name": "Nordkorea"
+},
+{
+"id": "kr",
+"name": "Südkorea"
+},
+{
+"id": "mn",
+"name": "Mongolei"
+},
+{
+"id": "in",
+"name": "Indien"
+},
+{
+"id": "bd",
+"name": "Bangladesch"
+},
+{
+"id": "bt",
+"name": "Bhutan"
+},
+{
+"id": "np",
+"name": "Nepal"
+},
+{
+"id": "pk",
+"name": "Pakistan"
+},
+{
+"id": "af",
+"name": "Afghanistan"
+},
+{
+"id": "tj",
+"name": "Tadschikistan"
+},
+{
+"id": "kg",
+"name": "Kirgisistan"
+},
+{
+"id": "tm",
+"name": "Turkmenistan"
+},
+{
+"id": "ir",
+"name": "Iran"
+},
+{
+"id": "sy",
+"name": "Syrien, Arabische Republik"
+},
+{
+"id": "am",
+"name": "Armenien"
+},
+{
+"id": "se",
+"name": "Schweden"
+},
+{
+"id": "by",
+"name": "Belarus"
+},
+{
+"id": "ua",
+"name": "Ukraine"
+},
+{
+"id": "pl",
+"name": "Polen"
+},
+{
+"id": "at",
+"name": "Österreich"
+},
+{
+"id": "hu",
+"name": "Ungarn"
+},
+{
+"id": "md",
+"name": "Moldawien"
+},
+{
+"id": "ro",
+"name": "Rumänien"
+},
+{
+"id": "lt",
+"name": "Litauen"
+},
+{
+"id": "lv",
+"name": "Lettland"
+},
+{
+"id": "ee",
+"name": "Estland"
+},
+{
+"id": "de",
+"name": "Deutschland"
+},
+{
+"id": "bg",
+"name": "Bulgarien"
+},
+{
+"id": "gr",
+"name": "Griechenland"
+},
+{
+"id": "tr",
+"name": "Türkei"
+},
+{
+"id": "al",
+"name": "Albanien"
+},
+{
+"id": "hr",
+"name": "Kroatien"
+},
+{
+"id": "ch",
+"name": "Schweiz"
+},
+{
+"id": "lu",
+"name": "Luxemburg"
+},
+{
+"id": "be",
+"name": "Belgien"
+},
+{
+"id": "nl",
+"name": "Niederlande"
+},
+{
+"id": "pt",
+"name": "Portugal"
+},
+{
+"id": "es",
+"name": "Spanien"
+},
+{
+"id": "ie",
+"name": "Irland"
+},
+{
+"id": "nc",
+"name": "Neukaledonien"
+},
+{
+"id": "sb",
+"name": "Salomonen"
+},
+{
+"id": "nz",
+"name": "Neuseeland"
+},
+{
+"id": "au",
+"name": "Australien"
+},
+{
+"id": "lk",
+"name": "Sri Lanka"
+},
+{
+"id": "cn",
+"name": "China"
+},
+{
+"id": "tw",
+"name": "Taiwan"
+},
+{
+"id": "it",
+"name": "Italien"
+},
+{
+"id": "dk",
+"name": "Dänemark"
+},
+{
+"id": "gb",
+"name": "Vereinigtes Königreich"
+},
+{
+"id": "is",
+"name": "Island"
+},
+{
+"id": "az",
+"name": "Aserbaidschan"
+},
+{
+"id": "ge",
+"name": "Georgien"
+},
+{
+"id": "ph",
+"name": "Philippinen"
+},
+{
+"id": "my",
+"name": "Malaysia"
+},
+{
+"id": "bn",
+"name": "Brunei Darussalam"
+},
+{
+"id": "si",
+"name": "Slowenien"
+},
+{
+"id": "fi",
+"name": "Finnland"
+},
+{
+"id": "sk",
+"name": "Slowakei"
+},
+{
+"id": "cz",
+"name": "Tschechische Republik"
+},
+{
+"id": "er",
+"name": "Eritrea"
+},
+{
+"id": "jp",
+"name": "Japan"
+},
+{
+"id": "py",
+"name": "Paraguay"
+},
+{
+"id": "ye",
+"name": "Jemen"
+},
+{
+"id": "sa",
+"name": "Saudi-Arabien"
+},
+{
+"id": "aq",
+"name": "Antarktis"
+},
+{
+"id": "cy",
+"name": "Zypern"
+},
+{
+"id": "ma",
+"name": "Marokko"
+},
+{
+"id": "eg",
+"name": "Ägypten"
+},
+{
+"id": "ly",
+"name": "Libyen"
+},
+{
+"id": "et",
+"name": "Äthiopien"
+},
+{
+"id": "dj",
+"name": "Dschibuti"
+},
+{
+"id": "ug",
+"name": "Uganda"
+},
+{
+"id": "rw",
+"name": "Ruanda"
+},
+{
+"id": "ba",
+"name": "Bosnien und Herzegowina"
+},
+{
+"id": "mk",
+"name": "Nordmazedonien"
+},
+{
+"id": "rs",
+"name": "Serbien"
+},
+{
+"id": "me",
+"name": "Montenegro"
+},
+{
+"id": "xk",
+"name": "Kosovo"
+},
+{
+"id": "tt",
+"name": "Trinidad und Tobago"
+},
+{
+"id": "ss",
+"name": "Südsudan"
+}
+],
+"points": [],
+"title": "Welt (Länder)",
+"description": "Weltkarte (Equal Earth) mit allen Ländern, ohne Hauptstädte. Keywords: Welt, world, Länder, Kontinente, Karte, map, Geografie.",
+"source": "Natural Earth via world-atlas 2.0.2 (1:110m)",
+"license": "Public domain (Natural Earth)"
+},
+{
+"slug": "switzerland",
+"builtIn": true,
+"shapes": [
+{
+"id": "zh",
+"name": "Zürich"
+},
+{
+"id": "be",
+"name": "Bern"
+},
+{
+"id": "lu",
+"name": "Luzern"
+},
+{
+"id": "ur",
+"name": "Uri"
+},
+{
+"id": "sz",
+"name": "Schwyz"
+},
+{
+"id": "ow",
+"name": "Obwalden"
+},
+{
+"id": "nw",
+"name": "Nidwalden"
+},
+{
+"id": "gl",
+"name": "Glarus"
+},
+{
+"id": "zg",
+"name": "Zug"
+},
+{
+"id": "fr",
+"name": "Freiburg"
+},
+{
+"id": "so",
+"name": "Solothurn"
+},
+{
+"id": "bs",
+"name": "Basel-Stadt"
+},
+{
+"id": "bl",
+"name": "Basel-Landschaft"
+},
+{
+"id": "sh",
+"name": "Schaffhausen"
+},
+{
+"id": "ar",
+"name": "Appenzell Ausserrhoden"
+},
+{
+"id": "ai",
+"name": "Appenzell Innerrhoden"
+},
+{
+"id": "sg",
+"name": "St. Gallen"
+},
+{
+"id": "gr",
+"name": "Graubünden"
+},
+{
+"id": "ag",
+"name": "Aargau"
+},
+{
+"id": "tg",
+"name": "Thurgau"
+},
+{
+"id": "ti",
+"name": "Tessin"
+},
+{
+"id": "vd",
+"name": "Waadt"
+},
+{
+"id": "vs",
+"name": "Wallis"
+},
+{
+"id": "ne",
+"name": "Neuenburg"
+},
+{
+"id": "ge",
+"name": "Genf"
+},
+{
+"id": "ju",
+"name": "Jura"
+}
+],
+"points": [
+{
+"of": "zh",
+"name": "Zürich"
+},
+{
+"of": "be",
+"name": "Bern"
+},
+{
+"of": "lu",
+"name": "Luzern"
+},
+{
+"of": "ur",
+"name": "Altdorf"
+},
+{
+"of": "sz",
+"name": "Schwyz"
+},
+{
+"of": "ow",
+"name": "Sarnen"
+},
+{
+"of": "nw",
+"name": "Stans"
+},
+{
+"of": "gl",
+"name": "Glarus"
+},
+{
+"of": "zg",
+"name": "Zug"
+},
+{
+"of": "fr",
+"name": "Freiburg"
+},
+{
+"of": "so",
+"name": "Solothurn"
+},
+{
+"of": "bs",
+"name": "Basel"
+},
+{
+"of": "bl",
+"name": "Liestal"
+},
+{
+"of": "sh",
+"name": "Schaffhausen"
+},
+{
+"of": "ar",
+"name": "Herisau"
+},
+{
+"of": "ai",
+"name": "Appenzell"
+},
+{
+"of": "sg",
+"name": "St. Gallen"
+},
+{
+"of": "gr",
+"name": "Chur"
+},
+{
+"of": "ag",
+"name": "Aarau"
+},
+{
+"of": "tg",
+"name": "Frauenfeld"
+},
+{
+"of": "ti",
+"name": "Bellinzona"
+},
+{
+"of": "vd",
+"name": "Lausanne"
+},
+{
+"of": "vs",
+"name": "Sitten"
+},
+{
+"of": "ne",
+"name": "Neuenburg"
+},
+{
+"of": "ge",
+"name": "Genf"
+},
+{
+"of": "ju",
+"name": "Delsberg"
+}
+],
+"title": "Schweiz (Kantone + Hauptorte)",
+"description": "Schweizer Kantone mit Grenzen 2026, Seen und Kantonshauptorten als Punkte. Keywords: Schweiz, Kantone, Hauptorte, Switzerland, cantons, Karte.",
+"source": "swiss-maps 4.7.0 (BFS/swisstopo, Stand 2026)",
+"license": "BSD-3-Clause (swiss-maps); Geodaten BFS"
+}
+]

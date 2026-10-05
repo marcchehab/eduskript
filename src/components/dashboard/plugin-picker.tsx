@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Search, Puzzle, User, Globe } from 'lucide-react'
+import Link from 'next/link'
+import { Search, Puzzle, User, Globe, Sparkles } from 'lucide-react'
 
 interface PluginInfo {
   id: string
@@ -25,9 +26,13 @@ interface PluginPickerProps {
   onOpenChange: (open: boolean) => void
   onSelect: (pluginSrc: string, configHint: string) => void
   userId?: string
+  /** Link to the plugin editor ("New plugin with AI"); the editor returns here on "Save & insert". */
+  newPluginHref?: string
+  /** Called right before following newPluginHref (to remember the cursor position). */
+  onNewPlugin?: () => void
 }
 
-export function PluginPicker({ open, onOpenChange, onSelect, userId }: PluginPickerProps) {
+export function PluginPicker({ open, onOpenChange, onSelect, userId, newPluginHref, onNewPlugin }: PluginPickerProps) {
   const [plugins, setPlugins] = useState<PluginInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -105,6 +110,20 @@ export function PluginPicker({ open, onOpenChange, onSelect, userId }: PluginPic
           </DialogTitle>
         </DialogHeader>
 
+        {newPluginHref && (
+          <Link
+            href={newPluginHref}
+            onClick={() => { onNewPlugin?.(); onOpenChange(false) }}
+            className="flex items-center gap-3 rounded-md border border-blue-400/60 bg-linear-to-b from-blue-500/15 to-blue-500/[0.02] px-3 py-2.5 text-left hover:from-blue-500/25 dark:border-blue-500/50"
+          >
+            <Sparkles className="h-5 w-5 shrink-0 text-blue-500" />
+            <span>
+              <span className="block text-sm font-medium">New plugin with AI</span>
+              <span className="block text-xs text-muted-foreground">Describe a game, quiz or simulation. It is inserted here when you save.</span>
+            </span>
+          </Link>
+        )}
+
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -151,7 +170,7 @@ export function PluginPicker({ open, onOpenChange, onSelect, userId }: PluginPic
             <div className="text-center py-8 text-muted-foreground">
               <p className="text-sm">{search ? 'No plugins match your search' : tab === 'mine' ? 'No plugins yet' : 'No plugins available'}</p>
               {tab === 'mine' && !search && (
-                <p className="text-xs mt-2">Create plugins in <span className="font-medium">Dashboard → Plugins</span></p>
+                <p className="text-xs mt-2">Use &quot;New plugin with AI&quot; above to make one.</p>
               )}
             </div>
           ) : (

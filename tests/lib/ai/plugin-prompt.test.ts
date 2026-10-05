@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractPluginHtml } from '@/lib/ai/plugin-prompt'
+import { extractPluginHtml, parsePluginResponse } from '@/lib/ai/plugin-prompt'
 
 const HTML = '<style>body{color:red}</style>\n<div id="q"></div>\n<script>var a = 1</script>'
 
@@ -30,5 +30,28 @@ describe('extractPluginHtml', () => {
   it('leaves fences inside unwrapped plugin HTML alone', () => {
     const inner = '<div></div>\n<script>\nvar md = `\n```js\nx()\n```\n`\n</script>'
     expect(extractPluginHtml(inner)).toBe(inner)
+  })
+})
+
+describe('extractPluginHtml without a fence', () => {
+  it('drops prose before the first tag and after the last tag line', () => {
+    const text = "Here's your memory game!\n\n" + HTML + '\n\nEnjoy it with your class.'
+    expect(extractPluginHtml(text)).toBe(HTML)
+  })
+})
+
+describe('parsePluginResponse', () => {
+  it('returns the summary and strips its comment', () => {
+    const r = parsePluginResponse('<!-- summary: Die Karten sind jetzt grösser. -->\n' + HTML)
+    expect(r).toEqual({ html: HTML, summary: 'Die Karten sind jetzt grösser.', question: null, needsTemplate: null })
+  })
+
+  it('returns a clarifying question when no HTML came back', () => {
+    const r = parsePluginResponse('<!-- question: Was genau soll besser werden? -->')
+    expect(r).toEqual({ html: '', summary: null, question: 'Was genau soll besser werden?', needsTemplate: null })
+  })
+
+  it('ignores a question when HTML is present', () => {
+    expect(parsePluginResponse('<!-- question: Okay? -->\n' + HTML).question).toBeNull()
   })
 })
