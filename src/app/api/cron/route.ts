@@ -1,6 +1,7 @@
 /**
  * Unified cron endpoint — runs all scheduled tasks in sequence.
- * Called daily by GitHub Actions (or any external scheduler).
+ * Called daily at 03:00 UTC by the eduskript-cron systemd timer on the VPS
+ * (scripts/ops/run-cron.sh, installed by scripts/ops/install-ops.sh).
  *
  * Auth: Bearer token must match CRON_SECRET env var.
  *

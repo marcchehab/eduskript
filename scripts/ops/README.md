@@ -43,6 +43,7 @@ set once with a Keystone token — not via the S3 API. The old Scaleway bucket
 | Restart DB with new config | `bin/reboot-db` (short outage; never `kamal accessory remove db` — deletes data dirs) |
 | Rebuild DB image (config/db) | `bin/build-db-image && bin/reboot-db` |
 | Backup status | `ssh eduskript-prod sudo docker exec -u postgres eduskript-db pgbackrest info` |
+| Run app cron now (billing, trials, demo reset) | `ssh eduskript-prod sudo systemctl start eduskript-cron` |
 | Timers / health | `ssh eduskript-prod 'systemctl list-timers "eduskript-*"; sudo eduskript-health'` |
 
 Migrations must be expand/contract (old and new container run side by side
@@ -68,7 +69,7 @@ for ~30 s, and `kamal rollback` runs old code against the new schema).
      and `… check`, then set `BACKUP_REPOS="1 2"` in `/etc/eduskript-ops.env`
      and run `systemctl start eduskript-backup@full`.
 - Heartbeats: healthchecks.io project "eduskript" (API key in prod.env),
-  checks `eduskript-backup` (daily) and `eduskript-health` (hourly). Ping URLs
+  checks `eduskript-backup` (daily), `eduskript-health` (hourly) and `eduskript-cron` (daily app cron, `CRON_SECRET` + `CRON_HEARTBEAT_URL` also in that file). Ping URLs
   are in `/etc/eduskript-ops.env` on the VPS (`BACKUP_HEARTBEAT_URL`,
   `HEALTH_HEARTBEAT_URL`). Alerts go to the project's email integration.
 - Timers are installed by `install-ops.sh` (see its header).

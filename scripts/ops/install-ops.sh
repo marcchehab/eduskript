@@ -2,11 +2,13 @@
 # Install/refresh the backup + health timers on the VPS. Idempotent.
 #   scp -r scripts/ops eduskript-prod:/tmp/ && ssh eduskript-prod sudo bash /tmp/ops/install-ops.sh
 # Schedules (Europe/Zurich), kept clear of the 02:00–02:45 unattended-upgrades
-# window: full Sunday 01:15, diff Mon–Sat 01:15, health check hourly at :20.
+# window: full Sunday 01:15, diff Mon–Sat 01:15, health check hourly at :20,
+# app cron daily 03:00 UTC (was GitHub Actions until 2026-10-05).
 set -euo pipefail
 SRC="$(cd "$(dirname "$0")" && pwd)"
 install -m 755 "$SRC/pgbackrest-backup.sh" /usr/local/sbin/eduskript-backup
 install -m 755 "$SRC/health-check.sh" /usr/local/sbin/eduskript-health
+install -m 755 "$SRC/run-cron.sh" /usr/local/sbin/eduskript-cron
 [ -f /etc/eduskript-ops.env ] || install -m 600 /dev/null /etc/eduskript-ops.env
 
 unit() { cat > "/etc/systemd/system/$1"; }
@@ -53,6 +55,22 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 U
+unit eduskript-cron.service <<'U'
+[Unit]
+Description=eduskript daily app cron (POST /api/cron)
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/eduskript-cron
+U
+unit eduskript-cron.timer <<'U'
+[Unit]
+Description=Daily eduskript app cron
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+U
 systemctl daemon-reload
-systemctl enable --now eduskript-backup-full.timer eduskript-backup-diff.timer eduskript-health.timer
+systemctl enable --now eduskript-backup-full.timer eduskript-backup-diff.timer eduskript-health.timer eduskript-cron.timer
 systemctl list-timers 'eduskript-*' --no-pager
