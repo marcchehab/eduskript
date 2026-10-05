@@ -16,7 +16,7 @@ import type { Root, Element, ElementContent } from 'hast'
  * documented as "put it on its own line"). Runs after rehypeRaw, before
  * rehypeMarkdownChildren.
  */
-const BLOCK_TAGS = new Set(['banner', 'phet', 'pricing'])
+const BLOCK_TAGS = new Set(['banner', 'phet', 'plugin', 'pricing'])
 
 export function rehypeUnwrapBlockTags() {
   return (tree: Root) => {
