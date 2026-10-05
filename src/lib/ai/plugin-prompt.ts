@@ -59,3 +59,32 @@ if (typeof window.eduskript !== 'undefined') {
 - Use 'var' instead of 'let/const' for maximum browser compatibility in the sandbox
 - Keep it simple, educational, and visually polished
 - Always feature-detect window.eduskript before calling init()/onReady()`
+
+
+/**
+ * Extract the plugin HTML from a model response.
+ *
+ * Models sometimes ignore "output only HTML" and answer with chat prose plus a
+ * fenced block ("Here's a quiz...\n```html\n<style>..."). If a line-start fence
+ * exists, keep only the content between the first opening fence and the LAST
+ * line-start closing fence (or to the end if unclosed); prose before/after is
+ * dropped. Without a fence, or when a line starting with "<" comes before the
+ * first fence (fence is part of the plugin itself), the trimmed text is
+ * returned as-is.
+ *
+ * Limitation: if the model emits two separate fenced blocks (e.g. html + a js
+ * snippet), everything between the first opening and the last closing fence is
+ * kept, including the inner fence lines and any prose between the blocks.
+ */
+export function extractPluginHtml(text: string): string {
+  const open = /^```[\w-]*[ \t]*$/m.exec(text)
+  if (!open) return text.trim()
+  // HTML already started before the first fence: the fence is inside the
+  // plugin (e.g. a markdown string in a <script>), not a wrapper.
+  const firstTagLine = text.search(/^[ \t]*</m)
+  if (firstTagLine !== -1 && firstTagLine < open.index) return text.trim()
+  const body = text.slice(open.index + open[0].length)
+  const closes = [...body.matchAll(/^```[ \t]*$/gm)]
+  const last = closes[closes.length - 1]
+  return (last ? body.slice(0, last.index) : body).trim()
+}

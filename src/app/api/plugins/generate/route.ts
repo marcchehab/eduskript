@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import OpenAI from 'openai'
-import { PLUGIN_AUTHORING_PROMPT } from '@/lib/ai/plugin-prompt'
+import { PLUGIN_AUTHORING_PROMPT, extractPluginHtml } from '@/lib/ai/plugin-prompt'
 import { openrouterRouting } from '@/lib/ai/openrouter'
 
 const CONTENT_MODEL = 'deepseek/deepseek-v4.1-flash'
@@ -116,8 +116,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'AI returned an empty response. Please try again.' }, { status: 500 })
       }
 
-      // Strip markdown fences if the model wrapped the response
-      const cleaned = text.replace(/^```(?:html)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
+      // Strip markdown fences and any chat prose around them
+      const cleaned = extractPluginHtml(text)
 
       return NextResponse.json({ entryHtml: cleaned })
     } catch (error) {
