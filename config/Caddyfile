@@ -11,12 +11,25 @@
 #
 # /api/internal/* is never served publicly; those routes are for the app's own
 # localhost calls (src/proxy.ts) and for the ask check above.
-# No Caddy access log: request logging stays with the app (bounded Docker logs).
+# No Caddy access log, and kamal-proxy runs with Docker's "none" log driver:
+# no per-request logs with client IPs anywhere (/datenschutz promises that).
+# Caddy's own warnings/errors (e.g. reverse_proxy "aborting with incomplete
+# response") embed the request; the filter below drops client IP, port and
+# headers from every log line before it is written.
 # X-Forwarded-For: without trusted_proxies Caddy replaces any client-sent value,
 # so the first XFF entry the app sees is the real client IP.
 
 {
 	email ops@eduskript.org
+	log default {
+		format filter {
+			wrap json
+			request>remote_ip delete
+			request>remote_port delete
+			request>client_ip delete
+			request>headers delete
+		}
+	}
 	on_demand_tls {
 		ask http://127.0.0.1:8080/api/internal/tls-allowed
 	}

@@ -162,7 +162,7 @@ Keine besonders schützenswerten Personendaten im Sinne von Art. 5 lit. c DSG vo
 ## Anhang 2 – Technische und organisatorische Massnahmen
 
 - Verschlüsselte Übertragung (TLS) für alle Verbindungen
-- Verschlüsselte Speicherung der Datenbank (AES-256) und der Dateien mit Schülerdaten (SSE)
+- Datensicherungen verschlüsselt (AES-256); hochgeladene Dateien im Objektspeicher von Infomaniak verschlüsselt. Der Datenträger des Servers selbst ist nicht verschlüsselt (bietet Infomaniak für VPS nicht an); Zugriff nur per SSH-Schlüssel
 - Pseudonymisierung der Schülerinnen und Schüler bei der Anmeldung; keine Speicherung von Schüler-E-Mails
 - Rollen- und Berechtigungskonzept: Lehrpersonen sehen nur eigene Klassen; Schüler nur freigegebene Inhalte; Daten verschiedener Schulen und Lehrpersonen sind logisch getrennt
 - Zugriff auf Produktivsysteme nur durch Betreiber, mit Zwei-Faktor-Authentifizierung (Passkey bzw. TOTP)
@@ -181,6 +181,7 @@ Stand bei Unterzeichnung. Die jeweils aktuelle, datierte Liste steht in der [Dat
 | Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher | Schweiz | ja |
 | Scaleway SAS | Verschlüsselte Datenbank-Sicherungen | Paris, Frankreich | ja (nur verschlüsselt) |
 | Brevo (Sendinblue SAS) | E-Mail-Versand an Lehrpersonen | EU | nein |
+| CloudMailin (Dynamic Edge Software Ltd, UK) | Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes) | USA/EU | nein |
 | Payrexx AG | Zahlungsabwicklung | Schweiz | nein |
 | Mux, Inc. | Video-Hosting (von Lehrpersonen hochgeladene Videos) | USA | nein |
 | OpenRouter, Inc. | Vermittlung von KI-Anfragen (Ziffer 9) | USA | nur Lösungen ohne Identifikationsmerkmale |

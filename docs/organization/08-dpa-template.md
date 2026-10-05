@@ -165,7 +165,7 @@ No sensitive personal data within the meaning of Art. 5 lit. c FADP is intended.
 ## Annex 2 – Technical and organisational measures
 
 - Encrypted transmission (TLS) for all connections
-- Encrypted storage of the database (AES-256) and of files containing student data (SSE)
+- Backups encrypted (AES-256); uploaded files encrypted in Infomaniak's object storage. The server's disk itself is not encrypted (Infomaniak does not offer this for VPS); access only via SSH key
 - Pseudonymisation of students at sign-in; no storage of student email addresses
 - Roles and permissions: teachers see only their own classes; students only released content; data of different schools and teachers is logically separated
 - Access to production systems only by the operator, with two-factor authentication (passkey or TOTP)
@@ -184,6 +184,7 @@ As at signature. The current, dated list is in the [privacy policy](https://edus
 | Infomaniak Network SA | Server for application and PostgreSQL database, file storage | Switzerland | yes |
 | Scaleway SAS | Encrypted database backups | Paris, France | yes (encrypted only) |
 | Brevo (Sendinblue SAS) | Email delivery to teachers | EU | no |
+| CloudMailin (Dynamic Edge Software Ltd, UK) | Receiving emails forwarded by teachers (mail hooks, e.g. login codes) | USA/EU | no |
 | Payrexx AG | Payment processing | Switzerland | no |
 | Mux, Inc. | Video hosting (videos uploaded by teachers) | USA | no |
 | OpenRouter, Inc. | Routing of AI requests (section 9) | USA | only answers without identifying information |

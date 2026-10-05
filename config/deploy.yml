@@ -34,6 +34,14 @@ proxy:
     https_port: 8443
     bind_ips:
       - 127.0.0.1            # Docker-published ports bypass ufw → loopback only
+    # No proxy logs: kamal-proxy logs every request with the client IP,
+    # user agent and path, and has no flag to turn that off. /datenschutz
+    # promises IPs are not stored. log_max_size "" stops Kamal from adding
+    # --log-opt max-size, which Docker rejects with the "none" driver.
+    # Trade-off: `docker logs kamal-proxy` is empty; app logs are unchanged.
+    log_max_size: ""
+    options:
+      log-driver: none
 
 deploy_timeout: 240          # migrate + seeds + sync-docs run before the server listens
 drain_timeout: 30

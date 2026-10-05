@@ -35,6 +35,7 @@ const SUBPROCESSORS: { name: string; purpose: string; location: string; studentD
   { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (hochgeladene Dateien, Bilder)', location: 'Schweiz', studentData: 'ja' },
   { name: 'Scaleway SAS (Frankreich)', purpose: 'Verschlüsselte Datenbank-Sicherungen', location: 'Paris, Frankreich', studentData: 'ja (nur verschlüsselt)' },
   { name: 'Brevo / Sendinblue SAS (Frankreich)', purpose: 'E-Mail-Versand an Lehrpersonen (Bestätigung, Benachrichtigungen)', location: 'EU', studentData: 'nein' },
+  { name: 'CloudMailin (Dynamic Edge Software Ltd, Grossbritannien)', purpose: 'Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes)', location: 'USA/EU', studentData: 'nein' },
   { name: 'Payrexx AG (Schweiz)', purpose: 'Zahlungsabwicklung', location: 'Schweiz', studentData: 'nein' },
   { name: 'Mux, Inc. (USA)', purpose: 'Video-Hosting für von Lehrpersonen hochgeladene Videos', location: 'USA', studentData: 'nein' },
   { name: 'OpenRouter, Inc. (USA)', purpose: 'Vermittlung der KI-Anfragen an die Modellanbieter', location: 'USA', studentData: 'nur Lösungen, ohne Identifikationsmerkmale' },
@@ -47,6 +48,7 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'September 2026', change: 'DeepInfra entfernt; KI-Bewertung nur noch über DigitalOcean.' },
   { date: 'September 2026', change: 'DigitalOcean entfernt; KI-Bewertung über Google Vertex AI. KI-Unterstützung der Lehrperson nur noch über Anbieter ohne Datenspeicherung.' },
   { date: 'Oktober 2026', change: 'Koyeb und Neon/AWS (Frankfurt) ersetzt durch einen eigenen Server bei Infomaniak in der Schweiz. Hochgeladene Dateien ebenfalls bei Infomaniak statt Scaleway. Bei Scaleway (Paris) liegen nur noch verschlüsselte Datenbank-Sicherungen.' },
+  { date: 'Oktober 2026', change: 'CloudMailin ergänzt (war für die Mail-Hooks der Lehrpersonen bereits im Einsatz, fehlte in der Liste).' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -164,9 +166,10 @@ export default function DatenschutzPage() {
             <h3 className={h3}>Technische Daten</h3>
             <p>
               IP-Adressen verwenden wir kurzzeitig im Arbeitsspeicher, um
-              Missbrauch zu begrenzen (Rate-Limiting). Wir speichern sie nicht
-              in der Datenbank. Die Zugriffsprotokolle des Hosting-Anbieters
-              können IP-Adressen für kurze Zeit enthalten.
+              Missbrauch zu begrenzen (Rate-Limiting). Wir speichern sie weder
+              in der Datenbank noch in Server-Protokollen: Der Server führt
+              keine Zugriffsprotokolle und entfernt IP-Adressen aus
+              Fehlermeldungen, bevor sie geschrieben werden.
             </p>
             <p className="mt-2">
               Für Besuche auf eduskript.org zählen wir anonym, über welchen
