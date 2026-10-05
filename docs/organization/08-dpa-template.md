@@ -82,7 +82,7 @@ UID CHE-261.508.926, operator of eduskript.org
 
 8.1 The database and uploaded files are stored in Switzerland (Infomaniak). Encrypted database backups are stored in Paris (France); email delivery takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
 
-8.2 For AI features (section 9), content is transferred to providers in the USA, exclusively without identifying information as described in section 9.2. Google LLC is certified under the Swiss-U.S. Data Privacy Framework. For OpenRouter, which is not certified and only forwards the requests, the transfer relies on the content not being attributable to any person for this recipient.
+8.2 For AI features (section 9), content is transferred to providers in the USA, exclusively without identifying information as described in section 9.2. Google LLC is certified under the Swiss-U.S. Data Privacy Framework. For OpenRouter, which forwards the requests, the transfer relies on the EU Standard Contractual Clauses (Module 2, with the Swiss adaptations and the FDPIC as supervisory authority) in [OpenRouter's data processing agreement](https://openrouter.ai/data-processing-agreement) (as of 26 August 2026, sections 13.2 and 13.4). In addition, the content cannot be attributed to any person by OpenRouter.
 
 8.3 By signing, the School approves processing at the locations listed in Annex 3. The current list of locations and providers is documented in the privacy policy.
 
@@ -136,6 +136,7 @@ Eduskript is a small provider. It does not meet, or only partially meets, the fo
 - **Access logging (cl. 8d):** Read access is not logged individually. Exam events are logged (start, hand-in, return).
 - **Contractual penalty (cl. 16):** Not included. The School may agree one.
 - **Passing all obligations on to sub-processors (cl. 10):** Only within the providers' standard agreements (section 7.3).
+- **Adapted Standard Contractual Clauses (guide «Bearbeiten im Auftrag», section 5.2):** OpenRouter's Standard Contractual Clauses (section 8.2) name the FDPIC as supervisory authority and are governed by Irish law, not the cantonal data protection commissioner and Swiss law. Independently of this, OpenRouter receives no identifying information (section 9.2).
 
 ## 16. Final provisions
 

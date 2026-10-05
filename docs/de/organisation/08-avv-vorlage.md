@@ -79,7 +79,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Verschlüsselte Datenbank-Sicherungen liegen in Paris (Frankreich), der E-Mail-Versand erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
 
-8.2 Für KI-Funktionen (Ziffer 9) werden Inhalte an Anbieter in den USA übermittelt, ausschliesslich ohne Identifikationsmerkmale gemäss Ziffer 9.2. Google LLC ist unter dem Swiss-U.S. Data Privacy Framework zertifiziert. Für OpenRouter, das nicht zertifiziert ist und die Anfragen nur weiterleitet, stützt sich die Übermittlung darauf, dass die Inhalte für diesen Empfänger keiner Person zuordenbar sind.
+8.2 Für KI-Funktionen (Ziffer 9) werden Inhalte an Anbieter in den USA übermittelt, ausschliesslich ohne Identifikationsmerkmale gemäss Ziffer 9.2. Google LLC ist unter dem Swiss-U.S. Data Privacy Framework zertifiziert. Für OpenRouter, das die Anfragen weiterleitet, stützt sich die Übermittlung auf die Standardvertragsklauseln der EU (Modul 2, mit den Anpassungen für die Schweiz und dem EDÖB als Aufsichtsbehörde) im [Auftragsbearbeitungsvertrag von OpenRouter](https://openrouter.ai/data-processing-agreement) (Stand 26. August 2026, Ziff. 13.2 und 13.4). Zudem sind die Inhalte für OpenRouter keiner Person zuordenbar.
 
 8.3 Mit der Unterzeichnung bewilligt die Schule die Bearbeitung an den in Anhang 3 genannten Orten. Die aktuelle Liste der Orte und Anbieter ist in der Datenschutzerklärung dokumentiert.
 
@@ -133,6 +133,7 @@ Eduskript ist ein kleiner Anbieter. Folgende Anforderungen der AGB Auslagerung I
 - **Protokollierung von Zugriffen (Ziff. 8d):** Lesezugriffe werden nicht einzeln protokolliert. Protokolliert werden Ereignisse bei Prüfungen (Start, Abgabe, Rückgabe).
 - **Konventionalstrafe (Ziff. 16):** Nicht enthalten. Die Schule kann eine vereinbaren.
 - **Weitergabe aller Pflichten an Unterauftragsbearbeiter (Ziff. 10):** Nur im Rahmen der Standardverträge der Anbieter (Ziffer 7.3).
+- **Angepasste Standardvertragsklauseln (Leitfaden «Bearbeiten im Auftrag», Ziff. 5.2):** Die Standardvertragsklauseln von OpenRouter (Ziffer 8.2) nennen den EDÖB als Aufsichtsbehörde und unterstehen irischem Recht, nicht der Datenschutzbeauftragten des Kantons und Schweizer Recht. Unabhängig davon erhält OpenRouter keine Identifikationsmerkmale (Ziffer 9.2).
 
 ## 16. Schlussbestimmungen
 
