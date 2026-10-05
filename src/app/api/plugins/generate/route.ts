@@ -9,6 +9,18 @@ import { openrouterRouting } from '@/lib/ai/openrouter'
 
 const CONTENT_MODEL = 'deepseek/deepseek-v4.1-flash'
 
+// Upper bound on how long one Generate click may take, across all attempts.
+// Each OpenAI call gets the remaining budget as its timeout and no new attempt
+// starts once it is used up. Before this, 3 attempts ran back to back and a
+// teacher waited 2.8 min (QA finding ai-plugin-generate-too-large-after-3min).
+const TOTAL_BUDGET_MS = 120_000
+// Below this many attempt-seconds left, another attempt is not worth starting.
+const MIN_ATTEMPT_MS = 15_000
+// finish_reason 'length' with less text than this means the model spent its
+// max_tokens on reasoning and barely started the HTML; that is not "too large".
+// Heuristic: a finished plugin is usually several thousand chars.
+const NEARLY_EMPTY_CHARS = 4000
+
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
@@ -75,6 +87,9 @@ export async function POST(request: NextRequest) {
       'HTTP-Referer': 'https://eduskript.org',
       'X-Title': 'Eduskript',
     },
+    // Our loop below is the only retry; the SDK's own retries would multiply
+    // the wait beyond TOTAL_BUDGET_MS.
+    maxRetries: 0,
   })
 
   // Build user message: if there's existing HTML, this is an edit request
@@ -86,8 +101,19 @@ export async function POST(request: NextRequest) {
   }
 
   const MAX_RETRIES = 3
+  const deadline = Date.now() + TOTAL_BUDGET_MS
+  const timeoutResponse = () =>
+    NextResponse.json(
+      { error: 'The AI took too long to respond. Please try again, or describe the plugin more briefly.' },
+      { status: 504 }
+    )
+  let lastTruncatedLength = 0
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const remaining = deadline - Date.now()
+    if (attempt > 1 && remaining < MIN_ATTEMPT_MS) {
+      return lastTruncatedLength > 0 ? truncatedResponse(lastTruncatedLength) : timeoutResponse()
+    }
     try {
       const response = await openai.chat.completions.create({
         // deepseek-v4.1-flash (successor of v4-flash, chosen 2026-08 over glm-5.2
@@ -99,7 +125,7 @@ export async function POST(request: NextRequest) {
           { role: 'user', content: userMessage },
         ],
         ...(openrouterRouting(CONTENT_MODEL) as Record<string, unknown>),
-      })
+      }, { timeout: Math.max(remaining, 1_000) })
 
       const text = response.choices[0]?.message?.content ?? ''
       const finishReason = response.choices[0]?.finish_reason
@@ -107,8 +133,9 @@ export async function POST(request: NextRequest) {
       // If truncated, retry
       if (finishReason === 'length') {
         console.warn(`Plugin generation attempt ${attempt}/${MAX_RETRIES} truncated at ${text.length} chars`)
+        lastTruncatedLength = text.length
         if (attempt < MAX_RETRIES) continue
-        return NextResponse.json({ error: 'Generated plugin was too large. Try simplifying your description.' }, { status: 422 })
+        return truncatedResponse(text.length)
       }
 
       if (!text.trim()) {
@@ -122,6 +149,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ entryHtml: cleaned })
     } catch (error) {
       console.error(`Plugin generation attempt ${attempt} failed:`, error)
+      if (error instanceof Error && error.name === 'APIConnectionTimeoutError') {
+        return timeoutResponse()
+      }
       if (attempt >= MAX_RETRIES) {
         return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
       }
@@ -129,4 +159,20 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ error: 'AI generation failed after retries' }, { status: 500 })
+}
+
+// finish_reason 'length' on the last attempt. Only call it "too large" when
+// the model actually wrote a lot; a nearly empty cut-off means it ran out of
+// tokens while reasoning, and the fix is retrying, not simplifying.
+function truncatedResponse(textLength: number) {
+  if (textLength < NEARLY_EMPTY_CHARS) {
+    return NextResponse.json(
+      { error: 'The AI stopped before finishing the plugin. Please try again.' },
+      { status: 502 }
+    )
+  }
+  return NextResponse.json(
+    { error: 'Generated plugin was too large. Try simplifying your description.' },
+    { status: 422 }
+  )
 }

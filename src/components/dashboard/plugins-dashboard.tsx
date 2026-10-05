@@ -61,6 +61,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
   // AI generation state
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiElapsed, setAiElapsed] = useState(0)
   const [aiError, setAiError] = useState<string | null>(null)
 
   // Embed-link copy feedback (plugin id whose link was just copied)
@@ -219,6 +220,10 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
     if (!aiPrompt.trim()) return
     setAiGenerating(true)
     setAiError(null)
+    setAiElapsed(0)
+    // Elapsed seconds on the button; the server caps a generation at ~2 min.
+    const started = Date.now()
+    const ticker = setInterval(() => setAiElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
 
     try {
       const res = await fetch('/api/plugins/generate', {
@@ -239,6 +244,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
     } catch (err) {
       setAiError(err instanceof Error ? err.message : 'Generation failed')
     } finally {
+      clearInterval(ticker)
       setAiGenerating(false)
     }
   }
@@ -463,7 +469,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
             disabled={aiGenerating || !aiPrompt.trim()}
           >
             <Sparkles className="h-4 w-4 mr-1" />
-            {aiGenerating ? 'Generating...' : 'Generate'}
+            {aiGenerating ? `Generating... ${aiElapsed}s` : 'Generate'}
           </Button>
         </div>
       )}
