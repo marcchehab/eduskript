@@ -356,7 +356,12 @@ export async function uploadTeacherFile(
   const key = `files/${hash}.${extension}`
 
   const disposition = INLINE_EXTENSIONS.has(extension.toLowerCase()) ? 'inline' : 'attachment'
-  const safeName = filename?.replace(/["\\\n\r]/g, '_')
+  // HTTP headers are ASCII-only; a raw "ü" breaks the S3 request signature.
+  // RFC 6266: ASCII fallback in filename=, the real name in filename*=.
+  const asciiName = filename?.normalize('NFKD').replace(/[^\x20-\x7e]/g, '').replace(/["\\]/g, '_')
+  const contentDisposition = filename
+    ? `${disposition}; filename="${asciiName || 'file'}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+    : undefined
 
   await client.send(new PutObjectCommand({
     Bucket: SCALEWAY_TEACHER_BUCKET,
@@ -367,7 +372,7 @@ export async function uploadTeacherFile(
     ACL: 'public-read',
     // Cache for 1 year (content-addressed by hash, so immutable)
     CacheControl: 'public, max-age=31536000, immutable',
-    ...(safeName && { ContentDisposition: `${disposition}; filename="${safeName}"` }),
+    ...(contentDisposition && { ContentDisposition: contentDisposition }),
   }))
 
   return key
