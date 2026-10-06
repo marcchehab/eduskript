@@ -306,9 +306,14 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   // Full mode: interleaved page-builder sidebar shared with the [domain]
   // layout. The locally built collections/rootSkripts above still back
   // contextual mode and the frontpage body.
-  const sidebarData = sidebarBehavior === 'full'
-    ? await getTeacherSidebarData(teacher.id, teacherSlug)
-    : undefined
+  // Loaded in every mode, not just 'full': its reads are the tagged cached
+  // queries (teacherContent/user) that the page-builder, frontpage and
+  // publish routes invalidate. The layout/collection reads above are direct
+  // Prisma calls without tags, so in 'contextual' mode this ISR page used to
+  // depend on no tag at all and kept serving the old frontpage after a save
+  // (until the next deploy).
+  const allSidebarData = await getTeacherSidebarData(teacher.id, teacherSlug)
+  const sidebarData = sidebarBehavior === 'full' ? allSidebarData : undefined
 
   const teacherSiteExtra = readExtraSettings(teacherSite)
   const teacherData = {
