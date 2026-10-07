@@ -75,14 +75,15 @@ export default function DatenschutzPage() {
                 E-Mail-Adressen liegt nur im Browser der Lehrperson.
               </li>
               <li>
-                Datenbank, Dateien und verschlüsselte Sicherungen liegen in der
+                Datenbank, Dateien und verschlüsselte Sicherungen liegen in der{' '}
                 <strong>Schweiz</strong>.
               </li>
               <li>
-                Lösungen von Schülerinnen und Schülern verarbeitet die KI
-                <strong>in der Schweiz</strong> (Infomaniak), ohne Namen,
-                Pseudonyme, E-Mail-Adressen oder Konto-IDs, ohne Speicherung
-                und ohne Training.
+                Lösungen von Schülerinnen und Schülern wertet ein
+                KI-Sprachmodell aus, das Infomaniak{' '}
+                <strong>in der Schweiz</strong> betreibt. Es erhält keine Namen,
+                Pseudonyme, E-Mail-Adressen oder Konto-IDs, speichert nichts und
+                wird damit nicht trainiert.
               </li>
               <li>Kein Tracking, keine Analyse-Dienste, keine Werbung.</li>
               <li>
