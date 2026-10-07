@@ -45,12 +45,7 @@ const SUBPROCESSORS: { name: string; purpose: string; location: string; studentD
 
 const CHANGELOG: { date: string; change: string }[] = [
   { date: 'September 2026', change: 'Erste veröffentlichte Liste.' },
-  { date: 'September 2026', change: 'DeepInfra entfernt; KI-Bewertung nur noch über DigitalOcean.' },
-  { date: 'September 2026', change: 'DigitalOcean entfernt; KI-Bewertung über Google Vertex AI. KI-Unterstützung der Lehrperson nur noch über Anbieter ohne Datenspeicherung.' },
-  { date: 'Oktober 2026', change: 'Koyeb und Neon/AWS (Frankfurt) ersetzt durch einen eigenen Server bei Infomaniak in der Schweiz. Hochgeladene Dateien ebenfalls bei Infomaniak statt Scaleway. Bei Scaleway (Paris) liegen nur noch verschlüsselte Datenbank-Sicherungen.' },
-  { date: 'Oktober 2026', change: 'CloudMailin ergänzt (war für die Mail-Hooks der Lehrpersonen bereits im Einsatz, fehlte in der Liste).' },
-  { date: 'Oktober 2026', change: 'KI-Feedback, KI-Bewertung und Import von Lehrmaterial laufen bei Infomaniak in der Schweiz statt über OpenRouter und Google. Schülerdaten gehen an keinen KI-Anbieter im Ausland mehr. OpenRouter nur noch für Inhalte der Lehrpersonen.' },
-  { date: 'Oktober 2026', change: 'Scaleway entfernt; verschlüsselte Datenbank-Sicherungen bei Infomaniak in der Schweiz (Winterthur, getrennt vom Server in Genf) statt in Paris. Daten von Schülerinnen und Schülern liegen damit vollständig in der Schweiz.' },
+  { date: 'Oktober 2026', change: 'Umzug in die Schweiz: Server, Datenbank, Dateien, Sicherungen und die KI für Schülerdaten laufen bei Infomaniak. Koyeb, Neon/AWS, Scaleway und Google für Schülerdaten entfernt; OpenRouter nur noch für Inhalte der Lehrpersonen. CloudMailin ergänzt (war bereits im Einsatz, fehlte in der Liste).' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'

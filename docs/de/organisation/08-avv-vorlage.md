@@ -1,6 +1,6 @@
 # AVV-Vorlage
 
-*Vorlage für einen Vertrag über die Auftragsbearbeitung von Personendaten, Stand September 2026.*
+*Vorlage für einen Vertrag über die Auftragsbearbeitung von Personendaten, Stand Oktober 2026.*
 
 *Diese Vorlage folgt Punkt für Punkt den [AGB Auslagerung Informatikleistungen](https://www.zh.ch/content/dam/zhweb/bilder-dokumente/organisation/finanzdirektion/afi/agb_auslagerung_informatikleistungen.pdf) des Kantons Zürich und dem [Leitfaden «Bearbeiten im Auftrag»](https://docs.datenschutz.ch/u/d/publikationen/leitfaeden/leitfaden_bearbeiten_im_auftrag.pdf) der Datenschutzbeauftragten des Kantons Zürich. Wo Eduskript eine dieser Anforderungen nicht erfüllt, steht das offen in Ziffer 15.*
 

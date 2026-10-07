@@ -1,6 +1,6 @@
 # DPA Template
 
-*Template for an agreement on the processing of personal data on behalf of a school (Swiss "Auftragsverarbeitungsvertrag", AVV), as of September 2026.*
+*Template for an agreement on the processing of personal data on behalf of a school (Swiss "Auftragsverarbeitungsvertrag", AVV), as of October 2026.*
 
 > [!info] Translation
 > This is a translation for information. Only the [German version](https://eduskript.org/c/organisation/avv-vorlage) is legally binding.
