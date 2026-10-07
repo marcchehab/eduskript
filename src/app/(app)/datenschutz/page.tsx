@@ -27,14 +27,14 @@ export const metadata: Metadata = {
 
 // Sources (checked 2026-10-05): config/deploy.yml (app + Postgres on one
 // Infomaniak VPS, Switzerland; files in Infomaniak Public Cloud object storage
-// (S3_ENDPOINT in config/deploy.yml); backups via pgBackRest to Scaleway, retention in
-// config/db/pgbackrest.conf), src/lib/s3.ts (fr-par), OpenRouter provider list
+// (S3_ENDPOINT in config/deploy.yml); backups via pgBackRest to Infomaniak object storage in
+// Winterthur (PGBACKREST_REPO2_* in config/deploy.yml, retention in
+// config/db/pgbackrest.conf)), src/lib/s3.ts, OpenRouter provider list
 // (retention/training flags), Infomaniak LLM API terms art. 6 (no storage, no
 // training; copy in pr-audit/vertraege). AI providers must match DEFAULTS /
 // STUDENT_DATA in src/lib/ai/provider.ts.
 const SUBPROCESSORS: { name: string; purpose: string; location: string; studentData: string }[] = [
-  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (hochgeladene Dateien, Bilder), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen)', location: 'Schweiz', studentData: 'ja' },
-  { name: 'Scaleway SAS (Frankreich)', purpose: 'Verschlüsselte Datenbank-Sicherungen', location: 'Paris, Frankreich', studentData: 'ja (nur verschlüsselt)' },
+  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (hochgeladene Dateien, Bilder), verschlüsselte Datenbank-Sicherungen (getrennter Standort), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen)', location: 'Schweiz', studentData: 'ja' },
   { name: 'Brevo / Sendinblue SAS (Frankreich)', purpose: 'E-Mail-Versand an Lehrpersonen (Bestätigung, Benachrichtigungen)', location: 'EU', studentData: 'nein' },
   { name: 'CloudMailin (Dynamic Edge Software Ltd, Grossbritannien)', purpose: 'Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes)', location: 'USA/EU', studentData: 'nein' },
   { name: 'Payrexx AG (Schweiz)', purpose: 'Zahlungsabwicklung', location: 'Schweiz', studentData: 'nein' },
@@ -50,6 +50,7 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'Oktober 2026', change: 'Koyeb und Neon/AWS (Frankfurt) ersetzt durch einen eigenen Server bei Infomaniak in der Schweiz. Hochgeladene Dateien ebenfalls bei Infomaniak statt Scaleway. Bei Scaleway (Paris) liegen nur noch verschlüsselte Datenbank-Sicherungen.' },
   { date: 'Oktober 2026', change: 'CloudMailin ergänzt (war für die Mail-Hooks der Lehrpersonen bereits im Einsatz, fehlte in der Liste).' },
   { date: 'Oktober 2026', change: 'KI-Feedback, KI-Bewertung und Import von Lehrmaterial laufen bei Infomaniak in der Schweiz statt über OpenRouter und Google. Schülerdaten gehen an keinen KI-Anbieter im Ausland mehr. OpenRouter nur noch für Inhalte der Lehrpersonen.' },
+  { date: 'Oktober 2026', change: 'Scaleway entfernt; verschlüsselte Datenbank-Sicherungen bei Infomaniak in der Schweiz (Winterthur, getrennt vom Server in Genf) statt in Paris. Daten von Schülerinnen und Schülern liegen damit vollständig in der Schweiz.' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -79,8 +80,8 @@ export default function DatenschutzPage() {
                 E-Mail-Adressen liegt nur im Browser der Lehrperson.
               </li>
               <li>
-                Datenbank und Dateien liegen in der <strong>Schweiz</strong>,
-                verschlüsselte Sicherungen in der <strong>EU</strong> (Paris).
+                Datenbank, Dateien und verschlüsselte Sicherungen liegen in der
+                <strong>Schweiz</strong>.
               </li>
               <li>
                 Lösungen von Schülerinnen und Schülern verarbeitet die KI
@@ -256,12 +257,13 @@ export default function DatenschutzPage() {
               5. Unterauftragsbearbeiter und Standorte
             </h2>
             <p>
-              Anwendung, Datenbank und Dateien liegen in der Schweiz
-              (Infomaniak). Verschlüsselte Datenbank-Sicherungen und der
-              E-Mail-Versand liegen in der EU, die nach Schweizer Recht als
-              Staat mit angemessenem Datenschutz gilt. Daten von Schülerinnen
-              und Schülern verlassen die Schweiz nur als verschlüsselte
-              Sicherung. In die USA gehen nur Inhalte der Lehrpersonen: Videos
+              Anwendung, Datenbank, Dateien und verschlüsselte
+              Datenbank-Sicherungen liegen in der Schweiz (Infomaniak; die
+              Sicherungen in einem anderen Rechenzentrum als der Server). Der
+              E-Mail-Versand an Lehrpersonen liegt in der EU, die nach
+              Schweizer Recht als Staat mit angemessenem Datenschutz gilt.
+              Daten von Schülerinnen und Schülern verlassen die Schweiz nicht.
+              In die USA gehen nur Inhalte der Lehrpersonen: Videos
               (Mux) und KI-Anfragen zum Bearbeiten eigener Inhalte (siehe
               Abschnitt 4).
             </p>

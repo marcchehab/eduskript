@@ -53,14 +53,19 @@ for ~30 s, and `kamal rollback` runs old code against the new schema).
 
 - repo1 local `/var/lib/eduskript/pgbackrest`: WAL continuously, full Sun
   01:15, diff Mon–Sat 01:15, 2 fulls kept → point-in-time restore ~14 days.
-- repo2 Scaleway S3 bucket `eduskript-backups`: configured 2026-10-05 (key = the app key). Setup steps, for a rebuild:
-  1. Create bucket `eduskript-backups` (fr-par) and an API key scoped to it.
-  2. Add to `prod.env`: `PGBACKREST_REPO2_S3_KEY`, `PGBACKREST_REPO2_S3_KEY_SECRET`
-     (`PGBACKREST_REPO2_CIPHER_PASS` is already there).
+- repo2 Infomaniak object storage, region dc4-a (Winterthur; VPS and teacher
+  files are in Geneva, dc3-a), bucket `eduskript-backups`: moved there from
+  Scaleway fr-par on 2026-10-07. Key = the app's EC2 key (`INFOMANIAK_S3_*`,
+  mapped in `.kamal/secrets`). Setup steps, for a rebuild:
+  1. Create the container with a Keystone token (S3 CreateBucket is not used):
+     `PUT https://s3.pub2.infomaniak.cloud/object/v1/AUTH_<project>/eduskript-backups`.
+     The Keystone token comes from `api.pub1.infomaniak.cloud/identity` (it
+     serves both regions; `api.pub2` answered 503).
+  2. `PGBACKREST_REPO2_CIPHER_PASS` must be in `prod.env`.
   3. In `config/deploy.yml` → `accessories.db.env`: clear
      `PGBACKREST_REPO2_TYPE: s3`, `PGBACKREST_REPO2_S3_BUCKET: eduskript-backups`,
-     `PGBACKREST_REPO2_S3_ENDPOINT: s3.fr-par.scw.cloud`,
-     `PGBACKREST_REPO2_S3_REGION: fr-par`, `PGBACKREST_REPO2_PATH: /pgbackrest`,
+     `PGBACKREST_REPO2_S3_ENDPOINT: s3.pub2.infomaniak.cloud`,
+     `PGBACKREST_REPO2_S3_REGION: us-east-1`, `PGBACKREST_REPO2_PATH: /pgbackrest`,
      `PGBACKREST_REPO2_CIPHER_TYPE: aes-256-cbc`,
      `PGBACKREST_REPO2_RETENTION_FULL: "26"`, `PGBACKREST_REPO2_RETENTION_DIFF: "14"`,
      `PGBACKREST_REPO2_RETENTION_ARCHIVE: "2"`; secret: the three above.

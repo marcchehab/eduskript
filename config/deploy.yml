@@ -124,13 +124,14 @@ accessories:
       clear:
         POSTGRES_DB: eduskript
         POSTGRES_USER: eduskript
-        # pgBackRest repo2: Scaleway S3, encrypted, retention per MIGRATION-VPS.md §5
+        # pgBackRest repo2: Infomaniak object storage in Winterthur (dc4-a; the VPS
+        # and the teacher files are in Geneva, dc3-a), encrypted, retention per MIGRATION-VPS.md §5
         # (26 weekly fulls = 6 months, 14 daily diffs, PITR for the last 2 weeks).
         PGBACKREST_REPO2_TYPE: s3
         PGBACKREST_REPO2_PATH: /pgbackrest
         PGBACKREST_REPO2_S3_BUCKET: eduskript-backups
-        PGBACKREST_REPO2_S3_ENDPOINT: s3.fr-par.scw.cloud
-        PGBACKREST_REPO2_S3_REGION: fr-par
+        PGBACKREST_REPO2_S3_ENDPOINT: s3.pub2.infomaniak.cloud
+        PGBACKREST_REPO2_S3_REGION: us-east-1
         PGBACKREST_REPO2_S3_URI_STYLE: path
         PGBACKREST_REPO2_CIPHER_TYPE: aes-256-cbc
         PGBACKREST_REPO2_RETENTION_FULL: "26"
@@ -138,7 +139,8 @@ accessories:
         PGBACKREST_REPO2_RETENTION_ARCHIVE: "2"
       secret:
         - POSTGRES_PASSWORD
-        # Currently the app's Scaleway key (no IAM rights to mint a scoped one).
+        # The app's Infomaniak EC2 key (INFOMANIAK_S3_*). EC2 credentials are
+        # project-wide in OpenStack, so a second key would not be scoped any tighter.
         - PGBACKREST_REPO2_S3_KEY
         - PGBACKREST_REPO2_S3_KEY_SECRET
         - PGBACKREST_REPO2_CIPHER_PASS

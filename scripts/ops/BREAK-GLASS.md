@@ -10,7 +10,7 @@ the site back up or at least keep the data safe. Don't delete anything.
 - SSH key: Bitwarden SSH item "eduskript-prod" (user `debian`, has sudo).
 - All app secrets: Bitwarden note "eduskript prod.env".
 - Backups: on the server (`/var/lib/eduskript/pgbackrest`) and encrypted at
-  Scaleway (bucket `eduskript-backups`, passphrase = `PGBACKREST_REPO2_CIPHER_PASS`
+  Infomaniak object storage in Winterthur (region dc4-a, bucket `eduskript-backups`, passphrase = `PGBACKREST_REPO2_CIPHER_PASS`
   in prod.env).
 - Code + deploy config: GitHub repo eduskript, `config/deploy.yml`.
 

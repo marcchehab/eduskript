@@ -80,7 +80,7 @@ UID CHE-261.508.926, operator of eduskript.org
 
 ## 8. Place of processing and transfer abroad
 
-8.1 The database and uploaded files are stored in Switzerland (Infomaniak). AI processing of students' answers (section 9) also takes place at Infomaniak in Switzerland. Encrypted database backups are stored in Paris (France); email delivery to teachers takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
+8.1 The database and uploaded files are stored in Switzerland (Infomaniak). AI processing of students' answers (section 9) also takes place at Infomaniak in Switzerland. Encrypted database backups are also stored at Infomaniak in Switzerland, in a different data centre from the server. Email delivery to teachers takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
 
 8.2 Students' personal data is not transferred to countries without an adequate level of data protection. Only teachers' content goes to the USA: videos (Mux) and AI requests with which teachers edit their own content (OpenRouter; based on the EU Standard Contractual Clauses in [OpenRouter's data processing agreement](https://openrouter.ai/data-processing-agreement), as of 26 August 2026).
 
@@ -131,7 +131,7 @@ Eduskript names the School as a reference or in publications only with the Schoo
 
 Eduskript is a small provider. It does not meet, or only partially meets, the following requirements of the AGB Auslagerung Informatikleistungen:
 
-- **Place of processing (cl. 12):** Database, files and AI processing of student data are in Switzerland. Encrypted backups and email delivery to teachers are in the EU (section 8).
+- **Place of processing (cl. 12):** Database, files, backups and AI processing of student data are in Switzerland. Only email delivery to teachers is in the EU (section 8).
 - **Security management under ISO 27000 and external audits (cl. 8a, 9a):** Eduskript has no certification of its own and does not commission periodic audits. The hosting providers' data centres are ISO 27001 certified; the source code is publicly reviewable.
 - **Access logging (cl. 8d):** Read access is not logged individually. Exam events are logged (start, hand-in, return).
 - **Contractual penalty (cl. 16):** Not included. The School may agree one.
@@ -181,8 +181,7 @@ As at signature. The current, dated list is in the [privacy policy](https://edus
 
 | Provider | Purpose | Location | Student data? |
 |---|---|---|---|
-| Infomaniak Network SA | Application server and PostgreSQL database, file storage, AI processing (AI feedback, AI scoring) with open models | Switzerland | yes |
-| Scaleway SAS | Encrypted database backups | Paris, France | yes (encrypted only) |
+| Infomaniak Network SA | Application server and PostgreSQL database, file storage, encrypted database backups, AI processing (AI feedback, AI scoring) with open models | Switzerland | yes |
 | Brevo (Sendinblue SAS) | Email delivery to teachers | EU | no |
 | CloudMailin (Dynamic Edge Software Ltd, UK) | Receiving emails forwarded by teachers (mail hooks, e.g. login codes) | USA/EU | no |
 | Payrexx AG | Payment processing | Switzerland | no |

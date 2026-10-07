@@ -77,7 +77,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 ## 8. Ort der Datenbearbeitung und Bekanntgabe ins Ausland
 
-8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Die KI-Verarbeitung von Lösungen der Schülerinnen und Schüler (Ziffer 9) findet ebenfalls bei Infomaniak in der Schweiz statt. Verschlüsselte Datenbank-Sicherungen liegen in Paris (Frankreich), der E-Mail-Versand an Lehrpersonen erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
+8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Die KI-Verarbeitung von Lösungen der Schülerinnen und Schüler (Ziffer 9) findet ebenfalls bei Infomaniak in der Schweiz statt. Verschlüsselte Datenbank-Sicherungen liegen ebenfalls bei Infomaniak in der Schweiz, in einem anderen Rechenzentrum als der Server. Der E-Mail-Versand an Lehrpersonen erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
 
 8.2 Personendaten von Schülerinnen und Schülern werden nicht in Staaten ohne angemessenen Datenschutz übermittelt. In die USA gehen nur Inhalte von Lehrpersonen: Videos (Mux) und KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten (OpenRouter; gestützt auf die Standardvertragsklauseln der EU im [Auftragsbearbeitungsvertrag von OpenRouter](https://openrouter.ai/data-processing-agreement), Stand 26. August 2026).
 
@@ -128,7 +128,7 @@ Eduskript nennt die Schule nur mit deren schriftlicher Zustimmung als Referenz o
 
 Eduskript ist ein kleiner Anbieter. Folgende Anforderungen der AGB Auslagerung Informatikleistungen erfüllt Eduskript nicht oder nur teilweise:
 
-- **Ort der Datenbearbeitung (Ziff. 12):** Datenbank, Dateien und KI-Verarbeitung der Schülerdaten liegen in der Schweiz. Verschlüsselte Sicherungen und der E-Mail-Versand an Lehrpersonen liegen in der EU (Ziffer 8).
+- **Ort der Datenbearbeitung (Ziff. 12):** Datenbank, Dateien, Sicherungen und KI-Verarbeitung der Schülerdaten liegen in der Schweiz. Nur der E-Mail-Versand an Lehrpersonen liegt in der EU (Ziffer 8).
 - **Sicherheitsmanagement nach ISO 27000 und externe Audits (Ziff. 8a, 9a):** Eduskript hat keine eigene Zertifizierung und lässt keine periodischen Audits durchführen. Die Rechenzentren der Hosting-Anbieter sind nach ISO 27001 zertifiziert; der Quellcode ist öffentlich prüfbar.
 - **Protokollierung von Zugriffen (Ziff. 8d):** Lesezugriffe werden nicht einzeln protokolliert. Protokolliert werden Ereignisse bei Prüfungen (Start, Abgabe, Rückgabe).
 - **Konventionalstrafe (Ziff. 16):** Nicht enthalten. Die Schule kann eine vereinbaren.
@@ -178,8 +178,7 @@ Stand bei Unterzeichnung. Die jeweils aktuelle, datierte Liste steht in der [Dat
 
 | Anbieter | Zweck | Standort | Schülerdaten? |
 |---|---|---|---|
-| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher, KI-Verarbeitung (KI-Feedback, KI-Bewertung) mit offenen Modellen | Schweiz | ja |
-| Scaleway SAS | Verschlüsselte Datenbank-Sicherungen | Paris, Frankreich | ja (nur verschlüsselt) |
+| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher, verschlüsselte Datenbank-Sicherungen, KI-Verarbeitung (KI-Feedback, KI-Bewertung) mit offenen Modellen | Schweiz | ja |
 | Brevo (Sendinblue SAS) | E-Mail-Versand an Lehrpersonen | EU | nein |
 | CloudMailin (Dynamic Edge Software Ltd, UK) | Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes) | USA/EU | nein |
 | Payrexx AG | Zahlungsabwicklung | Schweiz | nein |

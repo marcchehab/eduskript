@@ -2,24 +2,23 @@
 
 Eduskript is built for use in schools, where the data being handled belongs to teachers and — especially — to minors. Data protection is therefore a design constraint, not an afterthought. This page documents what data Eduskript stores, where it is stored, and who processes it.
 
-> **In short**: Student emails are never stored. All core data lives on European infrastructure (France). No third-party analytics or ad tracking. Sign-in via US identity providers happens only if a user chooses it.
+> **In short**: Student emails are never stored. Database, files and encrypted backups are in Switzerland. No third-party analytics or ad tracking. Sign-in via US identity providers happens only if a user chooses it.
 
 ## Legal Framework
 
-Eduskript is operated under the **Swiss Federal Act on Data Protection (revFADP / revDSG)**. Because backups and email delivery are in the EU, processing is also aligned with the **EU General Data Protection Regulation (GDPR)**.
+Eduskript is operated under the **Swiss Federal Act on Data Protection (revFADP / revDSG)**. Because email delivery is in the EU, processing is also aligned with the **EU General Data Protection Regulation (GDPR)**.
 
-Application, database and uploaded files are at Infomaniak in Switzerland (a Swiss company, not subject to the US CLOUD Act). Encrypted database backups are in the EU, which counts as a country with adequate data protection under Swiss law.
+Application, database and uploaded files are at Infomaniak in Switzerland (a Swiss company, not subject to the US CLOUD Act). Encrypted database backups are also at Infomaniak, in a different data centre (Winterthur) from the server (Geneva).
 
 > For school leadership and IT there is a [one-page overview](07-for-school-leadership-and-it.md) and a [data processing agreement template](08-dpa-template.md).
 
 ## Where Data Is Stored
 
-The database and uploaded files are stored in Switzerland, encrypted backups in the EU. The authoritative, dated list of all sub-processors (including payments, video and AI providers) is in the [privacy policy](https://eduskript.org/datenschutz#unterauftragsbearbeiter) (German).
+The database, uploaded files and encrypted backups are stored in Switzerland. The authoritative, dated list of all sub-processors (including payments, video and AI providers) is in the [privacy policy](https://eduskript.org/datenschutz#unterauftragsbearbeiter) (German).
 
 | Sub-processor | Purpose | Location | Company |
 |---------------|---------|----------|---------|
-| Infomaniak | Server for application and PostgreSQL database, object storage (uploaded files, images) | Switzerland | Infomaniak Network SA (Switzerland) |
-| Scaleway | Encrypted database backups | Paris (`fr-par`) | Scaleway SAS (France) |
+| Infomaniak | Server for application and PostgreSQL database, object storage (uploaded files, images), encrypted database backups | Switzerland | Infomaniak Network SA (Switzerland) |
 | Brevo | Transactional email (verification, notifications) | EU | Sendinblue SAS / Brevo (France) |
 
 Transactional emails are sent with tracking disabled.
@@ -85,4 +84,4 @@ For data-protection questions or requests, contact the instance operator. For th
 
 ## Summary
 
-Eduskript stores the minimum personal data needed to function. Teacher identities are conventional; student identities are pseudonymised and contain no email. Core data is hosted in Switzerland (Infomaniak); encrypted backups and email delivery in the EU (Scaleway, Brevo) under Swiss and EU data-protection law. Third-party US identity providers are optional and user-initiated, and no analytics or tracking is used.
+Eduskript stores the minimum personal data needed to function. Teacher identities are conventional; student identities are pseudonymised and contain no email. Core data is hosted in Switzerland (Infomaniak); so are the encrypted backups; email delivery is in the EU (Brevo) under Swiss and EU data-protection law. Third-party US identity providers are optional and user-initiated, and no analytics or tracking is used.

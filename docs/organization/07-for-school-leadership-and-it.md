@@ -7,7 +7,7 @@ This page summarises what school leadership, IT staff and data protection office
 
 > [!success] In short
 > - Students are **pseudonymous**. Eduskript does not store students' email addresses.
-> - Database and files are in **Switzerland** (Infomaniak); encrypted backups and email delivery are in the **EU** (backups in Paris).
+> - Database, files and encrypted backups are in **Switzerland** (Infomaniak); only email delivery to teachers is in the **EU**.
 > - AI for student data runs **in Switzerland** (Infomaniak). It receives **only the answer**, without name, pseudonym, account ID, class or IP address, stores nothing and does not train on it.
 > - No tracking, no analytics, no advertising.
 > - Source code is public (AGPL v3), so third parties can review its security.
