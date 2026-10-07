@@ -7,9 +7,8 @@ import { assembleEditPrompt } from '@/lib/ai/prompts'
 import type { EditRequest, SkriptContext } from '@/lib/ai/types'
 import { parseJsonResponse, isValidEditPlan, type ParseJsonResponse } from '@/lib/ai/parse-json-response'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
-import { openrouterRouting } from '@/lib/ai/openrouter'
+import { aiConfigured, aiModel } from '@/lib/ai/provider'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('ai:edit')
@@ -37,7 +36,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // 3. Check API key
-  if (!process.env.OPENROUTER_API_KEY) {
+  if (!aiConfigured('plan')) {
     return Response.json({ success: false, error: 'AI service not configured' }, { status: 503 })
   }
 
@@ -176,11 +175,7 @@ export async function POST(request: Request): Promise<Response> {
     }
   } else {
     // Skript mode: load org/user custom prompts, then ask the AI for a plan.
-    const openai = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1',
-      defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-    })
+    const ai = aiModel('plan')
 
     // aiSystemPrompt lives on Site for both users and organizations.
     let orgPrompt: string | undefined
@@ -216,18 +211,16 @@ export async function POST(request: Request): Promise<Response> {
     })
 
     const MAX_PLAN_RETRIES = 3
-    const planModel = process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite'
 
     for (let attempt = 1; attempt <= MAX_PLAN_RETRIES; attempt++) {
-      const planMessage = await openai.chat.completions.create({
-        // Plan step (decide how many pages to edit): short JSON, so use the fastest+cheapest
-        // model. OPENROUTER_PLAN_MODEL overrides. See docs/ai-model-selection-eval.md.
-        model: planModel,
+      const planMessage = await ai.client.chat.completions.create({
+        // Plan step (decide how many pages to edit): short JSON, fastest+cheapest
+        // model for 'plan' (provider.ts). See docs/ai-model-selection-eval.md.
+        model: ai.model,
         max_tokens: 8192,
         messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
-        // OpenRouter-specific `provider` field (see openrouter.ts). Unknown to the
-        // OpenAI SDK types but forwarded in the body.
-        ...(openrouterRouting(planModel) as Record<string, unknown>),
+        // Provider-specific fields (OpenRouter routing / Infomaniak options).
+        ...ai.extra,
       })
 
       lastPlanText = planMessage.choices[0]?.message?.content ?? ''

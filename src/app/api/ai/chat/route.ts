@@ -6,10 +6,8 @@ import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { assembleSystemPrompt } from '@/lib/ai/prompts'
 import type { ChatRequest, SkriptContext } from '@/lib/ai/types'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import { openrouterRouting } from '@/lib/ai/openrouter'
-import OpenAI from 'openai'
+import { aiConfigured, aiModel } from '@/lib/ai/provider'
 
-const CHAT_MODEL = 'google/gemini-3.5-flash-lite'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -52,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Check API key is configured
-    if (!process.env.OPENROUTER_API_KEY) {
+    if (!aiConfigured('chat')) {
       return Response.json(
         { error: 'AI service not configured' },
         { status: 503 }
@@ -152,12 +150,8 @@ export async function POST(request: Request) {
       skriptContext,
     })
 
-    // 9. Initialize OpenRouter client
-    const openai = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1',
-      defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-    })
+    // 9. Provider + model for 'chat' (src/lib/ai/provider.ts)
+    const ai = aiModel('chat')
 
     // 10. Create streaming response
     const encoder = new TextEncoder()
@@ -167,18 +161,17 @@ export async function POST(request: Request) {
     // Start AI stream in background
     ;(async () => {
       try {
-        const aiStream = await openai.chat.completions.create({
-          // flash-lite: fastest+cheapest, correct on chat-scale prompts (see docs/ai-model-selection-eval.md)
-          model: CHAT_MODEL,
+        const aiStream = await ai.client.chat.completions.create({
+          model: ai.model,
           max_tokens: 4096,
           messages: [
             { role: 'system', content: systemPrompt },
             ...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
           ],
           stream: true,
-          ...(openrouterRouting(CHAT_MODEL) as Record<string, unknown>),
+          ...ai.extra,
         }, {
-          // Cancels the upstream OpenRouter request when the client disconnects.
+          // Cancels the upstream request when the client disconnects.
           signal: request.signal,
         })
 

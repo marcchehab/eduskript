@@ -76,6 +76,8 @@ env:
     WARM_ON_BOOT: "0"
     # Object storage: Infomaniak Public Cloud (Swift + S3 API), see src/lib/s3.ts.
     S3_ENDPOINT: https://s3.pub1.infomaniak.cloud
+    # AI Services product (src/lib/ai/provider.ts); not a secret.
+    INFOMANIAK_AI_PRODUCT_ID: "112184"
     S3_REGION: us-east-1
     S3_FORCE_PATH_STYLE: "true"
     S3_PUBLIC_BASE_URL: https://s3.pub1.infomaniak.cloud/object/v1/AUTH_0545793e6966429094ae4a572cd0e156
@@ -104,6 +106,7 @@ env:
     - MUX_TOKEN_SECRET
     - MUX_WEBHOOK_SECRET
     - OPENROUTER_API_KEY
+    - INFOMANIAK_AI_TOKEN       # AI for student data (Infomaniak AI Services, CH)
     - PAYREXX_API_SECRET
     - PAYREXX_INSTANCE
     - PAYREXX_WEBHOOK_SECRET

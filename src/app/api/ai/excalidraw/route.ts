@@ -1,16 +1,14 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
-import { openrouterRouting } from '@/lib/ai/openrouter'
+import { aiConfigured, aiModel } from '@/lib/ai/provider'
 import {
   EXCALIDRAW_SYSTEM_PROMPT,
   buildUserPrompt,
   buildRetryPrompt,
   stripMermaidFences,
 } from '@/lib/ai/excalidraw-prompt'
-import OpenAI from 'openai'
 
-const CONTENT_MODEL = 'deepseek/deepseek-v4.1-flash'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -56,7 +54,7 @@ export async function POST(request: Request) {
       return paidOnlyResponse('AI Excalidraw generation is a paid feature.')
     }
 
-    if (!process.env.OPENROUTER_API_KEY) {
+    if (!aiConfigured('diagram')) {
       return Response.json({ error: 'AI service not configured' }, { status: 503 })
     }
 
@@ -78,27 +76,23 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Prompt too long (max 2000 chars)' }, { status: 400 })
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1',
-      defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-    })
+    const ai = aiModel('diagram')
 
     const userMessage =
       body.retryWith?.mermaid && body.retryWith?.error
         ? buildRetryPrompt(prompt, language, body.retryWith.mermaid, body.retryWith.error)
         : buildUserPrompt(prompt, language)
 
-    const completion = await openai.chat.completions.create({
-      // deepseek-v4.1-flash (successor of v4-flash, chosen 2026-08 over glm-5.2
-      // for price at comparable German quality, see docs/ai-model-selection-eval.md).
-      model: CONTENT_MODEL,
+    const completion = await ai.client.chat.completions.create({
+      // Model for 'diagram' in provider.ts (deepseek-v4.1-flash chosen 2026-08
+      // over glm-5.2 for price, see docs/ai-model-selection-eval.md).
+      model: ai.model,
       max_tokens: 1024,
       messages: [
         { role: 'system', content: EXCALIDRAW_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
-      ...(openrouterRouting(CONTENT_MODEL) as Record<string, unknown>),
+      ...ai.extra,
     })
 
     const raw = completion.choices[0]?.message?.content ?? ''

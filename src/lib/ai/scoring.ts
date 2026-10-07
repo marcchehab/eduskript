@@ -4,16 +4,15 @@
  *     question + reference + a sample of student submissions.
  *  2. score one student's submission against a fixed rubric → points + feedback.
  *
- * Reuses the OpenRouter setup from the AI-edit route (OPENROUTER_API_KEY /
- * OPENROUTER_MODEL / OPENROUTER_PROVIDERS). The AI only ever emits POINTS
+ * Provider/model: aiModel('scoring') in src/lib/ai/provider.ts (Infomaniak,
+ * Switzerland — student work). The AI only ever emits POINTS
  * (Punkte) + feedback — never a grade. Output is strict JSON, parsed with
  * parseJsonResponse.
  *
  * Related: [[scoring/submissions]], [[scoring/score-component]].
  */
 
-import OpenAI from 'openai'
-import { openrouterRouting } from './openrouter'
+import { aiModel } from './provider'
 import { extractCriterionRegex, runCriterionCheck, stripInlineRegex } from '@/lib/scoring/regex-check'
 import { createLogger } from '@/lib/logger'
 
@@ -91,22 +90,14 @@ export interface AiScoreResult {
   criteria: AiCriterionScore[]
 }
 
-function client(): OpenAI {
-  return new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: 'https://openrouter.ai/api/v1',
-    defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-  })
-}
-
+/** The model spec stored on scores/rubrics (e.g. "infomaniak:Qwen/…+nothink").
+ *  Provider + model come from aiModel('scoring') (src/lib/ai/provider.ts):
+ *  student work, so Infomaniak (Switzerland) only. History: gemini-3.8-flash on
+ *  Vertex via OpenRouter until 2026-10-07 (5-6 s per call); Qwen3.5-397B on
+ *  Infomaniak matched it on 60 real paper-exam crops (78 % vs 76 % exact) at
+ *  ~18 s per call. Not yet checked on Eduskript's own digital exams. */
 export function scoringModel(): string {
-  // gemini-3.8-flash on Vertex (2026-09-30): 5-6 s per scoring call vs 12-25 s
-  // for deepseek-v4-flash via zdr providers (144+ s pinned to DigitalOcean), and
-  // identical points on two runs of the same buggy submission, matching what
-  // deepseek-v4-flash awarded. deepseek-v4.1-flash was faster but its points
-  // varied by provider. One synthetic exercise only; not yet checked against
-  // real teacher grades (scripts/grading-bench/).
-  return process.env.OPENROUTER_MODEL ?? 'google/gemini-3.8-flash'
+  return aiModel('scoring').spec
 }
 
 /** Append the teacher/org custom guidance (language, style, terminology) so the
@@ -121,27 +112,66 @@ function withGuidance(base: string, guidance?: string): string {
  *  they still score independently; only an identical re-score is pinned. */
 const SCORING_SEED = 7
 
+/** JSON schemas for the two prompts' output (see RUBRIC_SYSTEM / SCORE_SYSTEM).
+ *  Infomaniak rejects response_format `json_object` and requires `json_schema`
+ *  (2026-10-07); a schema also keeps the shape fixed on any provider. */
+const RUBRIC_SCHEMA = {
+  type: 'object',
+  properties: {
+    criteria: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { description: { type: 'string' }, points: { type: 'number' } },
+        required: ['description', 'points'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['criteria'],
+  additionalProperties: false,
+} as const
+
+const SCORE_SCHEMA = {
+  type: 'object',
+  properties: {
+    criteria: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { id: { type: 'string' }, points: { type: 'number' }, comment: { type: 'string' } },
+        required: ['id', 'points', 'comment'],
+        additionalProperties: false,
+      },
+    },
+    feedback: { type: 'string' },
+  },
+  required: ['criteria', 'feedback'],
+  additionalProperties: false,
+} as const
+
 async function complete(
   system: string,
   user: string,
   maxTokens: number,
+  schema: { name: string; schema: Record<string, unknown> },
   opts: { temperature?: number; seed?: number } = {},
 ): Promise<{ content: string; finishReason: string | null; diag: ResponseDiag }> {
-  const model = scoringModel()
-  const res = await client().chat.completions.create({
-    model,
+  const ai = aiModel('scoring')
+  const res = await ai.client.chat.completions.create({
+    model: ai.model,
     max_tokens: maxTokens,
     // Force well-formed JSON: the model occasionally emitted slightly malformed
     // JSON (e.g. a dropped "{"), which the parser couldn't recover → a student
     // silently went unscored. (Both prompts already say "Output STRICT JSON".)
-    response_format: { type: 'json_object' },
+    response_format: { type: 'json_schema', json_schema: { name: schema.name, strict: true, schema: schema.schema } },
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
     ...opts,
-    // zdr: rubric samples and scored submissions are student work.
-    ...(openrouterRouting(model) as Record<string, unknown>),
+    // Rubric samples and scored submissions are student work → Infomaniak only.
+    ...ai.extra,
   })
   // Reasoning models (minimax) put their chain-of-thought in message.reasoning and
   // the answer in message.content; OpenRouter may add native_finish_reason + a
@@ -299,7 +329,7 @@ export async function generateRubric(
   try {
     // 8k tokens: the reasoning model (minimax) needs headroom or it truncates
     // mid-reasoning and returns empty content.
-    ;({ content: text, diag } = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 8192))
+    ;({ content: text, diag } = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 8192, { name: 'rubric', schema: RUBRIC_SCHEMA }))
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'LLM request failed' }
   }
@@ -503,7 +533,7 @@ export async function scoreSubmission(
       // untouched. Cap stays fixed (see the `attempt` note: more headroom worsens
       // a spiral).
       const system = attempt === 0 ? SCORE_SYSTEM : SCORE_SYSTEM + SCORE_RETRY_NUDGE
-      ;({ content: text, diag } = await complete(withGuidance(system, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 8192, {
+      ;({ content: text, diag } = await complete(withGuidance(system, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 8192, { name: 'score', schema: SCORE_SCHEMA }, {
         temperature: 0,
         seed: SCORING_SEED,
       }))

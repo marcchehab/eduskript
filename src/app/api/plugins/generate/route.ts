@@ -3,16 +3,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
-import OpenAI from 'openai'
 import { PLUGIN_AUTHORING_PROMPT, parsePluginResponse } from '@/lib/ai/plugin-prompt'
-import { openrouterRouting } from '@/lib/ai/openrouter'
+import { aiConfigured, aiModel } from '@/lib/ai/provider'
 import { templatePromptSection } from '@/lib/plugin-templates/server'
 
 // glm-5.2 since 2026-10-05: in a 6-prompt × 8-model plugin bench (reasoning
 // off) it was fastest (median 8 s) with the most polished results at
 // ~4.6 ¢/plugin; deepseek-v4.1-flash was close at 0.7 ¢ (13 s). Bench runner
 // was ad hoc (session scratchpad), results summarised in the commit message.
-const CONTENT_MODEL = 'z-ai/glm-5.2'
 
 // Upper bound on how long one Generate click may take, across all attempts.
 // Each OpenAI call gets the remaining budget as its timeout and no new attempt
@@ -88,7 +86,7 @@ export async function POST(request: NextRequest) {
     return paidOnlyResponse('AI plugin generation is a paid feature.')
   }
 
-  if (!process.env.OPENROUTER_API_KEY) {
+  if (!aiConfigured('plugin')) {
     return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
   }
 
@@ -127,17 +125,7 @@ export async function POST(request: NextRequest) {
     },
   })
 
-  const openai = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: 'https://openrouter.ai/api/v1',
-    defaultHeaders: {
-      'HTTP-Referer': 'https://eduskript.org',
-      'X-Title': 'Eduskript',
-    },
-    // Our loop below is the only retry; the SDK's own retries would multiply
-    // the wait beyond TOTAL_BUDGET_MS.
-    maxRetries: 0,
-  })
+  const ai = aiModel('plugin')
 
   // Build user message: if there's existing HTML, this is an edit request
   let userMessage: string
@@ -176,10 +164,9 @@ export async function POST(request: NextRequest) {
         }
         if (request.signal.aborted) return controller.close()
         try {
-          const completion = await openai.chat.completions.create({
-            // deepseek-v4.1-flash (successor of v4-flash, chosen 2026-08 over glm-5.2
-            // for price at comparable German quality, see docs/ai-model-selection-eval.md).
-            model: CONTENT_MODEL,
+          const completion = await ai.client.chat.completions.create({
+            // Model for 'plugin' in provider.ts.
+            model: ai.model,
             max_tokens: 32000,
             stream: true,
             // Reasoning off: deepseek-v4.1-flash ignores `effort: 'low'` and
@@ -187,13 +174,18 @@ export async function POST(request: NextRequest) {
             // effort low → 56k reasoning chars, 72 s, cut off; disabled → 15 s,
             // 24k chars of finished HTML). Attempts truncated "at 0 chars" in
             // the dev log were this.
-            ...({ reasoning: { enabled: false } } as Record<string, unknown>),
+            ...(ai.provider === 'openrouter' ? { reasoning: { enabled: false } } : {}),
             messages: [
               { role: 'system', content: system },
               { role: 'user', content: userMessage },
             ],
-            ...(openrouterRouting(CONTENT_MODEL) as Record<string, unknown>),
-          }, { timeout: Math.max(remaining, 1_000), signal: request.signal })
+            ...ai.extra,
+          }, {
+            timeout: Math.max(remaining, 1_000),
+            signal: request.signal,
+            // Our loop is the only retry; SDK retries would overrun TOTAL_BUDGET_MS.
+            maxRetries: 0,
+          })
 
           let text = ''
           let finishReason: string | null = null

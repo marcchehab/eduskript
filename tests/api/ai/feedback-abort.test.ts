@@ -53,6 +53,8 @@ describe('POST /api/ai/feedback client abort', () => {
 
   beforeEach(() => {
     process.env.OPENROUTER_API_KEY = 'test'
+    process.env.INFOMANIAK_AI_TOKEN = 'test'
+    process.env.INFOMANIAK_AI_PRODUCT_ID = '1'
     unhandled.length = 0
     process.on('unhandledRejection', onUnhandled)
     vi.spyOn(console, 'error').mockImplementation(() => {})

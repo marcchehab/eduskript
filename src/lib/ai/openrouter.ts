@@ -24,8 +24,10 @@
  *
  * Which providers end up serving teacher-content requests changes with
  * OpenRouter's ZDR list; /datenschutz covers them as "Weitere Modellanbieter".
- * Student work (scoring, AI feedback) goes to Gemini on Vertex only — keep it
- * that way unless /datenschutz lists the new provider (AVV: 30 days' notice).
+ * Since 2026-10-07 student work (AI feedback, scoring, script import) does not
+ * go through OpenRouter at all but to Infomaniak in Switzerland; provider.ts
+ * enforces that (STUDENT_DATA). Use aiModel() from provider.ts, not this
+ * module directly.
  */
 
 // A type alias (not an interface) so it casts cleanly to Record<string, unknown>

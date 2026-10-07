@@ -2,7 +2,7 @@
 
 Eduskript ist für den Einsatz in Schulen gebaut, wo die verarbeiteten Daten Lehrpersonen und — vor allem — Minderjährigen gehören. Datenschutz ist deshalb eine Designvorgabe, kein nachträglicher Gedanke. Diese Seite dokumentiert, welche Daten Eduskript speichert, wo sie gespeichert werden und wer sie verarbeitet.
 
-> **Kurz gesagt**: E-Mail-Adressen von Schülern werden nie gespeichert. Datenbank und Dateien liegen in der Schweiz, verschlüsselte Sicherungen in der EU (Paris). KI-Anfragen enthalten keine Identifikationsmerkmale. Keine Drittanbieter-Analytics, kein Werbe-Tracking.
+> **Kurz gesagt**: E-Mail-Adressen von Schülern werden nie gespeichert. Datenbank und Dateien liegen in der Schweiz, verschlüsselte Sicherungen in der EU (Paris). KI-Anfragen mit Schülerdaten bleiben in der Schweiz und enthalten keine Identifikationsmerkmale. Keine Drittanbieter-Analytics, kein Werbe-Tracking.
 >
 > Die verbindliche Fassung ist die [Datenschutzerklärung](https://eduskript.org/datenschutz). Für Schulleitung und ICT gibt es eine [Übersicht](07-fuer-schulleitung-und-ict.md) und eine [Vorlage für den Auftragsbearbeitungsvertrag](08-avv-vorlage.md).
 
@@ -66,7 +66,7 @@ Eduskript unterstützt die Anmeldung über externe Identitätsanbieter. Einige d
 
 ## KI-Funktionen
 
-KI-Feedback und KI-Bewertung schicken nur Aufgabentext, Lösung und gegebenenfalls Musterlösung bzw. Bewertungsraster an den KI-Anbieter — keine Namen, Pseudonyme, E-Mail-Adressen, Konto-IDs oder Klassen. Die Anfrage kommt vom Server, nicht vom Gerät des Schülers. Diese Anfragen gehen nur an Endpunkte ohne Datenspeicherung (Zero Data Retention), die nicht zum Training verwenden. Schreibt ein Schüler den eigenen Namen in die Lösung, geht er mit.
+KI-Feedback und KI-Bewertung schicken nur Aufgabentext, Lösung und gegebenenfalls Musterlösung bzw. Bewertungsraster an den KI-Anbieter — keine Namen, Pseudonyme, E-Mail-Adressen, Konto-IDs oder Klassen. Die Anfrage kommt vom Server, nicht vom Gerät des Schülers. Verarbeitet werden diese Anfragen von Infomaniak in der Schweiz, ohne Speicherung und ohne Training. Schreibt ein Schüler den eigenen Namen in die Lösung, geht er mit.
 
 ## Sitzungen
 

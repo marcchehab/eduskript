@@ -20,27 +20,27 @@ export const metadata: Metadata = {
  * The "KI-Funktionen" claims are backed by: src/lib/ai/scoring.ts (prompt =
  * exercise + rubric + submission text, no ids), src/lib/scoring/submissions.ts
  * (studentId never leaves the server), src/app/api/ai/feedback/route.ts (image
- * redrawn from strokes / re-encoded photo, no EXIF), src/lib/ai/openrouter.ts
- * (data_collection: 'deny' on every request). Re-check them before changing
- * this section.
+ * redrawn from strokes / re-encoded photo, no EXIF), src/lib/ai/provider.ts
+ * (student-data purposes forced to Infomaniak; OpenRouter routes zdr-only).
+ * Re-check them before changing this section.
  */
 
 // Sources (checked 2026-10-05): config/deploy.yml (app + Postgres on one
 // Infomaniak VPS, Switzerland; files in Infomaniak Public Cloud object storage
 // (S3_ENDPOINT in config/deploy.yml); backups via pgBackRest to Scaleway, retention in
 // config/db/pgbackrest.conf), src/lib/s3.ts (fr-par), OpenRouter provider list
-// (retention/training flags). AI providers must match openrouterRouting() in
-// src/lib/ai/openrouter.ts.
+// (retention/training flags), Infomaniak LLM API terms art. 6 (no storage, no
+// training; copy in pr-audit/vertraege). AI providers must match DEFAULTS /
+// STUDENT_DATA in src/lib/ai/provider.ts.
 const SUBPROCESSORS: { name: string; purpose: string; location: string; studentData: string }[] = [
-  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (hochgeladene Dateien, Bilder)', location: 'Schweiz', studentData: 'ja' },
+  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (hochgeladene Dateien, Bilder), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen)', location: 'Schweiz', studentData: 'ja' },
   { name: 'Scaleway SAS (Frankreich)', purpose: 'Verschlüsselte Datenbank-Sicherungen', location: 'Paris, Frankreich', studentData: 'ja (nur verschlüsselt)' },
   { name: 'Brevo / Sendinblue SAS (Frankreich)', purpose: 'E-Mail-Versand an Lehrpersonen (Bestätigung, Benachrichtigungen)', location: 'EU', studentData: 'nein' },
   { name: 'CloudMailin (Dynamic Edge Software Ltd, Grossbritannien)', purpose: 'Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes)', location: 'USA/EU', studentData: 'nein' },
   { name: 'Payrexx AG (Schweiz)', purpose: 'Zahlungsabwicklung', location: 'Schweiz', studentData: 'nein' },
   { name: 'Mux, Inc. (USA)', purpose: 'Video-Hosting für von Lehrpersonen hochgeladene Videos', location: 'USA', studentData: 'nein' },
-  { name: 'OpenRouter, Inc. (USA)', purpose: 'Vermittlung der KI-Anfragen an die Modellanbieter', location: 'USA', studentData: 'nur Lösungen, ohne Identifikationsmerkmale' },
-  { name: 'Google LLC (USA), Vertex AI', purpose: 'KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (Gemini)', location: 'von Google gewählt (global)', studentData: 'wie OpenRouter' },
-  { name: 'Weitere Modellanbieter über OpenRouter', purpose: 'KI-Unterstützung der Lehrperson beim Schreiben (Chat, KI-Bearbeitung, Diagramme)', location: 'USA u. a.', studentData: 'nein' },
+  { name: 'OpenRouter, Inc. (USA)', purpose: 'Vermittlung der KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten', location: 'USA', studentData: 'nein' },
+  { name: 'Modellanbieter über OpenRouter (u. a. Google Vertex AI)', purpose: 'KI-Unterstützung der Lehrperson beim Schreiben (Chat, KI-Bearbeitung, Diagramme, Plugins)', location: 'USA u. a.', studentData: 'nein' },
 ]
 
 const CHANGELOG: { date: string; change: string }[] = [
@@ -49,6 +49,7 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'September 2026', change: 'DigitalOcean entfernt; KI-Bewertung über Google Vertex AI. KI-Unterstützung der Lehrperson nur noch über Anbieter ohne Datenspeicherung.' },
   { date: 'Oktober 2026', change: 'Koyeb und Neon/AWS (Frankfurt) ersetzt durch einen eigenen Server bei Infomaniak in der Schweiz. Hochgeladene Dateien ebenfalls bei Infomaniak statt Scaleway. Bei Scaleway (Paris) liegen nur noch verschlüsselte Datenbank-Sicherungen.' },
   { date: 'Oktober 2026', change: 'CloudMailin ergänzt (war für die Mail-Hooks der Lehrpersonen bereits im Einsatz, fehlte in der Liste).' },
+  { date: 'Oktober 2026', change: 'KI-Feedback, KI-Bewertung und Import von Lehrmaterial laufen bei Infomaniak in der Schweiz statt über OpenRouter und Google. Schülerdaten gehen an keinen KI-Anbieter im Ausland mehr. OpenRouter nur noch für Inhalte der Lehrpersonen.' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -82,10 +83,10 @@ export default function DatenschutzPage() {
                 verschlüsselte Sicherungen in der <strong>EU</strong> (Paris).
               </li>
               <li>
-                KI-Anfragen enthalten <strong>keine Namen, Pseudonyme,
-                E-Mail-Adressen oder Konto-IDs</strong>. Anbieter, die
-                Lösungen von Schülerinnen und Schülern erhalten, dürfen sie
-                weder speichern noch zum Training verwenden.
+                Lösungen von Schülerinnen und Schülern verarbeitet die KI
+                <strong>in der Schweiz</strong> (Infomaniak), ohne Namen,
+                Pseudonyme, E-Mail-Adressen oder Konto-IDs, ohne Speicherung
+                und ohne Training.
               </li>
               <li>Kein Tracking, keine Analyse-Dienste, keine Werbung.</li>
               <li>
@@ -222,7 +223,7 @@ export default function DatenschutzPage() {
               IP-Adressen der Schülerinnen und Schüler. Bilder der Handschrift
               werden aus den Stiftstrichen neu gezeichnet; Fotos werden neu
               kodiert, dabei fallen Metadaten wie Standort oder Kameramodell
-              weg. Für den KI-Anbieter ist eine Anfrage damit keiner Person
+              weg. Für den KI-Dienst ist eine Anfrage damit keiner Person
               zuordenbar.
             </p>
             <p>
@@ -234,19 +235,19 @@ export default function DatenschutzPage() {
 
             <h3 className={h3}>Kein Training, keine Speicherung</h3>
             <p>
-              Alle KI-Anfragen laufen über OpenRouter. Anfragen mit Lösungen
-              von Schülerinnen und Schülern (KI-Feedback, KI-Bewertung) gehen
-              nur an die in Abschnitt 5 genannten Anbieter und nur an
-              Endpunkte ohne Datenspeicherung (Zero Data Retention): Die
-              Inhalte werden nur für die Antwort verarbeitet, nicht
-              gespeichert und nicht zum Training verwendet. Ist keiner dieser
-              Anbieter erreichbar, schlägt die Anfrage fehl, statt auf einen
-              anderen Anbieter auszuweichen.
+              Anfragen mit Lösungen von Schülerinnen und Schülern
+              (KI-Feedback, KI-Bewertung, Bewertungsraster) und Dokumente, die
+              Lehrpersonen importieren, verarbeitet Infomaniak in seinen
+              Rechenzentren in der Schweiz mit offenen Modellen. Infomaniak
+              speichert die Inhalte nicht über die Verarbeitung hinaus und
+              verwendet sie nicht zum Training. Der Code von Eduskript lässt
+              für diese Anfragen keinen anderen Anbieter zu.
             </p>
             <p>
-              Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten,
-              gehen ebenfalls nur an Endpunkte ohne Datenspeicherung, die
-              Inhalte nicht zum Training verwenden.
+              Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten
+              (Chat, KI-Bearbeitung, Diagramme, Plugins), laufen über
+              OpenRouter und gehen nur an Endpunkte ohne Datenspeicherung
+              (Zero Data Retention), die Inhalte nicht zum Training verwenden.
             </p>
           </section>
 
@@ -258,9 +259,11 @@ export default function DatenschutzPage() {
               Anwendung, Datenbank und Dateien liegen in der Schweiz
               (Infomaniak). Verschlüsselte Datenbank-Sicherungen und der
               E-Mail-Versand liegen in der EU, die nach Schweizer Recht als
-              Staat mit angemessenem Datenschutz gilt. Für die KI-Funktionen und das
-              Video-Hosting gehen Daten in die USA, bei der KI ohne
-              Identifikationsmerkmale (siehe Abschnitt 4).
+              Staat mit angemessenem Datenschutz gilt. Daten von Schülerinnen
+              und Schülern verlassen die Schweiz nur als verschlüsselte
+              Sicherung. In die USA gehen nur Inhalte der Lehrpersonen: Videos
+              (Mux) und KI-Anfragen zum Bearbeiten eigener Inhalte (siehe
+              Abschnitt 4).
             </p>
             <div className="not-prose overflow-x-auto">
               <table className="w-full text-sm border-collapse">

@@ -80,9 +80,9 @@ UID CHE-261.508.926, operator of eduskript.org
 
 ## 8. Place of processing and transfer abroad
 
-8.1 The database and uploaded files are stored in Switzerland (Infomaniak). Encrypted database backups are stored in Paris (France); email delivery takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
+8.1 The database and uploaded files are stored in Switzerland (Infomaniak). AI processing of students' answers (section 9) also takes place at Infomaniak in Switzerland. Encrypted database backups are stored in Paris (France); email delivery to teachers takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
 
-8.2 For AI features (section 9), content is transferred to providers in the USA, exclusively without identifying information as described in section 9.2. Google LLC is certified under the Swiss-U.S. Data Privacy Framework. For OpenRouter, which forwards the requests, the transfer relies on the EU Standard Contractual Clauses (Module 2, with the Swiss adaptations and the FDPIC as supervisory authority) in [OpenRouter's data processing agreement](https://openrouter.ai/data-processing-agreement) (as of 26 August 2026, sections 13.2 and 13.4). In addition, the content cannot be attributed to any person by OpenRouter.
+8.2 Students' personal data is not transferred to countries without an adequate level of data protection. Only teachers' content goes to the USA: videos (Mux) and AI requests with which teachers edit their own content (OpenRouter; based on the EU Standard Contractual Clauses in [OpenRouter's data processing agreement](https://openrouter.ai/data-processing-agreement), as of 26 August 2026).
 
 8.3 By signing, the School approves processing at the locations listed in Annex 3. The current list of locations and providers is documented in the privacy policy.
 
@@ -97,7 +97,7 @@ UID CHE-261.508.926, operator of eduskript.org
 
 Students' names, nicknames, pseudonyms, email addresses, account IDs, class names or IP addresses are **not** transferred. A request can therefore not be attributed to any person by the AI provider.
 
-9.3 **No training, no storage.** Requests containing students' answers go only to the providers listed in Annex 3 and only to zero-data-retention endpoints that do not use content for training. If none of these endpoints is reachable, the request fails instead of falling back to another provider.
+9.3 **In Switzerland, no training, no storage.** Requests containing students' answers (AI feedback, AI scoring, scoring rubrics) are processed by Infomaniak in its data centres in Switzerland with open models. Infomaniak does not store the content beyond processing and does not use it for training (LLM API terms of use, art. 6). Eduskript technically allows no other provider for these requests.
 
 9.4 **Residual risk.** If a student writes their own name into the answer itself (e.g. on the photographed sheet or in a code comment), it is transferred along. Eduskript points this out when a student joins a class.
 
@@ -131,12 +131,11 @@ Eduskript names the School as a reference or in publications only with the Schoo
 
 Eduskript is a small provider. It does not meet, or only partially meets, the following requirements of the AGB Auslagerung Informatikleistungen:
 
-- **Place of processing (cl. 12):** Database and files are in Switzerland; encrypted backups and email delivery are in the EU. AI requests go to the USA without identifying information (section 8).
+- **Place of processing (cl. 12):** Database, files and AI processing of student data are in Switzerland. Encrypted backups and email delivery to teachers are in the EU (section 8).
 - **Security management under ISO 27000 and external audits (cl. 8a, 9a):** Eduskript has no certification of its own and does not commission periodic audits. The hosting providers' data centres are ISO 27001 certified; the source code is publicly reviewable.
 - **Access logging (cl. 8d):** Read access is not logged individually. Exam events are logged (start, hand-in, return).
 - **Contractual penalty (cl. 16):** Not included. The School may agree one.
 - **Passing all obligations on to sub-processors (cl. 10):** Only within the providers' standard agreements (section 7.3).
-- **Adapted Standard Contractual Clauses (guide «Bearbeiten im Auftrag», section 5.2):** OpenRouter's Standard Contractual Clauses (section 8.2) name the FDPIC as supervisory authority and are governed by Irish law, not the cantonal data protection commissioner and Swiss law. Independently of this, OpenRouter receives no identifying information (section 9.2).
 
 ## 16. Final provisions
 
@@ -182,14 +181,13 @@ As at signature. The current, dated list is in the [privacy policy](https://edus
 
 | Provider | Purpose | Location | Student data? |
 |---|---|---|---|
-| Infomaniak Network SA | Server for application and PostgreSQL database, file storage | Switzerland | yes |
+| Infomaniak Network SA | Application server and PostgreSQL database, file storage, AI processing (AI feedback, AI scoring) with open models | Switzerland | yes |
 | Scaleway SAS | Encrypted database backups | Paris, France | yes (encrypted only) |
 | Brevo (Sendinblue SAS) | Email delivery to teachers | EU | no |
 | CloudMailin (Dynamic Edge Software Ltd, UK) | Receiving emails forwarded by teachers (mail hooks, e.g. login codes) | USA/EU | no |
 | Payrexx AG | Payment processing | Switzerland | no |
 | Mux, Inc. | Video hosting (videos uploaded by teachers) | USA | no |
-| OpenRouter, Inc. | Routing of AI requests (section 9) | USA | only answers without identifying information |
-| Google LLC (Vertex AI) | AI feedback on handwriting, AI scoring of exam answers (Gemini) | chosen by Google (global) | as OpenRouter |
-| Other model providers via OpenRouter (zero data retention only) | AI support for teachers when writing | USA and others | no |
+| OpenRouter, Inc. | Routing of teachers' AI requests for their own content | USA | no |
+| Model providers via OpenRouter, incl. Google Vertex AI (zero data retention only) | AI support for teachers when writing | USA and others | no |
 
 Sign-in via Microsoft happens at the identity provider of the School or teacher and is not processing on behalf by Eduskript.

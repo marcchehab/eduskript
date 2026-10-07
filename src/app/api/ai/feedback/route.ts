@@ -13,17 +13,15 @@
  * Streams SSE events in the same { type: 'content' | 'error' | 'done' } shape
  * as /api/ai/chat.
  *
- * Model: OPENROUTER_VISION_MODEL env, falling back to google/gemini-3.8-flash
- * (the text-only chat/plan models have no image input, so vision needs its own
- * multimodal slug). History: flash-lite beat qwen/qwen3-vl-235b-a22b-instruct on
+ * Model: aiModel('feedback') (src/lib/ai/provider.ts), since 2026-10-07
+ * Qwen3.5-397B on Infomaniak (Switzerland) without thinking — student work
+ * stays in Switzerland. Needs a vision model. Earlier history (OpenRouter): flash-lite beat qwen/qwen3-vl-235b-a22b-instruct on
  * a handwritten-math A/B (2026-07-23: as accurate, 5-11x faster, didn't hand over
  * solutions). Replaced 2026-09-13: on a hand-drawn shortest-path stroke that runs
  * through a node label, flash-lite misread the path ~20-30% of runs (7-10/10);
  * 3.8-flash got 20/20 and followed "one or two sentences". Both were 6/6 on clean
  * synthetic right/wrong paths, so the gap is reading messy strokes. Cost: 3.8-flash
  * is $0.75/$3.75 per M tokens vs $0.30/$2.50, latency ~4-9s vs ~2s.
- * Routing: openrouterRouting() pins Gemini to Vertex (OPENROUTER_PROVIDERS does
- * not apply to Gemini models).
  */
 
 import { getServerSession } from 'next-auth'
@@ -33,8 +31,8 @@ import { checkPagePermissions } from '@/lib/permissions'
 import { extractFeedbackContext } from '@/lib/ai/feedback-context'
 import { loadSolutionImage } from '@/lib/ai/feedback-solution'
 import { recordMetric } from '@/lib/metrics/buffer'
-import { openrouterRouting } from '@/lib/ai/openrouter'
-import OpenAI from 'openai'
+import { aiConfigured, aiModel } from '@/lib/ai/provider'
+import type OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -91,7 +89,7 @@ export async function POST(request: Request) {
       userId ??
       `ip:${request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip') ?? 'unknown'}`
 
-    if (!process.env.OPENROUTER_API_KEY) {
+    if (!aiConfigured('feedback')) {
       return Response.json({ error: 'AI service not configured' }, { status: 503 })
     }
 
@@ -251,17 +249,12 @@ export async function POST(request: Request) {
       { type: 'image_url', image_url: { url: image } }
     )
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1',
-      defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-    })
+    const ai = aiModel('feedback')
 
     const encoder = new TextEncoder()
     const stream = new TransformStream()
     const writer = stream.writable.getWriter()
 
-    const visionModel = process.env.OPENROUTER_VISION_MODEL ?? 'google/gemini-3.8-flash'
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
@@ -270,8 +263,8 @@ export async function POST(request: Request) {
     // One streamed completion; forwards text as it arrives and returns it with
     // the finish reason.
     const streamAttempt = async (attemptMessages: typeof messages) => {
-      const aiStream = await openai.chat.completions.create({
-        model: visionModel,
+      const aiStream = await ai.client.chat.completions.create({
+        model: ai.model,
         // Gemini's thinking tokens count against max_tokens. At 2048 a
         // detailed drawing (reaction mechanism) used ~1960 on reasoning and
         // the answer was cut after one sentence. Measured 2026-10-01 with
@@ -280,13 +273,12 @@ export async function POST(request: Request) {
         // tasks. OpenRouter's reasoning.max_tokens was not enforced reliably
         // for Gemini (3700 against a 2048 cap), hence effort.
         max_tokens: 8192,
-        // OpenRouter extension, not in the OpenAI SDK types.
-        ...({ reasoning: { effort: 'low' } } as Record<string, unknown>),
+        // OpenRouter extension (Gemini reasoning), not in the OpenAI SDK types.
+        ...(ai.provider === 'openrouter' ? { reasoning: { effort: 'low' } } : {}),
         messages: attemptMessages,
         stream: true,
-        // zdr: the image is student work. Gemini → Vertex standard, then
-        // Vertex priority, never AI Studio (retains prompts).
-        ...(openrouterRouting(visionModel) as Record<string, unknown>),
+        // Provider fields (Infomaniak: thinking off). Student work → Infomaniak only.
+        ...ai.extra,
       })
       let text = ''
       let finishReason: string | null = null
@@ -319,7 +311,7 @@ export async function POST(request: Request) {
           ])
           if (second.finishReason === 'length') {
             recordMetric('ai_feedback_truncated', 1)
-            console.warn(`[ai-feedback] answer still truncated after continuation (${visionModel})`)
+            console.warn(`[ai-feedback] answer still truncated after continuation (${ai.spec})`)
             await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'truncated' })}\n\n`))
           }
         }

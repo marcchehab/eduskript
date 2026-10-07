@@ -5,9 +5,8 @@ import { checkSkriptPermissions } from '@/lib/permissions'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
-import { openrouterRouting } from '@/lib/ai/openrouter'
+import { aiConfigured, aiModel } from '@/lib/ai/provider'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('ai:edit:agent')
@@ -111,7 +110,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!isPaidUser(session.user)) {
     return paidOnlyResponse('AI editing is a paid feature.')
   }
-  if (!process.env.OPENROUTER_API_KEY) {
+  if (!aiConfigured('plan')) {
     return Response.json({ success: false, error: 'AI service not configured' }, { status: 503 })
   }
 
@@ -205,20 +204,15 @@ export async function POST(request: Request): Promise<Response> {
   if (user?.sites[0]?.aiSystemPrompt) customPrompts.push(`## Teacher Preferences\n${user.sites[0].aiSystemPrompt}`)
   if (customPrompts.length > 0) orgPrompt = customPrompts.join('\n\n')
 
-  const openai = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: 'https://openrouter.ai/api/v1',
-    defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-  })
+  const ai = aiModel('plan')
 
   const systemPrompt = buildSystemPrompt(skriptContext, orgPrompt, pageId, pageOnly)
 
   let content = ''
   let toolCalls: Array<{ name: string; args: Record<string, unknown> }> = []
-  const model = process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite'
   try {
-    const completion = await openai.chat.completions.create({
-      model,
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       max_tokens: 2048,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -226,7 +220,7 @@ export async function POST(request: Request): Promise<Response> {
       ],
       tools: pageOnly ? TOOLS.filter(t => t.function.name === 'edit_page') : TOOLS,
       tool_choice: 'auto',
-      ...(openrouterRouting(model) as Record<string, unknown>),
+      ...ai.extra,
     })
     const msg = completion.choices[0]?.message
     content = msg?.content?.trim() ?? ''

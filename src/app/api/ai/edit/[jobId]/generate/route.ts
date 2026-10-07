@@ -6,9 +6,8 @@ import { assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
 import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import { normalizeContent } from '@/lib/ai/normalize-content'
-import { openrouterRouting } from '@/lib/ai/openrouter'
+import { aiConfigured, aiModel } from '@/lib/ai/provider'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('ai:edit')
@@ -62,7 +61,7 @@ export async function POST(
     return paidOnlyResponse('AI editing is a paid feature.')
   }
 
-  if (!process.env.OPENROUTER_API_KEY) {
+  if (!aiConfigured('content')) {
     return Response.json({ error: 'AI service not configured' }, { status: 503 })
   }
 
@@ -74,10 +73,7 @@ export async function POST(
   // User-facing speed/quality toggle (default 'thinking' if omitted, matching
   // pre-toggle behavior). 'flash' reuses the fast plan-step model instead of
   // the slower dedicated content model.
-  const contentModel =
-    body.contentModel === 'flash'
-      ? (process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite')
-      : 'deepseek/deepseek-v4.1-flash'
+  const ai = aiModel(body.contentModel === 'flash' ? 'plan' : 'content')
 
   if (typeof pageIndex !== 'number' || pageIndex < 0) {
     return Response.json({ error: 'Invalid pageIndex' }, { status: 400 })
@@ -200,14 +196,6 @@ export async function POST(
   }
 
   // 4. Call AI
-  const openai = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: 'https://openrouter.ai/api/v1',
-    defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-  })
-
-  // zdr + fastest provider first; Gemini pinned to Vertex (see openrouter.ts).
-  const modelRouting = openrouterRouting(contentModel) as Record<string, unknown>
 
   // Fetch user and organization custom AI prompts (both live on Site).
   let orgPrompt: string | undefined
@@ -253,14 +241,14 @@ export async function POST(
         instruction: effectiveInstruction,
       })
 
-      const newPageMessage = await openai.chat.completions.create({
-        model: contentModel,
+      const newPageMessage = await ai.client.chat.completions.create({
+        model: ai.model,
         max_tokens: 8192,
         messages: [
           { role: 'system', content: newPagePrompt },
           { role: 'user', content: `Create the content for the new page "${plannedEdit.pageTitle}". ${plannedEdit.summary}` },
         ],
-        ...modelRouting,
+        ...ai.extra,
       })
 
       proposedContent = (newPageMessage.choices[0]?.message?.content ?? '').trim()
@@ -280,14 +268,14 @@ export async function POST(
         instruction: effectiveInstruction,
       })
 
-      const editMessage = await openai.chat.completions.create({
-        model: contentModel,
+      const editMessage = await ai.client.chat.completions.create({
+        model: ai.model,
         max_tokens: 8192,
         messages: [
           { role: 'system', content: editPrompt },
           { role: 'user', content: `Apply the following change to the page "${originalPage?.title || plannedEdit.pageTitle}": ${plannedEdit.summary}` },
         ],
-        ...modelRouting,
+        ...ai.extra,
       })
 
       proposedContent = (editMessage.choices[0]?.message?.content ?? '').trim()

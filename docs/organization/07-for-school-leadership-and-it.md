@@ -8,7 +8,7 @@ This page summarises what school leadership, IT staff and data protection office
 > [!success] In short
 > - Students are **pseudonymous**. Eduskript does not store students' email addresses.
 > - Database and files are in **Switzerland** (Infomaniak); encrypted backups and email delivery are in the **EU** (backups in Paris).
-> - The AI receives **only the answer**, without name, pseudonym, account ID, class or IP address. The AI providers may neither store the content nor use it for training.
+> - AI for student data runs **in Switzerland** (Infomaniak). It receives **only the answer**, without name, pseudonym, account ID, class or IP address, stores nothing and does not train on it.
 > - No tracking, no analytics, no advertising.
 > - Source code is public (AGPL v3), so third parties can review its security.
 > - We sign a **data processing agreement**: our [template](08-dpa-template.md) or your canton's model contract.
@@ -40,13 +40,15 @@ Anyone looking into Eduskript's database finds no student email addresses, only 
 
 AI is used for three things: feedback on handwritten solutions, suggested scores for exam answers, and helping teachers write content. The AI suggests, the teacher decides.
 
-The AI provider receives only:
+Students' answers are processed by Infomaniak in Switzerland with open models, without storage or training. The AI receives only:
 
 - the teacher's task text,
 - the answer (image of the handwriting, answer text or code),
 - where applicable, the model solution and the scoring rubric.
 
 The request comes from Eduskript's server, not from the student's device. Images are redrawn from the pen strokes; photos lose their metadata (e.g. location) when re-encoded. If a student writes their own name into the answer, it is sent along; Eduskript points this out when a student joins a class.
+
+Only the AI help for teachers writing their own content goes through OpenRouter to providers in the USA, also without data retention. No student data goes there.
 
 ## Sub-processors
 

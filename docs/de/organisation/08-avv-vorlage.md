@@ -77,9 +77,9 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 ## 8. Ort der Datenbearbeitung und Bekanntgabe ins Ausland
 
-8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Verschlüsselte Datenbank-Sicherungen liegen in Paris (Frankreich), der E-Mail-Versand erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
+8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Die KI-Verarbeitung von Lösungen der Schülerinnen und Schüler (Ziffer 9) findet ebenfalls bei Infomaniak in der Schweiz statt. Verschlüsselte Datenbank-Sicherungen liegen in Paris (Frankreich), der E-Mail-Versand an Lehrpersonen erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
 
-8.2 Für KI-Funktionen (Ziffer 9) werden Inhalte an Anbieter in den USA übermittelt, ausschliesslich ohne Identifikationsmerkmale gemäss Ziffer 9.2. Google LLC ist unter dem Swiss-U.S. Data Privacy Framework zertifiziert. Für OpenRouter, das die Anfragen weiterleitet, stützt sich die Übermittlung auf die Standardvertragsklauseln der EU (Modul 2, mit den Anpassungen für die Schweiz und dem EDÖB als Aufsichtsbehörde) im [Auftragsbearbeitungsvertrag von OpenRouter](https://openrouter.ai/data-processing-agreement) (Stand 26. August 2026, Ziff. 13.2 und 13.4). Zudem sind die Inhalte für OpenRouter keiner Person zuordenbar.
+8.2 Personendaten von Schülerinnen und Schülern werden nicht in Staaten ohne angemessenen Datenschutz übermittelt. In die USA gehen nur Inhalte von Lehrpersonen: Videos (Mux) und KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten (OpenRouter; gestützt auf die Standardvertragsklauseln der EU im [Auftragsbearbeitungsvertrag von OpenRouter](https://openrouter.ai/data-processing-agreement), Stand 26. August 2026).
 
 8.3 Mit der Unterzeichnung bewilligt die Schule die Bearbeitung an den in Anhang 3 genannten Orten. Die aktuelle Liste der Orte und Anbieter ist in der Datenschutzerklärung dokumentiert.
 
@@ -94,7 +94,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 **Nicht** übermittelt werden Namen, Spitznamen, Pseudonyme, E-Mail-Adressen, Konto-IDs, Klassenbezeichnungen oder IP-Adressen der Schülerinnen und Schüler. Für den KI-Anbieter ist eine Anfrage damit keiner Person zuordenbar.
 
-9.3 **Kein Training, keine Speicherung.** Anfragen mit Lösungen von Schülerinnen und Schülern gehen nur an die in Anhang 3 genannten Anbieter und nur an Endpunkte ohne Datenspeicherung (Zero Data Retention), die Inhalte nicht zum Training verwenden. Ist keiner dieser Endpunkte erreichbar, schlägt die Anfrage fehl, statt auf einen anderen Anbieter auszuweichen.
+9.3 **In der Schweiz, kein Training, keine Speicherung.** Anfragen mit Lösungen von Schülerinnen und Schülern (KI-Feedback, KI-Bewertung, Bewertungsraster) verarbeitet Infomaniak in seinen Rechenzentren in der Schweiz mit offenen Modellen. Infomaniak speichert die Inhalte nicht über die Verarbeitung hinaus und verwendet sie nicht zum Training (Nutzungsbedingungen der LLM-API, Art. 6). Eduskript lässt für diese Anfragen technisch keinen anderen Anbieter zu.
 
 9.4 **Restrisiko.** Schreibt eine Schülerin oder ein Schüler den eigenen Namen in die Lösung selbst (z. B. auf das fotografierte Blatt oder in einen Code-Kommentar), wird dieser mit übermittelt. Eduskript weist beim Beitritt zu einer Klasse darauf hin.
 
@@ -128,12 +128,11 @@ Eduskript nennt die Schule nur mit deren schriftlicher Zustimmung als Referenz o
 
 Eduskript ist ein kleiner Anbieter. Folgende Anforderungen der AGB Auslagerung Informatikleistungen erfüllt Eduskript nicht oder nur teilweise:
 
-- **Ort der Datenbearbeitung (Ziff. 12):** Datenbank und Dateien liegen in der Schweiz; verschlüsselte Sicherungen und E-Mail-Versand in der EU. KI-Anfragen gehen ohne Identifikationsmerkmale in die USA (Ziffer 8).
+- **Ort der Datenbearbeitung (Ziff. 12):** Datenbank, Dateien und KI-Verarbeitung der Schülerdaten liegen in der Schweiz. Verschlüsselte Sicherungen und der E-Mail-Versand an Lehrpersonen liegen in der EU (Ziffer 8).
 - **Sicherheitsmanagement nach ISO 27000 und externe Audits (Ziff. 8a, 9a):** Eduskript hat keine eigene Zertifizierung und lässt keine periodischen Audits durchführen. Die Rechenzentren der Hosting-Anbieter sind nach ISO 27001 zertifiziert; der Quellcode ist öffentlich prüfbar.
 - **Protokollierung von Zugriffen (Ziff. 8d):** Lesezugriffe werden nicht einzeln protokolliert. Protokolliert werden Ereignisse bei Prüfungen (Start, Abgabe, Rückgabe).
 - **Konventionalstrafe (Ziff. 16):** Nicht enthalten. Die Schule kann eine vereinbaren.
 - **Weitergabe aller Pflichten an Unterauftragsbearbeiter (Ziff. 10):** Nur im Rahmen der Standardverträge der Anbieter (Ziffer 7.3).
-- **Angepasste Standardvertragsklauseln (Leitfaden «Bearbeiten im Auftrag», Ziff. 5.2):** Die Standardvertragsklauseln von OpenRouter (Ziffer 8.2) nennen den EDÖB als Aufsichtsbehörde und unterstehen irischem Recht, nicht der Datenschutzbeauftragten des Kantons und Schweizer Recht. Unabhängig davon erhält OpenRouter keine Identifikationsmerkmale (Ziffer 9.2).
 
 ## 16. Schlussbestimmungen
 
@@ -179,14 +178,13 @@ Stand bei Unterzeichnung. Die jeweils aktuelle, datierte Liste steht in der [Dat
 
 | Anbieter | Zweck | Standort | Schülerdaten? |
 |---|---|---|---|
-| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher | Schweiz | ja |
+| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher, KI-Verarbeitung (KI-Feedback, KI-Bewertung) mit offenen Modellen | Schweiz | ja |
 | Scaleway SAS | Verschlüsselte Datenbank-Sicherungen | Paris, Frankreich | ja (nur verschlüsselt) |
 | Brevo (Sendinblue SAS) | E-Mail-Versand an Lehrpersonen | EU | nein |
 | CloudMailin (Dynamic Edge Software Ltd, UK) | Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes) | USA/EU | nein |
 | Payrexx AG | Zahlungsabwicklung | Schweiz | nein |
 | Mux, Inc. | Video-Hosting (von Lehrpersonen hochgeladene Videos) | USA | nein |
-| OpenRouter, Inc. | Vermittlung von KI-Anfragen (Ziffer 9) | USA | nur Lösungen ohne Identifikationsmerkmale |
-| Google LLC (Vertex AI) | KI-Feedback auf Handschrift, KI-Bewertung von Prüfungsantworten (Gemini) | von Google gewählt (global) | wie OpenRouter |
-| Weitere Modellanbieter über OpenRouter (nur ohne Datenspeicherung) | KI-Unterstützung der Lehrperson beim Schreiben | USA u. a. | nein |
+| OpenRouter, Inc. | Vermittlung von KI-Anfragen der Lehrpersonen für eigene Inhalte | USA | nein |
+| Modellanbieter über OpenRouter, u. a. Google Vertex AI (nur ohne Datenspeicherung) | KI-Unterstützung der Lehrperson beim Schreiben | USA u. a. | nein |
 
 Anmeldung über Microsoft erfolgt beim Identitätsanbieter der Schule bzw. der Lehrperson und ist keine Auftragsbearbeitung durch Eduskript.

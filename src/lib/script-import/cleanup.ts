@@ -17,32 +17,20 @@
  * model that summarizes or truncates cannot silently drop content. The
  * fallback is per chunk; the import still succeeds.
  *
- * Model access: OpenRouter via the OpenAI SDK, like the other AI routes.
- * Model: SCRIPT_IMPORT_MODEL, default google/gemini-3.8-flash (vision needed
- * for the formula pictures; same model as AI feedback). Routed like AI
- * feedback (openrouterRouting: Gemini → Vertex only, zero retention):
- * the upload UI asks for no student data, but a document may contain some
- * anyway. Another SCRIPT_IMPORT_MODEL gets openrouterRouting's ZDR pool, which
- * /datenschutz does not list for student data.
+ * Model: aiModel('scriptImport') (src/lib/ai/provider.ts), a vision model for
+ * the formula pictures. Treated like student data (Infomaniak, Switzerland
+ * only): the upload UI asks for no student data, but a document may contain
+ * some anyway.
  */
 import OpenAI from 'openai'
 import { getCondensedSyntaxReference } from '@/lib/ai/syntax-reference'
-import { openrouterRouting } from '@/lib/ai/openrouter'
+import { aiModel } from '@/lib/ai/provider'
 
 export const CHUNK_CHARS = 8000
 export const MAX_IMAGES_PER_CHUNK = 40
 const CONCURRENCY = 6
 const MIN_KEEP_RATIO = 0.7
 
-function client() {
-  if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not set')
-  return new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: 'https://openrouter.ai/api/v1',
-    defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-  })
-}
-const model = () => process.env.SCRIPT_IMPORT_MODEL ?? 'google/gemini-3.8-flash'
 
 export type ImportSource = 'docx' | 'pdf' | 'text'
 
@@ -193,16 +181,18 @@ export async function callImportModel(
   let cost = 0
   for (let attempt = 1; ; attempt++) {
     try {
-      const res = await client().chat.completions.create({
-        model: model(),
+      const ai = aiModel('scriptImport')
+      const res = await ai.client.chat.completions.create({
+        model: ai.model,
         max_tokens: maxTokens,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content },
         ],
-        // OpenRouter extras: cost in the usage block; Vertex-only zero-retention routing.
-        // Low reasoning: this is a markup rewrite, not a reasoning task (cost + latency).
-        ...({ usage: { include: true }, reasoning: { effort: 'low' }, ...openrouterRouting(model()) } as Record<string, unknown>),
+        // OpenRouter extras: cost in the usage block, low reasoning (markup rewrite,
+        // not a reasoning task). Infomaniak: thinking off via ai.extra.
+        ...(ai.provider === 'openrouter' ? { usage: { include: true }, reasoning: { effort: 'low' } } : {}),
+        ...ai.extra,
       })
       const choice = res.choices[0]
       cost += (res.usage as { cost?: number } | undefined)?.cost ?? 0

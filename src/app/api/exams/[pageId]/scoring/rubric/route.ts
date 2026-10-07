@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { aiConfigured } from '@/lib/ai/provider'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!isPaidUser(session.user)) return paidOnlyResponse('AI scoring is a paid feature.')
-  if (!process.env.OPENROUTER_API_KEY) {
+  if (!aiConfigured('scoring')) {
     return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
   }
   const { pageId } = await params

@@ -5,7 +5,7 @@ Diese Seite fasst auf einer Seite zusammen, was Schulleitung, ICT-Verantwortlich
 > [!success] Kurz gesagt
 > - Schülerinnen und Schüler sind **pseudonym**. Eduskript speichert keine E-Mail-Adressen von Schülerinnen und Schülern.
 > - Datenbank und Dateien liegen in der **Schweiz** (Infomaniak); verschlüsselte Sicherungen und E-Mail-Versand liegen in der **EU** (Sicherungen in Paris).
-> - Die KI erhält **nur die Lösung**, ohne Namen, Pseudonym, Konto-ID, Klasse oder IP-Adresse. Die KI-Anbieter dürfen die Inhalte weder speichern noch zum Training verwenden.
+> - Die KI läuft für Schülerdaten **in der Schweiz** (Infomaniak). Sie erhält **nur die Lösung**, ohne Namen, Pseudonym, Konto-ID, Klasse oder IP-Adresse, und speichert nichts und trainiert nicht damit.
 > - Kein Tracking, keine Analyse-Dienste, keine Werbung.
 > - Quellcode öffentlich (AGPL v3), Sicherheitsprüfung durch Dritte möglich.
 > - Wir unterzeichnen einen **Auftragsbearbeitungsvertrag**: unsere [Vorlage](08-avv-vorlage.md) oder das Muster Ihres Kantons.
@@ -37,13 +37,15 @@ Wer die Datenbank von Eduskript einsieht, findet keine E-Mail-Adressen von Schü
 
 KI wird für drei Dinge eingesetzt: Feedback auf handschriftliche Lösungen, Vorschläge zur Bewertung von Prüfungsantworten und Unterstützung der Lehrperson beim Schreiben. Die KI schlägt vor, die Lehrperson entscheidet.
 
-An den KI-Anbieter gehen nur:
+Lösungen von Schülerinnen und Schülern verarbeitet Infomaniak in der Schweiz mit offenen Modellen, ohne Speicherung und ohne Training. An die KI gehen nur:
 
 - der Aufgabentext der Lehrperson,
 - die Lösung (Bild der Handschrift, Antworttext oder Code),
 - gegebenenfalls Musterlösung und Bewertungsraster.
 
 Die Anfrage kommt vom Server von Eduskript, nicht vom Gerät der Schülerin oder des Schülers. Bilder werden aus den Stiftstrichen neu gezeichnet, Fotos verlieren beim Neukodieren ihre Metadaten (z. B. Standort). Schreibt jemand den eigenen Namen in die Lösung, geht er mit; darauf weist Eduskript beim Beitritt zur Klasse hin.
+
+Nur die KI-Hilfe für Lehrpersonen beim Schreiben eigener Inhalte läuft über OpenRouter zu Anbietern in den USA, ebenfalls ohne Datenspeicherung. Dort gehen keine Schülerdaten hin.
 
 ## Unterauftragsbearbeiter
 
