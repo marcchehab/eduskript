@@ -14,7 +14,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mocks = vi.hoisted(() => {
   const mockUpdate = vi.fn(async () => 1)
   const mockToArray = vi.fn()
-  const mockEquals = vi.fn(() => ({ toArray: mockToArray }))
+  const mockModify = vi.fn(async () => 0)
+  const mockEquals = vi.fn(() => ({ toArray: mockToArray, modify: mockModify }))
   const mockWhere = vi.fn(() => ({ equals: mockEquals }))
   const mockTransaction = vi.fn(async (_mode: string, _table: unknown, fn: () => Promise<number>) => fn())
   const mockBlobsGet = vi.fn()
@@ -28,6 +29,8 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/userdata/schema', () => ({
+  LEGACY_SITE_ID: '__legacy__',
+  NO_SITE_ID: '',
   db: {
     userData_history: {
       where: mocks.mockWhere,
@@ -58,6 +61,7 @@ beforeEach(() => {
   // The service exposes a setter through its provider; reach in directly
   // with a typed cast. 'test-user' is what we seed rows with below.
   ;(userDataService as unknown as { currentUserId: string }).currentUserId = 'test-user'
+  userDataService.setCurrentSite('site-1')
 })
 
 describe('userDataService.reassignVersionHistory', () => {
@@ -73,8 +77,10 @@ describe('userDataService.reassignVersionHistory', () => {
 
     expect(moved).toBe(3)
     // Selected the right slice of the index.
-    expect(mockWhere).toHaveBeenCalledWith('[userId+pageId+componentId]')
-    expect(mockEquals).toHaveBeenCalledWith(['test-user', 'p1', 'code-editor-old'])
+    // Site-scoped index; legacy rows were adopted into site-1 first.
+    expect(mockWhere).toHaveBeenCalledWith('[userId+siteId+pageId+componentId]')
+    expect(mockEquals).toHaveBeenCalledWith(['test-user', '__legacy__', 'p1', 'code-editor-old'])
+    expect(mockEquals).toHaveBeenCalledWith(['test-user', 'site-1', 'p1', 'code-editor-old'])
     // Updated each row by id with ONLY componentId — nothing else is touched.
     expect(mockUpdate).toHaveBeenCalledTimes(3)
     expect(mockUpdate).toHaveBeenNthCalledWith(1, 1, { componentId: 'code-editor-new' })
