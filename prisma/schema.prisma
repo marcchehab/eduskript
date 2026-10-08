@@ -178,11 +178,11 @@ model User {
 
   // Append-only event log for exam attempts (started / submitted / reopened) plus
   // grading events (return / take_back). Source of truth for "currently returned".
-  examAuditLogs      ExamAuditLog[] @relation("StudentExamAuditLogs")
+  examAuditLogs      ExamAuditLog[]   @relation("StudentExamAuditLogs")
   // Grading events (return / take_back) this user performed as the teacher actor.
-  actedExamAuditLogs ExamAuditLog[] @relation("ActorExamAuditLogs")
+  actedExamAuditLogs ExamAuditLog[]   @relation("ActorExamAuditLogs")
   // Per-question score sources (check / ai / override), priority-resolved.
-  componentScores ComponentScore[] @relation("StudentComponentScores")
+  componentScores    ComponentScore[] @relation("StudentComponentScores")
 
   // Encryption keys used by students to encrypt offline exam backups.
   // Rotatable; old keys are kept so historical .examfile backups stay decryptable.
@@ -201,11 +201,11 @@ model User {
   mailHooks MailHook[]
 
   // Pages forked from this user's content
-  forkedPages Page[] @relation("ForkedPages")
+  forkedPages     Page[]           @relation("ForkedPages")
+  pluginTemplates PluginTemplate[]
 
   @@unique([oauthProvider, oauthProviderId]) // Students identified by OAuth provider
   @@map("users")
-  pluginTemplates PluginTemplate[]
 }
 
 // A public page/site. Owned polymorphically by either a User (a teacher's
@@ -252,11 +252,11 @@ model Site {
   user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  collections Collection[]
-  pageLayout  PageLayout?
-  frontPage   FrontPage?
+  collections          Collection[]
+  pageLayout           PageLayout?
+  frontPage            FrontPage?
   // Slugs this site used before a rename (src/lib/site-slugs.ts)
-  slugAliases SiteSlugAlias[]
+  slugAliases          SiteSlugAlias[]
   teacherCustomDomains TeacherCustomDomain[]
 
   @@index([userId])
@@ -355,25 +355,25 @@ model SkriptAuthor {
 }
 
 model Page {
-  id           String   @id @default(cuid())
-  title        String
-  slug         String
-  content      String
+  id                 String   @id @default(cuid())
+  title              String
+  slug               String
+  content            String
   // Optional teacher-authored summary. When set, used as the og:description
   // ahead of the auto-derived generateExcerpt(content) fallback so social
   // previews surface the teacher's intent rather than the first prose
   // paragraph.
-  description  String?
-  order        Int
-  isPublished  Boolean  @default(false)
-  isUnlisted   Boolean  @default(false)
-  pageType     String   @default("normal") @map("page_type") // "normal", "exam"
-  examSettings Json?    @map("exam_settings") // { requireSEB: boolean, timeLimitMinutes?: number }
+  description        String?
+  order              Int
+  isPublished        Boolean  @default(false)
+  isUnlisted         Boolean  @default(false)
+  pageType           String   @default("normal") @map("page_type") // "normal", "exam"
+  examSettings       Json?    @map("exam_settings") // { requireSEB: boolean, timeLimitMinutes?: number }
   // When true the "Present as slides" button is shown to everyone, not just
   // logged-in teachers. Off by default — presenting is a teacher action.
-  presentationPublic Boolean @default(false) @map("presentation_public")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  presentationPublic Boolean  @default(false) @map("presentation_public")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   // Provenance (fork tracking)
   forkedFromPageId   String?   @map("forked_from_page_id")
@@ -405,12 +405,12 @@ model Page {
   examSessions ExamSession[] @relation("ExamSessionPage")
 
   // Exam state and submissions
-  examStates         ExamState[]         @relation("ExamStates")
-  examSubmissions    ExamSubmission[]    @relation("ExamSubmissions")
-  examAuditLogs      ExamAuditLog[]      @relation("PageExamAuditLogs")
-  examGradeConfig    ExamGradeConfig?    @relation("ExamGradeConfigs")
-  componentScores    ComponentScore[]    @relation("ComponentScores")
-  scoringRubrics     ScoringRubric[]     @relation("ScoringRubrics")
+  examStates      ExamState[]      @relation("ExamStates")
+  examSubmissions ExamSubmission[] @relation("ExamSubmissions")
+  examAuditLogs   ExamAuditLog[]   @relation("PageExamAuditLogs")
+  examGradeConfig ExamGradeConfig? @relation("ExamGradeConfigs")
+  componentScores ComponentScore[] @relation("ComponentScores")
+  scoringRubrics  ScoringRubric[]  @relation("ScoringRubrics")
 
   // Server-side checkpoints captured at manual save / Check / hand-in
   userDataCheckpoints UserDataCheckpoint[] @relation("PageCheckpoints")
@@ -728,10 +728,17 @@ model UserData {
   targetType String? @map("target_type")
   targetId   String? @map("target_id") // classId when targetType='class', studentId when targetType='student'
 
+  // Site scoping (presentation data belongs to the SITE it was produced on, see
+  // src/lib/site-access.ts + SITE-SCOPING.md). Plain string, no FK: '' means
+  // "no site" — server-owned rows (itemId='global' etc.) and legacy rows whose
+  // skript was not placed on any site at migration time (invisible on sites).
+  siteId String @default("") @map("site_id")
+
   // Relations
   user User @relation("UserDataEntries", fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, adapter, itemId, targetType, targetId])
+  @@unique([userId, siteId, adapter, itemId, targetType, targetId])
+  @@index([siteId, itemId])
   @@index([userId])
   @@index([userId, adapter])
   @@index([updatedAt])
@@ -754,6 +761,8 @@ model UserDataCheckpoint {
   payload     Json // Snapshot data (e.g. CodeEditorData)
   label       String? // Optional label for manual saves
   createdAt   DateTime @default(now()) @map("created_at")
+  // Site the checkpoint was taken on ('' = legacy/unplaced). See UserData.siteId.
+  siteId      String   @default("") @map("site_id")
 
   user User @relation("UserCheckpoints", fields: [userId], references: [id], onDelete: Cascade)
   page Page @relation("PageCheckpoints", fields: [pageId], references: [id], onDelete: Cascade)
@@ -761,6 +770,7 @@ model UserDataCheckpoint {
   @@index([userId])
   @@index([pageId])
   @@index([userId, pageId, componentId, createdAt])
+  @@index([siteId, pageId])
   @@map("user_data_checkpoints")
 }
 
@@ -1055,6 +1065,8 @@ model ExamSession {
   userId    String   @map("user_id")
   pageId    String   @map("page_id") // Initial exam page that started session
   skriptId  String   @map("skript_id") // Allow access to all pages in this skript
+  // Site the exam is taken on (route context at session start). '' = legacy.
+  siteId    String   @default("") @map("site_id")
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -1087,6 +1099,10 @@ model ExamState {
   classId   String    @map("class_id")
   studentId String?   @map("student_id") // null = class-level row; set = per-student override
   state     String    @default("closed") // "hidden" | "closed" | "lobby" | "open"
+  // Site the class is assigned the exam ON. Not part of the unique key: one
+  // assignment per (page, class[, student]); re-assigning from another site
+  // moves it. Students only see the state on this site. '' = legacy.
+  siteId    String    @default("") @map("site_id")
   openedAt  DateTime? @map("opened_at")
   closedAt  DateTime? @map("closed_at")
   createdAt DateTime  @default(now()) @map("created_at")
@@ -1119,7 +1135,10 @@ model ExamSubmission {
   //   "teacher"  — the teacher ended it on the student's behalf (crashed machine)
   //   "recovery" — imported via offline/crash recovery
   //   <future>   — e.g. timeout / auto-submit
-  source String @default("student")
+  source      String   @default("student")
+  // Site the exam was taken on. Part of the unique key: the same student can
+  // hand in the same exam page once per site. '' = legacy/unplaced.
+  siteId      String   @default("") @map("site_id")
 
   // DEPRECATED / DEAD — superseded by the append-only exam log. Return state +
   // scoring now live in ExamAuditLog ('return' / 'take_back' events, frozen
@@ -1137,9 +1156,10 @@ model ExamSubmission {
   student User  @relation("StudentExamSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
   scorer  User? @relation("ScoredExamSubmissions", fields: [scoredBy], references: [id])
 
-  @@unique([pageId, studentId])
+  @@unique([pageId, studentId, siteId])
   @@index([pageId])
   @@index([studentId])
+  @@index([siteId])
   @@map("exam_submissions")
 }
 
@@ -1167,12 +1187,15 @@ model ExamAuditLog {
   payload   Json?   @map("payload") // "return": frozen buildReviewScores() snapshot. null otherwise.
   score     Float? // "return": aggregate points earned (mirrors payload.totalEarned).
   createdBy String? @map("created_by") // teacher actor for return/take_back; null for student/system events.
+  // Site the attempt belongs to. '' = legacy/unplaced.
+  siteId    String  @default("") @map("site_id")
 
   page    Page  @relation("PageExamAuditLogs", fields: [pageId], references: [id], onDelete: Cascade)
   student User  @relation("StudentExamAuditLogs", fields: [studentId], references: [id], onDelete: Cascade)
   actor   User? @relation("ActorExamAuditLogs", fields: [createdBy], references: [id])
 
   @@index([pageId, studentId, occurredAt])
+  @@index([pageId, siteId, studentId, occurredAt])
   @@index([pageId, occurredAt])
   @@index([pageId])
   @@map("exam_audit_logs")
@@ -1236,14 +1259,17 @@ model ComponentScore {
   // criteria: [{ id, points, comment }] }. override: usually empty.
   meta      Json?
   createdBy String?  @map("created_by") // teacher userId; null = machine (check/ai)
+  // Site the scored submission belongs to. '' = legacy/unplaced.
+  siteId    String   @default("") @map("site_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   page    Page @relation("ComponentScores", fields: [pageId], references: [id], onDelete: Cascade)
   student User @relation("StudentComponentScores", fields: [studentId], references: [id], onDelete: Cascade)
 
-  @@unique([pageId, studentId, componentId, source])
+  @@unique([pageId, studentId, componentId, source, siteId])
   @@index([pageId, studentId])
+  @@index([pageId, siteId])
   @@map("component_scores")
 }
 
@@ -1398,17 +1424,17 @@ model Subscription {
 /// Teacher-created plugins rendered in sandboxed iframes within markdown content.
 /// All plugins are globally visible — teachers reference them as ownerPageSlug/pluginSlug.
 model Plugin {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   slug        String // Plugin slug (unique per author)
   name        String // Display name
-  description String?  @db.Text
-  version     String   @default("1.0.0")
+  description String?         @db.Text
+  version     String          @default("1.0.0")
   authorId    String
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author      User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
   manifest    Json // configSchema, defaultHeight, allowedCDNs, etc.
-  entryHtml   String   @db.Text // Self-contained HTML (rendered in sandboxed iframe)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  entryHtml   String          @db.Text // Self-contained HTML (rendered in sandboxed iframe)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
   versions    PluginVersion[]
 
   @@unique([authorId, slug])
