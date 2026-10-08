@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -16,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Save, Eye, EyeOff } from 'lucide-react'
+import { Save, GraduationCap, FileText } from 'lucide-react'
 import { PageCog, SkriptCog } from '@/components/icons/settings-icons'
 
 interface EditModalProps {
@@ -26,20 +25,25 @@ interface EditModalProps {
     title: string
     description?: string | null
     slug: string
-    isPublished: boolean
+    /** Pages only: 'normal' | 'exam'. When set, the modal shows a page type switch. */
+    pageType?: string
   }
   onItemUpdated: (newSlug?: string) => void
+  /** Called with the saved values before onItemUpdated (page editor syncs its state). */
+  onSaved?: (values: { title: string; slug: string; description: string | null; pageType?: string }) => void
+  /** Rendered at the end of the form (page editor: public link). */
+  extraContent?: React.ReactNode
   triggerClassName?: string
   buttonText?: string
 }
 
-export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonText }: EditModalProps) {
+export function EditModal({ type, item, onItemUpdated, onSaved, extraContent, triggerClassName, buttonText }: EditModalProps) {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     slug: '',
-    isPublished: false
+    pageType: '',
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -52,7 +56,7 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
         title: item.title || '',
         description: item.description || '',
         slug: item.slug || '',
-        isPublished: item.isPublished
+        pageType: item.pageType || '',
       })
        
       setError('')
@@ -66,13 +70,6 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
       [name]: value,
       // Auto-generate slug from title if title is being changed
       ...(name === 'title' ? { slug: generateSlug(value) } : {})
-    }))
-  }
-
-  const handlePublishedChange = (checked: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      isPublished: checked
     }))
   }
 
@@ -90,12 +87,18 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
           title: formData.title.trim(),
           description: formData.description.trim() || null,
           slug: formData.slug.trim(),
-          isPublished: formData.isPublished
+          ...(item.pageType ? { pageType: formData.pageType } : {}),
         })
       })
 
       if (response.ok) {
         setOpen(false)
+        onSaved?.({
+          title: formData.title.trim(),
+          slug: formData.slug.trim(),
+          description: formData.description.trim() || null,
+          ...(item.pageType ? { pageType: formData.pageType } : {}),
+        })
         // Pass the new slug if it changed, so parent can navigate
         const slugChanged = formData.slug.trim() !== item.slug
         onItemUpdated(slugChanged ? formData.slug.trim() : undefined)
@@ -114,7 +117,7 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
     formData.title !== item.title ||
     formData.description !== (item.description || '') ||
     formData.slug !== item.slug ||
-    formData.isPublished !== item.isPublished
+    formData.pageType !== (item.pageType || '')
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -125,13 +128,38 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Edit {type === 'skript' ? 'Skript' : 'Page'}</DialogTitle>
+          <DialogTitle>{type === 'skript' ? 'Edit Skript' : 'Page settings'}</DialogTitle>
           <DialogDescription>
-            Update {type} details and publication status.
+            {type === 'page' ? 'Page type, title, URL and description.' : 'Update skript title, URL and description.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
+            {item.pageType && (
+              <div className="space-y-2">
+                <Label className="block">Page type</Label>
+                <div className="flex w-full overflow-hidden rounded-md border text-sm" role="radiogroup" aria-label="Page type">
+                  {(['normal', 'exam'] as const).map((t, i) => (
+                    <button
+                      key={t}
+                      type="button"
+                      role="radio"
+                      aria-checked={formData.pageType === t}
+                      onClick={() => setFormData(prev => ({ ...prev, pageType: t }))}
+                      className={`flex flex-1 items-center justify-center gap-1.5 px-3 py-2 ${i > 0 ? 'border-l' : ''} ${
+                        formData.pageType === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {t === 'exam' ? <GraduationCap className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                      {t === 'exam' ? 'Exam' : 'Normal'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {formData.pageType === 'exam' ? 'Exam: students take it under exam rules.' : 'Normal: a regular page of the skript.'}
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="title">{type === 'skript' ? 'Skript' : 'Page'} Title *</Label>
               <Input
@@ -165,28 +193,7 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
                 rows={3}
               />
             </div>
-            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-              <div className="flex items-center space-x-3">
-                {formData.isPublished ? (
-                  <Eye className="w-5 h-5 text-success" />
-                ) : (
-                  <EyeOff className="w-5 h-5 text-warning" />
-                )}
-                <div>
-                  <Label htmlFor="published" className="text-sm font-medium">
-                    Published Status
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {formData.isPublished ? 'Visible to the public' : 'Hidden from public view'}
-                  </p>
-                </div>
-              </div>
-              <Switch
-                id="published"
-                checked={formData.isPublished}
-                onCheckedChange={handlePublishedChange}
-              />
-            </div>
+            {extraContent}
             {error && (
               <div className="text-destructive text-sm">{error}</div>
             )}

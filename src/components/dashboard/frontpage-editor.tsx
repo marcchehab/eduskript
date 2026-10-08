@@ -405,7 +405,8 @@ export function FrontPageEditor({
   const pageLabel = (
     <>
       <BookA className="w-3.5 h-3.5" />
-      Front page
+      {/* Qualified so the skript's front page isn't confused with the site's. */}
+      {type === 'skript' ? 'Skript front page' : 'Site front page'}
     </>
   )
 

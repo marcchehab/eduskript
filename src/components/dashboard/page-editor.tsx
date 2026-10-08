@@ -8,17 +8,18 @@ import { Input } from '@/components/ui/input'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useUnsavedChangesGuard } from '@/components/dashboard/unsaved-changes-guard'
-import { PublishToggle, PublicLinkRow, VisibilityDot, getVisibilityState, visibilityConfig } from '@/components/dashboard/publish-toggle'
+import { PublishToggle, VisibilityDot, getVisibilityState, visibilityConfig } from '@/components/dashboard/publish-toggle'
 import { VersionHistory } from '@/components/dashboard/version-history'
 import { EditModal } from '@/components/dashboard/edit-modal'
-import { ExportSkriptModal } from '@/components/dashboard/export-skript-modal'
+import { ExportSkriptPanel } from '@/components/dashboard/export-skript-panel'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
 import { AIEditChatModal } from '@/components/ai/ai-edit-chat-modal'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2 } from 'lucide-react'
+import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover'
+import { RibbonGroup, RibbonBigButton } from '@/components/dashboard/editor-ribbon'
+import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2, HardDriveDownload } from 'lucide-react'
 import { PageCog } from '@/components/icons/settings-icons'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
@@ -129,8 +130,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // AI Edit ribbon tab inside the editor.
   const [skriptAiOpen, setSkriptAiOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const openHistoryAfterSettingsRef = useRef(false)
   const isFreePlan = useIsFreeTeacher()
 
   const [isSaving, setIsSaving] = useState(false)
@@ -723,6 +722,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   const extraTabs: ExtraManageTab[] = [
     { id: 'pages', label: 'Pages', icon: <FileText className="w-3.5 h-3.5" />, content: pagesTabContent, position: 'start', title: 'View and reorder this skript\'s pages, or switch to another one' },
     { id: 'access', label: 'Access', icon: <Users className="w-3.5 h-3.5" />, content: accessTabContent, title: 'Manage access of other teachers to this skript' },
+    { id: 'export', label: 'Export', icon: <HardDriveDownload className="w-3.5 h-3.5" />, content: <ExportSkriptPanel skriptId={skript.id} />, title: 'Download this skript (markdown + attachments) as a folder or zip' },
   ]
 
   // Skript-level header, handed to EditorWithMedia as `headerContent` so it
@@ -761,7 +761,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               />
             </QuestSpotlight>
             <Link href={`/dashboard/skripts/${skript.slug}/frontpage`}>
-              <Button variant="ghost" size="sm" title="Front Page">
+              <Button variant="ghost" size="sm" title="Skript front page">
                 <BookA className="w-4 h-4" />
               </Button>
             </Link>
@@ -775,7 +775,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               <Wand2 className="w-4 h-4" />
               <span className="hidden sm:inline text-xs">AI Edit</span>
             </Button>}
-            <ExportSkriptModal skriptId={skript.id} skriptTitle={skript.title} />
             <Button
               variant="ghost"
               size="sm"
@@ -832,6 +831,89 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     </div>
   )
 
+  // Title row actions: visibility, then Save. The version history popover is
+  // anchored here (opened from the Page settings tab).
+  const titleRowActions = (
+    <div className="flex shrink-0 items-center gap-1 md:gap-2">
+                  <QuestSpotlight step="view_via_eye_icon" label="Try this!">
+                    <PublishToggle
+                      type="page"
+                      itemId={page.id}
+                      isPublished={page.isPublished}
+                      isUnlisted={page.isUnlisted}
+                      onToggle={() => router.refresh()}
+                      size="sm"
+                      publicUrl={sessionPageSlug ? buildPageUrl(skript.slug, page.slug) : null}
+                      viewBlockedReason={skript.isPublished ? null : 'The skript is a draft, so this page is not reachable yet. Publish the skript first.'}
+                      onOpenPublic={() => completeStep('view_via_eye_icon')}
+                    />
+                  </QuestSpotlight>
+                  {/* Page settings: same modal as the skript's settings. Saves
+                      title/slug/description directly; the editor state follows. */}
+                  {canEdit && (
+                    <EditModal
+                      type="page"
+                      item={{ id: page.id, title, slug, description, pageType }}
+                      onSaved={(v) => {
+                        if (v.pageType) setPageType(v.pageType)
+                        setTitle(v.title)
+                        setSlug(v.slug)
+                        setDescription(v.description ?? '')
+                        setPages(prev => prev.map(p => p.id === page.id ? { ...p, title: v.title, slug: v.slug } : p))
+                      }}
+                      onItemUpdated={(newSlug) => {
+                        if (newSlug) router.replace(`/dashboard/skripts/${skript.slug}/pages/${newSlug}/edit`)
+                      }}
+                    />
+                  )}
+                  <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+                    <PopoverAnchor asChild>
+                      <div className="flex items-center">
+                        <QuestSpotlight step="edit_page_content" label="Try this!">
+                          {/* Split button: left part saves (primary + dot while
+                              dirty, quiet "Saved" otherwise); the clock opens
+                              the version history popover. */}
+                          <div className="inline-flex items-stretch">
+                            <Button
+                              onClick={() => void handleSave()}
+                              disabled={isSaving}
+                              size="sm"
+                              variant={hasUnsavedChanges || isSaving ? 'default' : 'outline'}
+                              className={`relative rounded-r-none ${!hasUnsavedChanges && !isSaving ? (justSaved ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground') : ''}`}
+                              title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'All changes saved (Ctrl+S)'}
+                            >
+                              {!hasUnsavedChanges && !isSaving ? <Check className="w-4 h-4 mr-1.5" /> : <Save className="w-4 h-4 mr-1.5" />}
+                              {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Saved'}
+                              {hasUnsavedChanges && (
+                                <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
+                              )}
+                            </Button>
+                            <Button
+                              onClick={() => setHistoryOpen(o => !o)}
+                              size="sm"
+                              variant={hasUnsavedChanges || isSaving ? 'default' : 'outline'}
+                              className={`rounded-l-none border-l-0 px-1.5 ${hasUnsavedChanges || isSaving ? 'border-l border-l-primary-foreground/30' : 'text-muted-foreground'} ${historyOpen ? 'bg-muted' : ''}`}
+                              title={`Version history${versions.length ? ` (${versions.length})` : ''}`}
+                              aria-expanded={historyOpen}
+                            >
+                              <History className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </QuestSpotlight>
+                      </div>
+                    </PopoverAnchor>
+                    <PopoverContent align="end" onOpenAutoFocus={(e) => e.preventDefault()} className="w-[min(640px,90vw)] max-h-[70vh] overflow-y-auto border-blue-400/70 p-2 shadow-lg dark:border-blue-500/60">
+                      <VersionHistory
+                        pageId={page.id}
+                        versions={versions}
+                        currentContent={content}
+                        onRestoreVersion={handleRestoreVersion}
+                      />
+                    </PopoverContent>
+                  </Popover>
+    </div>
+  )
+
   // Scope labels, rendered by EditorWithMedia as folder-tab notches at the top
   // of the blue skript card and the orange page card, so the two scopes read
   // apart at a glance without a label row above each card.
@@ -839,6 +921,15 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     <>
       <FilePenLine className="w-3.5 h-3.5" />
       Page
+      {/* FolderTab is pointer-events-none; the button opts back in. */}
+      <button
+        type="button"
+        onClick={() => setIsFullscreen(!isFullscreen)}
+        title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen editor'}
+        className="pointer-events-auto ml-1 rounded p-0.5 hover:bg-orange-500/15"
+      >
+        {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+      </button>
     </>
   )
   const skriptLabelContent = (
@@ -856,7 +947,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           // can flex-1 into the remaining space and let its internal panes
           // (CodeMirror scroller + preview pane) handle their own scroll.
           // No `overflow-auto` here — that would push the toolbar offscreen.
-          ? 'fixed inset-0 z-50 bg-background p-3 flex flex-col gap-2'
+          ? 'fixed inset-0 z-50 bg-background px-3 pb-3 flex flex-col gap-2'
           // Fills the dashboard's scroll area so the page card (and its
           // editor) take all remaining height — no page scroll, no resize bar.
           : 'flex h-full flex-col gap-4'
@@ -900,9 +991,28 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         isAdmin={session?.user?.isAdmin}
         fullscreen={isFullscreen}
         pageLabel={pageLabelContent}
+        layoutRibbonExtra={pageType !== 'exam' && (
+          <RibbonGroup caption="Slides">
+            <RibbonBigButton
+              icon={<Presentation />}
+              label="Public slides"
+              active={presentationPublic}
+              // `!`: override the button's own text-foreground / bg-accent.
+              className={presentationPublic ? 'bg-blue-500/15! text-blue-600! dark:text-blue-400!' : undefined}
+              title={presentationPublic
+                ? 'On: all viewers can open this page as slides. Click to turn off.'
+                : 'Off: only teachers can open this page as slides. Click to turn on.'}
+              onClick={() => {
+                setPresentationPublic(!presentationPublic)
+                setHasUnsavedChanges(true)
+              }}
+            />
+          </RibbonGroup>
+        )}
         metadataSlot={
           <div className="space-y-3">
-            {/* Page title row — always visible (Save/Fullscreen toggle live here). */}
+            {/* Page title row: title → visibility → Save. Everything else
+                about the page is in the ribbon's "Page settings" tab. */}
             {isStale && (
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
                 <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
@@ -922,232 +1032,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   placeholder="Page title"
                   className="flex-1 min-w-[140px] h-9 text-lg md:text-xl font-semibold border-transparent hover:border-border focus:border-border"
                 />
-                {/* Page URL next to the title: the skript part is fixed (grey),
-                    only the page slug is editable. Saved with the page. */}
-                <label
-                  htmlFor="page-slug"
-                  title="Page URL — only the last part is editable"
-                  className="flex h-8 max-w-full shrink-0 items-center overflow-hidden rounded-md border bg-background font-mono text-xs focus-within:ring-2 focus-within:ring-ring"
-                >
-                  <span className="max-w-[12rem] truncate bg-muted px-2 py-1.5 text-muted-foreground select-none">/{skript.slug}/</span>
-                  <input
-                    id="page-slug"
-                    type="text"
-                    value={slug}
-                    size={Math.max(slug.length + 1, 18)}
-                    onChange={(e) => {
-                      setSlug(e.target.value)
-                      setHasUnsavedChanges(true)
-                    }}
-                    placeholder="page-slug"
-                    className="min-w-0 bg-transparent px-2 outline-none"
-                  />
-                </label>
-                <div className="flex gap-1 md:gap-2 items-center shrink-0">
-                  {(
-                    // Description: edited rarely, so it lives behind a
-                    // settings button instead of taking a full row above the
-                    // editor (≈84px measured in the layout test, 2026-10-04).
-                    <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Page settings: type, description, URL, slides, delete"
-                          className={settingsOpen ? 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300' : ''}
-                        >
-                          <PageCog className="w-4 h-4" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        align="end"
-                        // Opening history from here: wait until this popover
-                        // has closed, else its focus return dismisses history.
-                        onCloseAutoFocus={(e) => {
-                          if (!openHistoryAfterSettingsRef.current) return
-                          openHistoryAfterSettingsRef.current = false
-                          e.preventDefault()
-                          setHistoryOpen(true)
-                        }}
-                        style={{ width: 'min(420px, 92vw)' }} className="border-blue-400/70 p-0 shadow-lg dark:border-blue-500/60">
-                        <div className="flex items-center gap-3 border-b px-4 py-3">
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-medium">Page type</span>
-                            <span className="block text-xs text-muted-foreground">
-                              {pageType === 'exam'
-                                ? 'Exam: students take it under exam rules.'
-                                : 'Normal: a regular page of the skript.'}
-                            </span>
-                          </span>
-                          <div className="inline-flex shrink-0 overflow-hidden rounded-md border text-xs" role="radiogroup" aria-label="Page type">
-                            {(['normal', 'exam'] as const).map((t, i) => (
-                              <button
-                                key={t}
-                                type="button"
-                                role="radio"
-                                aria-checked={pageType === t}
-                                onClick={() => {
-                                  if (pageType === t) return
-                                  setPageType(t)
-                                  setHasUnsavedChanges(true)
-                                }}
-                                className={`flex items-center gap-1 px-2.5 py-1 ${i > 0 ? 'border-l' : ''} ${
-                                  pageType === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-                                }`}
-                              >
-                                {t === 'exam' ? <GraduationCap className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-                                {t === 'exam' ? 'Exam' : 'Normal'}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="space-y-3 p-4">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="page-description" className="text-xs font-medium">Description</Label>
-                            <Input
-                              id="page-description"
-                              type="text"
-                              value={description}
-                              onChange={(e) => {
-                                setDescription(e.target.value)
-                                setHasUnsavedChanges(true)
-                              }}
-                              placeholder="One sentence about this page"
-                              className="h-8 text-sm"
-                            />
-                            <p className="text-xs text-muted-foreground">Optional. Shown in search results and link previews.</p>
-                          </div>
-                          {sessionPageSlug && (
-                            <div className="space-y-1.5">
-                              <span className="block text-xs font-medium">Link</span>
-                              <PublicLinkRow
-                                publicUrl={buildPageUrl(skript.slug, page.slug)}
-                                label="Go to page"
-                                blockedReason={!page.isPublished || !skript.isPublished
-                                  ? `Not reachable yet: the ${!skript.isPublished ? 'skript' : 'page'} is a draft.`
-                                  : null}
-                              />
-                            </div>
-                          )}
-                          <p className="text-xs text-muted-foreground">Description is saved with the page (Save / Ctrl+S).</p>
-                          <button
-                            type="button"
-                            onClick={() => { openHistoryAfterSettingsRef.current = true; setSettingsOpen(false) }}
-                            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                          >
-                            <History className="h-3.5 w-3.5" />
-                            Version history{versions.length ? ` (${versions.length})` : ''}
-                          </button>
-                        </div>
-                        {pageType !== 'exam' && (
-                          <label htmlFor="page-presentation" className="flex cursor-pointer items-center gap-3 border-t px-4 py-3">
-                            <Presentation className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-sm font-medium">Slide presentation</span>
-                              <span className="block text-xs text-muted-foreground">
-                                {presentationPublic
-                                  ? 'On: all viewers can open it as slides.'
-                                  : 'Off: only teachers can open it as slides.'}
-                              </span>
-                            </span>
-                            <Switch
-                              id="page-presentation"
-                              checked={presentationPublic}
-                              onCheckedChange={(checked) => {
-                                setPresentationPublic(checked)
-                                setHasUnsavedChanges(true)
-                              }}
-                            />
-                          </label>
-                        )}
-                        {canEdit && (
-                          <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
-                            <span className="text-xs text-muted-foreground">Removes the page from this skript.</span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => { setSettingsOpen(false); void handleDeletePage(page.id, page.title) }}
-                              className="h-7 shrink-0 gap-1.5 border-red-300 text-xs text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:border-red-900 dark:text-red-400"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Delete page
-                            </Button>
-                          </div>
-                        )}
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                  <QuestSpotlight step="view_via_eye_icon" label="Try this!">
-                    <PublishToggle
-                      type="page"
-                      itemId={page.id}
-                      isPublished={page.isPublished}
-                      isUnlisted={page.isUnlisted}
-                      onToggle={() => router.refresh()}
-                      size="sm"
-                      publicUrl={sessionPageSlug ? buildPageUrl(skript.slug, page.slug) : null}
-                      viewBlockedReason={skript.isPublished ? null : 'The skript is a draft, so this page is not reachable yet. Publish the skript first.'}
-                      onOpenPublic={() => completeStep('view_via_eye_icon')}
-                    />
-                  </QuestSpotlight>
-                  <QuestSpotlight step="edit_page_content" label="Try this!">
-                    {/* Primary + dot when there's something to save; quiet
-                        outline "Saved" otherwise, so the state is readable. */}
-                    <Button
-                      onClick={() => void handleSave()}
-                      disabled={isSaving}
-                      size="sm"
-                      variant={hasUnsavedChanges || isSaving ? 'default' : 'outline'}
-                      className={`relative ${!hasUnsavedChanges && !isSaving ? (justSaved ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground') : ''}`}
-                      title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'All changes saved (Ctrl+S)'}
-                    >
-                      {!hasUnsavedChanges && !isSaving ? <Check className="w-4 h-4 mr-1.5" /> : <Save className="w-4 h-4 mr-1.5" />}
-                      {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Saved'}
-                      {hasUnsavedChanges && (
-                        <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
-                      )}
-                    </Button>
-                  </QuestSpotlight>
-                  {(versions.length > 0 || lastSaved) && (
-                    <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-                      <PopoverTrigger asChild>
-                        {/* Quiet status text, Google-Docs style: last change time
-                            + version count; click opens the history. */}
-                        <button
-                          type="button"
-                          title="Version history"
-                          className={`hidden sm:inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground ${historyOpen ? 'bg-muted text-foreground' : ''}`}
-                        >
-                          {(() => {
-                            const last = lastSaved ?? (versions[0] ? new Date(versions[0].createdAt) : null)
-                            const time = last
-                              ? (last.toDateString() === new Date().toDateString()
-                                ? last.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                : last.toLocaleDateString())
-                              : null
-                            const count = versions.length ? `${versions.length} version${versions.length === 1 ? '' : 's'}` : null
-                            return [time, count].filter(Boolean).join(' · ')
-                          })()}
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" onOpenAutoFocus={(e) => e.preventDefault()} className="w-[min(640px,90vw)] max-h-[70vh] overflow-y-auto border-blue-400/70 p-2 shadow-lg dark:border-blue-500/60">
-                        <VersionHistory
-                          pageId={page.id}
-                          versions={versions}
-                          currentContent={content}
-                          onRestoreVersion={handleRestoreVersion}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsFullscreen(!isFullscreen)}
-                    title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen editor'}
-                  >
-                    {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                  </Button>
-                </div>
+                {titleRowActions}
               </div>
 
             </div>

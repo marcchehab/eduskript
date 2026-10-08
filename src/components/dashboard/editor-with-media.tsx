@@ -16,6 +16,7 @@ import {
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { MarkdownEditor } from '@/components/dashboard/markdown-editor'
+import type { RibbonTabDef } from '@/components/dashboard/editor-ribbon'
 import { FileBrowser } from '@/components/dashboard/file-browser'
 import { VideoBrowser } from '@/components/dashboard/video-browser'
 import { ExcalidrawEditor } from '@/components/dashboard/excalidraw-editor'
@@ -136,6 +137,10 @@ export interface EditorWithMediaProps {
    * box uses the fit-to-window / dragged height (front-page editor).
    */
   fillHeight?: boolean
+  /** Extra ribbon tabs appended after the editor's own (page editor: "Page settings"). */
+  extraRibbonTabs?: RibbonTabDef[]
+  /** Extra groups at the end of the ribbon's Layout tab. */
+  layoutRibbonExtra?: React.ReactNode
   /** Rendered after the editor card, inside the same bordered card as
    *  metadataSlot (e.g. version history) — it's part of the page too, not a
    *  separate scope. Hidden in fullscreen. */
@@ -184,6 +189,8 @@ export function EditorWithMedia({
   headerLabel,
   fillHeight = false,
   footerSlot,
+  extraRibbonTabs,
+  layoutRibbonExtra,
 }: EditorWithMediaProps) {
   const alert = useAlertDialog()
   const isFreePlan = useIsFreeTeacher()
@@ -722,14 +729,16 @@ export function EditorWithMedia({
           toggle itself) need to stay reachable. */}
       <div className={
         fullscreen
-          ? 'flex-1 min-h-0 flex flex-col'
+          ? 'relative flex-1 min-h-0 flex flex-col'
           : `${hasPageCard ? 'relative border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden' : ''} ${
               fillHeight ? 'flex-1 min-h-0 flex flex-col' : ''
             }`
       }>
-        {!fullscreen && pageLabel && <FolderTab tone="orange">{pageLabel}</FolderTab>}
+        {/* Also shown in fullscreen: the page editor puts its fullscreen
+            toggle in this tab, so it must stay reachable to exit. */}
+        {pageLabel && <FolderTab tone="orange">{pageLabel}</FolderTab>}
         {metadataSlot && (
-          <div className={fullscreen ? '' : 'px-3 pt-3 pb-1 shrink-0'}>
+          <div className={fullscreen ? 'pt-6' : 'px-3 pt-3 pb-1 shrink-0'}>
             {metadataSlot}
           </div>
         )}
@@ -788,6 +797,8 @@ export function EditorWithMedia({
               aiEditLocked={Boolean(aiEdit) && isFreePlan}
               onExcalidrawEdit={(filename, fileId) => handleExcalidrawEdit({ id: fileId, name: filename })}
               flush={fillHeight && !fullscreen}
+              extraRibbonTabs={extraRibbonTabs}
+              layoutRibbonExtra={layoutRibbonExtra}
             />
           </div>
           {!fullscreen && !fillHeight && (

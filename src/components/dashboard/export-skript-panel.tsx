@@ -2,18 +2,10 @@
 
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { HardDriveDownload, Folder, FileArchive, Loader2 } from 'lucide-react'
+import { Folder, FileArchive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter
-} from '@/components/ui/dialog'
 import {
   exportSkriptAsZip,
   exportSkriptToDirectory,
@@ -29,14 +21,13 @@ const STAGE_LABELS: Record<ExportProgress['stage'], string> = {
   done: 'Done'
 }
 
-interface ExportSkriptModalProps {
+interface ExportSkriptPanelProps {
   skriptId: string
-  skriptTitle: string
 }
 
-export function ExportSkriptModal({ skriptId, skriptTitle }: ExportSkriptModalProps) {
+/** Skript export as an inline panel (the skript's "Export" manage tab). */
+export function ExportSkriptPanel({ skriptId }: ExportSkriptPanelProps) {
   const { data: session } = useSession()
-  const [open, setOpen] = useState(false)
   const [progress, setProgress] = useState<ExportProgress | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [failure, setFailure] = useState<string | null>(null)
@@ -59,36 +50,28 @@ export function ExportSkriptModal({ skriptId, skriptTitle }: ExportSkriptModalPr
     }
   }
 
-  function reset(next: boolean) {
-    setOpen(next)
-    if (!next) {
-      setProgress(null)
-      setErrors([])
-      setFailure(null)
-    }
+  function reset() {
+    setProgress(null)
+    setErrors([])
+    setFailure(null)
   }
 
   return (
-    <Dialog open={open} onOpenChange={reset}>
-      <Button variant="ghost" size="sm" title="Export skript" onClick={() => setOpen(true)}>
-        <HardDriveDownload className="h-4 w-4" />
-      </Button>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Export &ldquo;{skriptTitle}&rdquo;</DialogTitle>
-          <DialogDescription>
-            Pages as markdown and attachments are downloaded and packed directly in your browser —
-            the server isn&rsquo;t involved.
-          </DialogDescription>
-        </DialogHeader>
+    // Full-width text, centered; only the button grid keeps the former
+    // dialog width (max-w-md).
+    <div className="space-y-3 p-3 text-center">
+        <p className="text-sm text-muted-foreground">
+          Pages as markdown and attachments are downloaded and packed directly in your browser —
+          the server isn&rsquo;t involved.
+        </p>
 
         {!busy && progress?.stage !== 'done' && (
           <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center justify-center gap-2 text-sm">
               <Checkbox checked={includeVideos} onCheckedChange={v => setIncludeVideos(v === true)} />
               Also export videos (takes a while)
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="mx-auto grid max-w-md grid-cols-2 gap-3">
               <Button
                 variant="outline"
                 className="h-auto flex-col gap-2 py-4"
@@ -147,12 +130,9 @@ export function ExportSkriptModal({ skriptId, skriptTitle }: ExportSkriptModalPr
 
         {failure && <p className="text-sm text-destructive">{failure}</p>}
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => reset(false)}>
-            {progress?.stage === 'done' || failure ? 'Close' : 'Cancel'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        {(progress?.stage === 'done' || failure) && (
+          <Button variant="outline" size="sm" onClick={reset}>Export again</Button>
+        )}
+    </div>
   )
 }

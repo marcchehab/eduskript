@@ -30,7 +30,7 @@ import { VideoPickDialog } from './video-pick-dialog'
 import { PdfPickDialog } from './pdf-pick-dialog'
 import { InteractivePreview } from './interactive-preview'
 import { autocompletion } from '@codemirror/autocomplete'
-import { Ribbon, RibbonGroup, RibbonBigButton, RibbonSmallButton, RibbonSmallStack, RibbonSmallRow, RibbonSplitBigButton, RibbonGalleryChip } from '@/components/dashboard/editor-ribbon'
+import { Ribbon, RibbonGroup, RibbonBigButton, RibbonSmallButton, RibbonSmallStack, RibbonSmallRow, RibbonSplitBigButton, RibbonGalleryChip, type RibbonTabDef } from '@/components/dashboard/editor-ribbon'
 import { createMarkdownCompletions, pageLinkCompletions, phetSimCompletions } from './markdown-completions'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
@@ -80,6 +80,11 @@ interface CodeMirrorEditorProps {
   aiInline?: { locked: boolean; onAccepted?: () => void }
   /** Edge-to-edge inside a parent card: no own side/bottom border or rounding. */
   flush?: boolean
+  /** Host-defined ribbon tabs appended after the editor's own (page editor:
+   *  "Page settings"). */
+  extraRibbonTabs?: RibbonTabDef[]
+  /** Host-defined groups appended to the Layout tab (page editor: Slides). */
+  layoutRibbonExtra?: React.ReactNode
 }
 
 /**
@@ -182,6 +187,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   aiEditLocked = false,
   aiInline,
   flush = false,
+  extraRibbonTabs,
+  layoutRibbonExtra,
 }: CodeMirrorEditorProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
@@ -1987,7 +1994,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           simple-textarea fallback, Home and Layout are hidden (their commands
           need the CodeMirror view). */}
       <Ribbon
-        tabBarRight={onAIEdit && !aiInline ? (
+        tabBarRight={<>
+          {onAIEdit && !aiInline ? (
           aiEditLocked ? (
             <button
               type="button"
@@ -2012,7 +2020,32 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             </QuestSpotlight>
           )
         ) : undefined}
+        </>}
         tabs={[
+          // AI Edit first (leftmost); host tabs (extraRibbonTabs, e.g. the
+          // page editor's "Page settings") come last.
+          ...(aiInline && !useSimpleEditor && skriptId && pageId ? [{
+            id: 'ai',
+            label: 'AI Edit',
+            icon: <Wand2 className="w-4 h-4" />,
+            pinned: true,
+            accent: {
+              active: 'border-blue-500 text-blue-600 dark:text-blue-400',
+              fill: 'from-blue-500/15 to-blue-500/[0.02]',
+              idle: 'text-blue-600/80 dark:text-blue-400/80',
+            },
+            content: (
+              <AIEditPanel
+                locked={aiInline.locked}
+                chat={aiEdit}
+                contentModel={aiContentModel}
+                onContentModelChange={setAiContentModel}
+                pendingChanges={aiPendingChunks}
+                onAcceptAll={() => clearAIMerge(true)}
+                onRejectAll={rejectAllAI}
+              />
+            ),
+          }] : []),
           ...(!useSimpleEditor ? [{
             id: 'home',
             label: 'Home',
@@ -2335,6 +2368,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 <RibbonGroup caption="Page">
                   <RibbonBigButton icon={<Megaphone />} label="Banner" title="Sticky announcement bar at the top of the page (banner)" onClick={insertBanner} />
                 </RibbonGroup>
+                {layoutRibbonExtra}
               </>
             ),
           }] : []),
@@ -2376,29 +2410,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               </>
             ),
           },
-          ...(aiInline && !useSimpleEditor && skriptId && pageId ? [{
-            id: 'ai',
-            label: 'AI Edit',
-            icon: <Wand2 className="w-4 h-4" />,
-            align: 'right' as const,
-            pinned: true,
-            accent: {
-              active: 'border-blue-500 text-blue-600 dark:text-blue-400',
-              fill: 'from-blue-500/15 to-blue-500/[0.02]',
-              idle: 'text-blue-600/80 dark:text-blue-400/80',
-            },
-            content: (
-              <AIEditPanel
-                locked={aiInline.locked}
-                chat={aiEdit}
-                contentModel={aiContentModel}
-                onContentModelChange={setAiContentModel}
-                pendingChanges={aiPendingChunks}
-                onAcceptAll={() => clearAIMerge(true)}
-                onRejectAll={rejectAllAI}
-              />
-            ),
-          }] : []),
+          ...(extraRibbonTabs ?? []),
         ]}
       />
 

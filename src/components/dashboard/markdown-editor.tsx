@@ -36,6 +36,8 @@ interface MarkdownEditorProps {
   aiEditLocked?: boolean
   aiInline?: { locked: boolean; onAccepted?: () => void }
   flush?: boolean
+  extraRibbonTabs?: import('./editor-ribbon').RibbonTabDef[]
+  layoutRibbonExtra?: React.ReactNode
 }
 
 // Create a client-only version using dynamic import
