@@ -15,9 +15,14 @@
  *      History rows have auto-increment IDs and don't collide; re-key
  *      everything and renumber `versionNumber` so the merged history has no
  *      duplicates per (pageId, componentId).
+ *
+ * Site scoping (Dexie version 2, see schema.ts): records live in
+ * `siteUserData`, keyed by siteId too. Data copied from the v2 DB gets
+ * LEGACY_SITE_ID (adopted later by the first site that reads it); the
+ * anonymous re-key keeps each record's siteId.
  */
 
-import { db } from './schema'
+import { db, LEGACY_SITE_ID } from './schema'
 import type { UserDataRecord, UserDataVersion, VersionBlob } from './types'
 
 const MIGRATED_V3_FLAG = 'eduskript-userdata-migrated-v3'
@@ -100,14 +105,16 @@ export async function runOneTimeMigrationV2ToV3(): Promise<void> {
       return
     }
 
-    await db.transaction('rw', db.userData, db.userData_history, db.versionBlobs, async () => {
+    await db.transaction('rw', db.siteUserData, db.userData_history, db.versionBlobs, async () => {
       for (const r of v2UserData) {
-        await db.userData.put({ ...r, userId: lastUserId } as UserDataRecord)
+        // Into the site-scoped table (Dexie v2 has already upgraded the v3 DB
+        // by the time this runs), marked legacy so a site adopts it later.
+        await db.siteUserData.put({ ...r, userId: lastUserId, siteId: LEGACY_SITE_ID } as UserDataRecord)
       }
       for (const v of v2History) {
         // Drop the v2 auto-increment id so v3 assigns a fresh one.
         const { id: _ignore, ...rest } = v
-        await db.userData_history.add({ ...rest, userId: lastUserId } as UserDataVersion)
+        await db.userData_history.add({ ...rest, userId: lastUserId, siteId: LEGACY_SITE_ID } as UserDataVersion)
       }
       for (const b of v2Blobs) {
         // Blobs are content-addressed; if the same blob is somehow already in
@@ -148,22 +155,22 @@ export async function migrateAnonymousIfNeeded(
   if (!currentUserId || currentUserId === 'anonymous') return
 
   try {
-    const anonRows = await db.userData.where('userId').equals('anonymous').toArray()
+    const anonRows = await db.siteUserData.where('userId').equals('anonymous').toArray()
     const anonHistory = await db.userData_history.where('userId').equals('anonymous').toArray()
 
     if (anonRows.length === 0 && anonHistory.length === 0) return
 
-    await db.transaction('rw', db.userData, db.userData_history, async () => {
+    await db.transaction('rw', db.siteUserData, db.userData_history, async () => {
       for (const r of anonRows) {
-        const targetKey: [string, string, string, string, string] = [
-          currentUserId, r.pageId, r.componentId, r.targetType, r.targetId
+        const targetKey: [string, string, string, string, string, string] = [
+          currentUserId, r.siteId, r.pageId, r.componentId, r.targetType, r.targetId
         ]
-        const existing = await db.userData.get(targetKey)
+        const existing = await db.siteUserData.get(targetKey)
 
         // Always remove the anonymous row — either we replaced it with a
         // re-keyed copy, or the destination is newer and we drop the anon copy.
-        await db.userData.delete([
-          r.userId, r.pageId, r.componentId, r.targetType, r.targetId
+        await db.siteUserData.delete([
+          r.userId, r.siteId, r.pageId, r.componentId, r.targetType, r.targetId
         ])
 
         if (existing && existing.updatedAt >= r.updatedAt) {
@@ -173,7 +180,7 @@ export async function migrateAnonymousIfNeeded(
 
         // Anonymous record is newer (or destination is empty) — claim it.
         // savedToRemote: false ensures the unsynced sweep pushes it next time.
-        await db.userData.put({ ...r, userId: currentUserId, savedToRemote: false })
+        await db.siteUserData.put({ ...r, userId: currentUserId, savedToRemote: false })
       }
 
       for (const v of anonHistory) {
@@ -185,12 +192,12 @@ export async function migrateAnonymousIfNeeded(
       // Renumber versionNumber per (pageId, componentId) — anon and existing
       // both started at 1, so a naive merge has duplicates that confuse the
       // history UI. Sort by createdAt (true ordering) and reassign 1..n.
-      const touchedKeys = new Set(anonHistory.map(v => `${v.pageId}\u0000${v.componentId}`))
+      const touchedKeys = new Set(anonHistory.map(v => `${v.siteId ?? LEGACY_SITE_ID}\u0000${v.pageId}\u0000${v.componentId}`))
       for (const key of touchedKeys) {
-        const [pageId, componentId] = key.split('\u0000')
+        const [siteId, pageId, componentId] = key.split('\u0000')
         const versions = await db.userData_history
-          .where('[userId+pageId+componentId]')
-          .equals([currentUserId, pageId, componentId])
+          .where('[userId+siteId+pageId+componentId]')
+          .equals([currentUserId, siteId, pageId, componentId])
           .sortBy('createdAt')
         for (let i = 0; i < versions.length; i++) {
           if (versions[i].versionNumber !== i + 1 && versions[i].id !== undefined) {

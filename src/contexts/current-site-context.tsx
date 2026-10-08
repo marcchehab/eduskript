@@ -17,6 +17,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 import { syncEngine } from '@/lib/userdata/sync-engine'
+import { userDataService } from '@/lib/userdata/userDataService'
 
 export interface CurrentSite {
   siteId: string | null
@@ -42,6 +43,15 @@ export function CurrentSiteProvider({
   children: React.ReactNode
 }) {
   const [pageId, setPageId] = useState<string | null>(null)
+  // Site scoping (src/lib/site-access.ts): every IndexedDB record is keyed on
+  // the site. Set during render, not in an effect — child effects (editors
+  // restoring saved answers) run BEFORE this provider's effects, and must
+  // already read/write under the right site. Idempotent, so re-renders and
+  // StrictMode double-renders are harmless. Pending debounced saves captured
+  // their own site, so a switch can't misfile them.
+  if (userDataService.getCurrentSite() !== (siteId ?? '')) {
+    userDataService.setCurrentSite(siteId)
+  }
   return (
     <CurrentSiteContext.Provider value={{ siteId, organizationId, pageId, setPageId }}>
       <SyncEngineSiteBridge siteId={siteId} />
@@ -69,11 +79,17 @@ export function ReportCurrentPageId({ pageId }: { pageId: string }) {
 
 /** Feeds the resolved siteId into the sync engine singleton — a plain
  *  imported module, not itself context-aware, so this is the one place
- *  that bridges React state into it. */
+ *  that bridges React state into it. On unmount the user-data service drops
+ *  back to "no site" so a later non-site route (dashboard) can't write into
+ *  this site's records. */
 function SyncEngineSiteBridge({ siteId }: { siteId: string | null }) {
   useEffect(() => {
     syncEngine.setSiteId(siteId)
-    return () => syncEngine.setSiteId(null)
+    userDataService.setCurrentSite(siteId)
+    return () => {
+      syncEngine.setSiteId(null)
+      if (userDataService.getCurrentSite() === (siteId ?? '')) userDataService.setCurrentSite(null)
+    }
   }, [siteId])
   return null
 }

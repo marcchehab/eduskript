@@ -1466,7 +1466,7 @@ export const CodeEditor = memo(function CodeEditor({
           .then(async () => {
             const record = await userDataService.get(pageId, componentId)
             if (record) {
-              syncEngine.queueSync(componentId, pageId, sig, record.version, { immediate: false })
+              syncEngine.queueSync(componentId, pageId, sig, record.version, { immediate: false, siteId: record.siteId })
             }
           })
           .catch((e) => console.error('[code-editor] exam autosave stream failed:', e))

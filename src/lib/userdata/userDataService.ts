@@ -7,9 +7,17 @@
  * USERID SCOPING: All records are keyed on `currentUserId` (default 'anonymous'),
  * set via setCurrentUser() from the provider when auth resolves. Different users
  * on one browser are naturally isolated — no wipe needed.
+ *
+ * SITE SCOPING: All records are also keyed on `currentSiteId`, set
+ * synchronously by CurrentSiteProvider (src/contexts/current-site-context.tsx)
+ * at the site/org route boundary. The same page on two sites has two
+ * independent records (src/lib/site-access.ts). '' (NO_SITE_ID) = no site
+ * context (dashboard preview) → stays local, never synced. Pre-site-scoping
+ * rows carry LEGACY_SITE_ID and are adopted (moved, never dropped) by the
+ * first real site that reads them — see adoptLegacy().
  */
 
-import { db } from './schema'
+import { db, LEGACY_SITE_ID, NO_SITE_ID, type SiteUserDataKey } from './schema'
 import type { UserDataRecord, SaveOptions, UserDataVersion, VersionBlob, CreateVersionOptions, VersionSummary, VersionKind } from './types'
 import { generateSHA256, gzipCompress, gzipDecompress, calculateSize } from './compression'
 import { recordDeletions } from './adapters'
@@ -28,6 +36,7 @@ interface PendingSave<T = any> {
 export class UserDataService {
   private static instance: UserDataService
   private currentUserId: string = 'anonymous'
+  private currentSiteId: string = NO_SITE_ID
   private saveTimers: Map<string, PendingSave> = new Map()
   private readonly DEFAULT_DEBOUNCE = 1000 // 1 second
 
@@ -64,29 +73,97 @@ export class UserDataService {
   }
 
   /**
-   * Generate cache key for debounce timers and pub/sub (includes userId + targeting)
+   * Set the active site for all subsequent reads/writes. Called
+   * synchronously during render by CurrentSiteProvider so that no child
+   * effect can read/write under a stale site. Debounced saves already queued
+   * keep the site they captured (see save()), so no flush is needed here.
+   */
+  public setCurrentSite(siteId: string | null | undefined): void {
+    this.currentSiteId = siteId || NO_SITE_ID
+  }
+
+  public getCurrentSite(): string {
+    return this.currentSiteId
+  }
+
+  /**
+   * Generate cache key for debounce timers and pub/sub (includes userId,
+   * siteId + targeting)
    */
   private getCacheKey(
     pageId: string,
     componentId: string,
     targetType?: 'class' | 'student' | 'page' | null,
-    targetId?: string | null
+    targetId?: string | null,
+    userId: string = this.currentUserId,
+    siteId: string = this.currentSiteId,
   ): string {
     const targetKey = targetType && targetId ? `:${targetType}:${targetId}` : ''
-    return `${this.currentUserId}:${pageId}:${componentId}${targetKey}`
+    return `${userId}:${siteId}:${pageId}:${componentId}${targetKey}`
   }
 
   /**
-   * Generate IndexedDB compound key (5-tuple including userId)
+   * Generate IndexedDB compound key (6-tuple including userId + siteId)
    * Note: Uses empty strings instead of null because IndexedDB doesn't support null in compound keys
    */
   private getDbKey(
     pageId: string,
     componentId: string,
     targetType?: 'class' | 'student' | 'page' | null,
-    targetId?: string | null
-  ): [string, string, string, string, string] {
-    return [this.currentUserId, pageId, componentId, targetType ?? '', targetId ?? '']
+    targetId?: string | null,
+    userId: string = this.currentUserId,
+    siteId: string = this.currentSiteId,
+  ): SiteUserDataKey {
+    return [userId, siteId, pageId, componentId, targetType ?? '', targetId ?? '']
+  }
+
+  /**
+   * Move a pre-site-scoping record (siteId = LEGACY_SITE_ID) under `siteId`
+   * when that site has no record of its own yet. Runs in one transaction:
+   * put under the site, then delete the legacy key — the data is moved, never
+   * dropped (and the Dexie v1 `userData` table still holds the original).
+   * The record keeps its savedToRemote flag, so unsynced edits get pushed to
+   * the adopting site. Returns the site record (existing or adopted) or null.
+   *
+   * Adoption = "first real site that reads it wins". The server data
+   * migration assigned each row to the single site its skript is placed on;
+   * for skripts placed on several sites the two may disagree — documented in
+   * SITE-SCOPING.md.
+   */
+  public async adoptLegacy<T = any>(
+    userId: string,
+    siteId: string,
+    pageId: string,
+    componentId: string,
+    targetType: string,
+    targetId: string,
+  ): Promise<UserDataRecord<T> | null> {
+    if (!siteId || siteId === LEGACY_SITE_ID) return null
+    const siteKey: SiteUserDataKey = [userId, siteId, pageId, componentId, targetType, targetId]
+    const legacyKey: SiteUserDataKey = [userId, LEGACY_SITE_ID, pageId, componentId, targetType, targetId]
+    return db.transaction('rw', db.siteUserData, async () => {
+      const existing = await db.siteUserData.get(siteKey)
+      if (existing) return existing as UserDataRecord<T>
+      const legacy = await db.siteUserData.get(legacyKey)
+      if (!legacy) return null
+      const adopted: UserDataRecord<T> = { ...(legacy as UserDataRecord<T>), siteId }
+      await db.siteUserData.put(adopted)
+      await db.siteUserData.delete(legacyKey)
+      return adopted
+    })
+  }
+
+  /** Same as adoptLegacy for the local version history of one component. */
+  private async adoptLegacyHistory(userId: string, siteId: string, pageId: string, componentId?: string): Promise<void> {
+    if (!siteId || siteId === LEGACY_SITE_ID) return
+    const coll = componentId === undefined
+      ? db.userData_history
+          .where('[userId+siteId+pageId+componentId]')
+          .between([userId, LEGACY_SITE_ID, pageId, ''], [userId, LEGACY_SITE_ID, pageId, '\uffff'])
+      : db.userData_history
+          .where('[userId+siteId+pageId+componentId]')
+          .equals([userId, LEGACY_SITE_ID, pageId, componentId])
+    await coll.modify({ siteId })
   }
 
   /**
@@ -108,8 +185,10 @@ export class UserDataService {
 
     try {
       const dbKey = this.getDbKey(pageId, componentId, options.targetType, options.targetId)
-      const record = await db.userData.get(dbKey)
-      return (record as UserDataRecord<T>) || null
+      const record = await db.siteUserData.get(dbKey)
+      if (record) return record as UserDataRecord<T>
+      // No record for this site yet — adopt a pre-site-scoping one if present.
+      return await this.adoptLegacy<T>(dbKey[0], dbKey[1], pageId, componentId, dbKey[4], dbKey[5])
     } catch (error) {
       console.error('Failed to retrieve user data:', error)
       return null
@@ -183,10 +262,13 @@ export class UserDataService {
     const { debounce = this.DEFAULT_DEBOUNCE, immediate = false, targetType, targetId, sourceId, localOnly } = options
     const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
 
-    // Capture the userId active right now; if the user changes mid-debounce,
-    // setCurrentUser() awaits flush() and the replay below will run under
-    // this captured userId rather than the new one.
+    // Capture the userId + siteId active right now; if the user changes
+    // mid-debounce, setCurrentUser() awaits flush() and the replay below will
+    // run under this captured userId rather than the new one. Same for a site
+    // switch (client navigation to another site): the pending save lands on
+    // the site it was made on.
     const capturedUserId = this.currentUserId
+    const capturedSiteId = this.currentSiteId
 
     // Clear existing timer if any
     const existing = this.saveTimers.get(cacheKey)
@@ -197,7 +279,7 @@ export class UserDataService {
 
     // If immediate save requested, execute now
     if (immediate) {
-      await this.performSave(capturedUserId, pageId, componentId, data, targetType, targetId, sourceId, localOnly)
+      await this.performSave(capturedUserId, capturedSiteId, pageId, componentId, data, targetType, targetId, sourceId, localOnly)
       return
     }
 
@@ -205,7 +287,7 @@ export class UserDataService {
     // can persist it instead of dropping it.
     const replay = async () => {
       this.saveTimers.delete(cacheKey)
-      await this.performSave(capturedUserId, pageId, componentId, data, targetType, targetId, sourceId, localOnly)
+      await this.performSave(capturedUserId, capturedSiteId, pageId, componentId, data, targetType, targetId, sourceId, localOnly)
     }
     const timer = setTimeout(() => { void replay() }, debounce)
 
@@ -217,6 +299,7 @@ export class UserDataService {
    */
   private async performSave<T = any>(
     userId: string,
+    siteId: string,
     pageId: string,
     componentId: string,
     data: T,
@@ -226,9 +309,12 @@ export class UserDataService {
     localOnly?: boolean
   ): Promise<void> {
     try {
-      // Look up the existing record under the userId active at save time —
-      // not this.currentUserId, which may have changed since debounce started.
-      const existing = await db.userData.get([userId, pageId, componentId, targetType ?? '', targetId ?? ''])
+      // Look up the existing record under the userId/siteId active at save
+      // time — not the current ones, which may have changed since debounce
+      // started. Adopts a legacy record first so its version/createdAt/
+      // deletion list carry over instead of being shadowed.
+      const existing = await db.siteUserData.get([userId, siteId, pageId, componentId, targetType ?? '', targetId ?? ''])
+        ?? await this.adoptLegacy(userId, siteId, pageId, componentId, targetType ?? '', targetId ?? '')
       const now = Date.now()
 
       // Preserve existing localOnly flag unless caller explicitly overrides.
@@ -241,6 +327,7 @@ export class UserDataService {
 
       const record: UserDataRecord<T> = {
         userId,
+        siteId,
         pageId,
         componentId,
         data,
@@ -254,13 +341,12 @@ export class UserDataService {
         ...(effectiveLocalOnly ? { localOnly: true } : {}),
       }
 
-      await db.userData.put(record)
+      await db.siteUserData.put(record)
 
-      // Notify subscribers under the cache key matching this userId. We
-      // recompute the key here using `userId` (not currentUserId) so that
-      // late replays after a user swap notify under the captured user.
-      const targetKey = targetType && targetId ? `:${targetType}:${targetId}` : ''
-      const cacheKey = `${userId}:${pageId}:${componentId}${targetKey}`
+      // Notify subscribers under the cache key matching this userId/siteId.
+      // Recomputed from the captured values (not the current ones) so late
+      // replays after a user/site swap notify under the captured scope.
+      const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId, userId, siteId)
       this.notifyListeners(cacheKey, data, sourceId)
     } catch (error) {
       console.error('Failed to save user data:', error)
@@ -297,7 +383,7 @@ export class UserDataService {
       }
 
       const dbKey = this.getDbKey(pageId, componentId, targetType, targetId)
-      await db.userData.delete(dbKey)
+      await db.siteUserData.delete(dbKey)
     } catch (error) {
       console.error('Failed to delete user data:', error)
       throw error
@@ -305,13 +391,13 @@ export class UserDataService {
   }
 
   /**
-   * Delete all data for a specific page (scoped to current user)
+   * Delete all data for a specific page (scoped to current user + site)
    */
   public async deleteAllForPage(pageId: string): Promise<void> {
     try {
-      await db.userData
-        .where('[userId+pageId]')
-        .equals([this.currentUserId, pageId])
+      await db.siteUserData
+        .where('[userId+siteId+pageId]')
+        .equals([this.currentUserId, this.currentSiteId, pageId])
         .delete()
     } catch (error) {
       console.error('Failed to delete page data:', error)
@@ -320,13 +406,13 @@ export class UserDataService {
   }
 
   /**
-   * Get all component IDs with data for a specific page (scoped to current user)
+   * Get all component IDs with data for a specific page (scoped to current user + site)
    */
   public async getComponentsForPage(pageId: string): Promise<string[]> {
     try {
-      const records = await db.userData
-        .where('[userId+pageId]')
-        .equals([this.currentUserId, pageId])
+      const records = await db.siteUserData
+        .where('[userId+siteId+pageId]')
+        .equals([this.currentUserId, this.currentSiteId, pageId])
         .toArray()
       return records.map((r) => r.componentId)
     } catch (error) {
@@ -343,9 +429,10 @@ export class UserDataService {
     try {
       const cutoff = Date.now() - olderThanDays * 24 * 60 * 60 * 1000
       const userId = this.currentUserId
-      const deleted = await db.userData
+      // Never drops unsynced rows: those may be the only copy.
+      const deleted = await db.siteUserData
         .where('updatedAt').below(cutoff)
-        .and((r) => r.userId === userId)
+        .and((r) => r.userId === userId && r.savedToRemote !== false)
         .delete()
       return deleted
     } catch (error) {
@@ -398,6 +485,8 @@ export class UserDataService {
       // `isManualSave` flag, default to 'auto'.
       const kind: VersionKind = options.kind ?? (isManualSave ? 'manual' : 'auto')
       const userId = this.currentUserId
+      const siteId = this.currentSiteId
+      await this.adoptLegacyHistory(userId, siteId, pageId, componentId)
 
       // Serialize data to JSON
       const dataJson = JSON.stringify(data)
@@ -418,8 +507,8 @@ export class UserDataService {
         // Read existing rows once: needed for both the dedup guard below and
         // the version-number assignment further down.
         const existingVersions = await db.userData_history
-          .where('[userId+pageId+componentId]')
-          .equals([userId, pageId, componentId])
+          .where('[userId+siteId+pageId+componentId]')
+          .equals([userId, siteId, pageId, componentId])
           .toArray()
 
         // Dedup guard: skip rows whose content hash matches the most recent
@@ -472,6 +561,7 @@ export class UserDataService {
 
         const version: UserDataVersion = {
           userId,
+          siteId,
           pageId,
           componentId,
           versionNumber,
@@ -513,9 +603,10 @@ export class UserDataService {
     componentId: string
   ): Promise<VersionSummary[]> {
     try {
+      await this.adoptLegacyHistory(this.currentUserId, this.currentSiteId, pageId, componentId)
       const rows = await db.userData_history
-        .where('[userId+pageId+componentId]')
-        .equals([this.currentUserId, pageId, componentId])
+        .where('[userId+siteId+pageId+componentId]')
+        .equals([this.currentUserId, this.currentSiteId, pageId, componentId])
         .toArray()
       const versions = rows.sort((a, b) => b.createdAt - a.createdAt)
 
@@ -545,11 +636,12 @@ export class UserDataService {
    */
   public async getCodeEditorComponentIdsWithHistory(pageId: string): Promise<string[]> {
     try {
+      await this.adoptLegacyHistory(this.currentUserId, this.currentSiteId, pageId)
       const versions = await db.userData_history
-        .where('[userId+pageId+componentId]')
+        .where('[userId+siteId+pageId+componentId]')
         .between(
-          [this.currentUserId, pageId, ''],
-          [this.currentUserId, pageId, '\uffff']
+          [this.currentUserId, this.currentSiteId, pageId, ''],
+          [this.currentUserId, this.currentSiteId, pageId, '\uffff']
         )
         .toArray()
       const ids = new Set<string>()
@@ -586,10 +678,12 @@ export class UserDataService {
   ): Promise<number> {
     try {
       const userId = this.currentUserId
+      const siteId = this.currentSiteId
+      await this.adoptLegacyHistory(userId, siteId, pageId, fromComponentId)
       return await db.transaction('rw', db.userData_history, async () => {
         const rows = await db.userData_history
-          .where('[userId+pageId+componentId]')
-          .equals([userId, pageId, fromComponentId])
+          .where('[userId+siteId+pageId+componentId]')
+          .equals([userId, siteId, pageId, fromComponentId])
           .toArray()
         for (const row of rows) {
           if (row.id == null) continue
@@ -615,8 +709,8 @@ export class UserDataService {
         console.error('Version not found:', versionId)
         return null
       }
-      if (version.userId !== this.currentUserId) {
-        console.error('Version does not belong to current user:', versionId)
+      if (version.userId !== this.currentUserId || (version.siteId ?? LEGACY_SITE_ID) !== this.currentSiteId) {
+        console.error('Version does not belong to current user/site:', versionId)
         return null
       }
 
@@ -661,6 +755,7 @@ export class UserDataService {
         if (
           version &&
           (version.userId !== this.currentUserId ||
+            (version.siteId ?? LEGACY_SITE_ID) !== this.currentSiteId ||
             version.pageId !== pageId ||
             version.componentId !== componentId)
         ) {
@@ -668,8 +763,8 @@ export class UserDataService {
         }
       } else {
         version = await db.userData_history
-          .where('[userId+pageId+componentId]')
-          .equals([this.currentUserId, pageId, componentId])
+          .where('[userId+siteId+pageId+componentId]')
+          .equals([this.currentUserId, this.currentSiteId, pageId, componentId])
           .filter(v => v.versionNumber === versionNumberOrId)
           .first()
       }
@@ -760,7 +855,7 @@ export class UserDataService {
   ): Promise<void> {
     try {
       const version = await db.userData_history.get(versionId)
-      if (!version || version.userId !== this.currentUserId) {
+      if (!version || version.userId !== this.currentUserId || (version.siteId ?? LEGACY_SITE_ID) !== this.currentSiteId) {
         throw new Error(`Version ${versionId} not found`)
       }
       await db.userData_history.update(versionId, { label })
@@ -780,8 +875,8 @@ export class UserDataService {
   ): Promise<void> {
     try {
       const versions = await db.userData_history
-        .where('[userId+pageId+componentId]')
-        .equals([this.currentUserId, pageId, componentId])
+        .where('[userId+siteId+pageId+componentId]')
+        .equals([this.currentUserId, this.currentSiteId, pageId, componentId])
         .sortBy('versionNumber')
 
       if (versions.length <= maxVersions) {
@@ -823,8 +918,8 @@ export class UserDataService {
   ): Promise<void> {
     try {
       const versions = await db.userData_history
-        .where('[userId+pageId+componentId]')
-        .equals([this.currentUserId, pageId, componentId])
+        .where('[userId+siteId+pageId+componentId]')
+        .equals([this.currentUserId, this.currentSiteId, pageId, componentId])
         .toArray()
 
       for (const version of versions) {

@@ -7,10 +7,27 @@
  * - Retry with exponential backoff
  * - Online/offline detection
  * - Conflict resolution via adapters
+ *
+ * Site scoping: every item carries the siteId it belongs to (records are
+ * keyed on it locally, src/lib/userdata/schema.ts) and the server stores it
+ * per (user, site, adapter, item). Items without a real site — '' (dashboard
+ * preview, no site context) or '__legacy__' (pre-site-scoping, not yet
+ * adopted) — are never pushed; they stay local until a site adopts them.
  */
 
-import { db } from './schema'
+import { db, LEGACY_SITE_ID, type SiteUserDataKey } from './schema'
 import { getAdapter } from './adapters'
+import { userDataService } from './userDataService'
+
+/** True for a siteId the server accepts (not '' / legacy). */
+export function isSyncableSite(siteId: string | null | undefined): siteId is string {
+  return !!siteId && siteId !== LEGACY_SITE_ID
+}
+
+function queueKey(siteId: string, adapter: string, itemId: string, targetType?: string | null, targetId?: string | null): string {
+  const targetKey = targetType && targetId ? `:${targetType}:${targetId}` : ''
+  return `${siteId}:${adapter}:${itemId}${targetKey}`
+}
 
 // Must stay <= MAX_ITEMS in src/app/api/user-data/bulk-fetch/route.ts, which
 // 400s any request over that cap.
@@ -43,6 +60,8 @@ export interface SyncStatus {
 }
 
 export interface SyncItem {
+  /** Site the record belongs to (required by /api/user-data/sync). */
+  siteId: string
   adapter: string
   itemId: string
   data: string
@@ -72,10 +91,12 @@ export class SyncEngine {
   private userId: string | null = null
   // Set by CurrentSiteProvider's bridge (src/contexts/current-site-context.tsx)
   // when mounted under a site/org route. Scopes initialSync's manifest fetch
-  // to that site instead of the whole account. Null on routes with no site
-  // context (dashboard, auth) — initialSync then falls back to unscoped, as
-  // before this existed.
+  // to that site. Null on routes with no site context (dashboard, auth) —
+  // initialSync then skips the manifest pass (the server only serves data
+  // per site) and only pushes unsynced site records.
   private siteId: string | null = null
+  // Sites whose manifest was reconciled in this session (per user).
+  private reconciledSites: Set<string> = new Set()
   private syncQueue: Map<string, SyncItem> = new Map()
   private syncTimeout: ReturnType<typeof setTimeout> | null = null
   private retryTimeout: ReturnType<typeof setTimeout> | null = null
@@ -130,21 +151,27 @@ export class SyncEngine {
 
     if (userId && !wasLoggedIn) {
       // User just logged in - do initial sync
+      this.reconciledSites.clear()
       this.initialSync()
     } else if (!userId && wasLoggedIn) {
       // User logged out - clear queue
       this.syncQueue.clear()
+      this.reconciledSites.clear()
       this.updateStatus({ pending: 0 })
     }
   }
 
   /**
    * Set the current site ID (call from CurrentSiteProvider's bridge when the
-   * resolved site/org route mounts or unmounts). Read by initialSync only —
-   * doesn't retroactively rescope a sync already in flight or already run.
+   * resolved site/org route mounts or unmounts). Entering a site not yet
+   * reconciled this session (client navigation to another site) runs the
+   * manifest pass for it; queued items keep their own siteId either way.
    */
   public setSiteId(siteId: string | null): void {
     this.siteId = siteId
+    if (this.userId && isSyncableSite(siteId) && !this.reconciledSites.has(siteId)) {
+      this.initialSync()
+    }
   }
 
   /**
@@ -163,18 +190,22 @@ export class SyncEngine {
     data: string,
     version: number,
     options: {
+      /** Site of the record. Without a syncable site nothing is queued. */
+      siteId: string | null | undefined
       immediate?: boolean
       targetType?: 'class' | 'student' | 'page' | null
       targetId?: string | null
-    } = {}
+    }
   ): void {
-    // Include targeting in key to allow same adapter/itemId with different targets
-    const targetKey = options.targetType && options.targetId
-      ? `:${options.targetType}:${options.targetId}`
-      : ''
-    const key = `${adapter}:${itemId}${targetKey}`
+    // No site context (dashboard preview) or not-yet-adopted legacy data:
+    // keep it local. The server would reject it anyway.
+    if (!isSyncableSite(options.siteId)) return
+    // Include site + targeting in key to allow same adapter/itemId on several
+    // sites / with different targets
+    const key = queueKey(options.siteId, adapter, itemId, options.targetType, options.targetId)
 
     this.syncQueue.set(key, {
+      siteId: options.siteId,
       adapter,
       itemId,
       data,
@@ -276,8 +307,18 @@ export class SyncEngine {
 
       const result = await response.json()
 
-      // Mark items as synced in local DB
-      await this.markSynced(batch)
+      // Mark items as synced in local DB — except those the server refused
+      // under site scoping (item not placed on that site, no right to write the
+      // public/class layer). They stay savedToRemote=false locally: nothing is
+      // lost, and they are retried on the next initial sync.
+      const rejected = new Set(
+        ((result.rejected ?? []) as Array<{ siteId: string; adapter: string; itemId: string; targetType?: string | null; targetId?: string | null }>)
+          .map((r) => queueKey(r.siteId, r.adapter, r.itemId, r.targetType, r.targetId))
+      )
+      if (rejected.size > 0) {
+        console.warn(`[SyncEngine] ${rejected.size} item(s) refused by the server (site scoping); kept local.`)
+      }
+      await this.markSynced(batch.filter((it) => !rejected.has(queueKey(it.siteId, it.adapter, it.itemId, it.targetType, it.targetId))))
 
       // Mark operation as successful
       this.updateOperation(operationId, 'success')
@@ -321,9 +362,11 @@ export class SyncEngine {
       // Mark operation as failed
       this.updateOperation(operationId, 'failed', errorMsg)
 
-      // Re-queue failed items
+      // Re-queue failed items (same key shape as queueSync, so a newer edit
+      // queued meanwhile isn't duplicated)
       batch.forEach((item) => {
-        this.syncQueue.set(`${item.adapter}:${item.itemId}`, item)
+        const key = queueKey(item.siteId, item.adapter, item.itemId, item.targetType, item.targetId)
+        if (!this.syncQueue.has(key)) this.syncQueue.set(key, item)
       })
 
       this.updateStatus({
@@ -372,16 +415,56 @@ export class SyncEngine {
    */
   private async initialSync(): Promise<void> {
     if (!this.userId) return
+    const siteId = this.siteId
 
     try {
-      // Get server manifest, scoped to the current site when known.
-      const manifestUrl = this.siteId
-        ? `/api/user-data/manifest?siteId=${encodeURIComponent(this.siteId)}`
-        : '/api/user-data/manifest'
+      if (isSyncableSite(siteId)) {
+        this.reconciledSites.add(siteId)
+        await this.reconcileSite(siteId)
+      }
+
+      // Also push any unsynced local data not on server — for EVERY site the
+      // user has local records on, each under its own siteId (the server
+      // validates placement per item). Skip localOnly records — those are
+      // deliberately on-device only (e.g. student-uploaded binaries) and must
+      // never reach the server. Skip '' / legacy rows (no site yet). Filter
+      // to current user so we never push another user's pending data up
+      // under this session.
+      const sessionUserId = this.userId
+      const unsyncedRecords = await db.siteUserData
+        .filter((record) => record.userId === sessionUserId && record.savedToRemote === false && !record.localOnly && isSyncableSite(record.siteId))
+        .toArray()
+
+      for (const record of unsyncedRecords) {
+        this.queueSync(
+          record.componentId, // adapter
+          record.pageId, // itemId
+          JSON.stringify(record.data),
+          record.version,
+          {
+            siteId: record.siteId,
+            targetType: record.targetType || null,
+            targetId: record.targetId || null,
+          }
+        )
+      }
+
+      this.updateStatus({ lastSync: new Date() })
+    } catch (error) {
+      console.error('[SyncEngine] Initial sync failed:', error)
+      // Don't show error to user on initial sync failure
+    }
+  }
+
+  /** Manifest pass for one site: fetch server-newer rows, queue local-newer. */
+  private async reconcileSite(siteId: string): Promise<void> {
+    if (!this.userId) return
+    {
+      const manifestUrl = `/api/user-data/manifest?siteId=${encodeURIComponent(siteId)}`
       const response = await fetch(manifestUrl)
       if (!response.ok) {
-        if (response.status === 401) {
-          // Not authenticated - skip sync
+        if (response.status === 401 || response.status === 403) {
+          // Not authenticated / not allowed - skip sync
           return
         }
         throw new Error(`Failed to fetch manifest: ${response.status}`)
@@ -403,13 +486,16 @@ export class SyncEngine {
       for (const serverItem of manifest) {
         if (!serverItem.itemId || !serverItem.adapter) continue
         if (!this.userId) continue
-        const localRecord = await db.userData.get([
+        // Adopt a pre-site-scoping local copy first, so local edits that never
+        // reached the server get merged below instead of being shadowed.
+        const localRecord = await userDataService.adoptLegacy(
           this.userId,
+          siteId,
           serverItem.itemId,
           serverItem.adapter,
           '',
           '',
-        ])
+        )
 
         if (!localRecord || serverItem.updatedAt > localRecord.updatedAt) {
           serverNewer.push(serverItem)
@@ -419,37 +505,14 @@ export class SyncEngine {
             serverItem.itemId,
             JSON.stringify(localRecord.data),
             localRecord.version,
+            { siteId },
           )
         }
       }
 
       if (serverNewer.length > 0) {
-        await this.bulkFetchAndMerge(serverNewer)
+        await this.bulkFetchAndMerge(siteId, serverNewer)
       }
-
-      // Also push any unsynced local data not on server.
-      // Skip localOnly records — those are deliberately on-device only
-      // (e.g. student-uploaded binaries) and must never reach the server.
-      // Filter to current user so we never push another user's pending data
-      // up under this session.
-      const sessionUserId = this.userId
-      const unsyncedRecords = await db.userData
-        .filter((record) => record.userId === sessionUserId && record.savedToRemote === false && !record.localOnly)
-        .toArray()
-
-      for (const record of unsyncedRecords) {
-        this.queueSync(
-          record.componentId, // adapter
-          record.pageId, // itemId
-          JSON.stringify(record.data),
-          record.version
-        )
-      }
-
-      this.updateStatus({ lastSync: new Date() })
-    } catch (error) {
-      console.error('[SyncEngine] Initial sync failed:', error)
-      // Don't show error to user on initial sync failure
     }
   }
 
@@ -467,7 +530,7 @@ export class SyncEngine {
    * set/etc. per page, across every skript), and the manifest reconciliation
    * on login has no upper bound, so a single unchunked POST 400s outright.
    */
-  private async bulkFetchAndMerge(serverItems: ManifestItem[]): Promise<void> {
+  private async bulkFetchAndMerge(siteId: string, serverItems: ManifestItem[]): Promise<void> {
     if (serverItems.length === 0) return
     if (!this.userId) return
 
@@ -491,7 +554,7 @@ export class SyncEngine {
     for (let i = 0; i < serverItems.length; i += BULK_FETCH_CHUNK_SIZE) {
       const chunk = serverItems.slice(i, i + BULK_FETCH_CHUNK_SIZE)
       try {
-        const counts = await this.fetchAndMergeChunk(chunk)
+        const counts = await this.fetchAndMergeChunk(siteId, chunk)
         mergeCount += counts.mergeCount
         fetchCount += counts.fetchCount
         missingCount += counts.missingCount
@@ -515,12 +578,14 @@ export class SyncEngine {
   }
 
   private async fetchAndMergeChunk(
+    siteId: string,
     serverItems: ManifestItem[]
   ): Promise<{ mergeCount: number; fetchCount: number; missingCount: number }> {
     const response = await fetch('/api/user-data/bulk-fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        siteId,
         items: serverItems.map((s) => ({ adapter: s.adapter, itemId: s.itemId })),
       }),
     })
@@ -552,13 +617,8 @@ export class SyncEngine {
         continue
       }
 
-      const localRecord = await db.userData.get([
-        this.userId!,
-        serverItem.itemId,
-        serverItem.adapter,
-        '',
-        '',
-      ])
+      const localKey: SiteUserDataKey = [this.userId!, siteId, serverItem.itemId, serverItem.adapter, '', '']
+      const localRecord = await db.siteUserData.get(localKey)
 
       let mergedData: unknown = serverData.data
       let didMerge = false
@@ -580,8 +640,9 @@ export class SyncEngine {
         }
       }
 
-      await db.userData.put({
+      await db.siteUserData.put({
         userId: this.userId!,
+        siteId,
         pageId: serverItem.itemId,
         componentId: serverItem.adapter,
         data: mergedData,
@@ -611,6 +672,7 @@ export class SyncEngine {
    */
   private async handleConflicts(
     conflicts: Array<{
+      siteId: string
       adapter: string
       itemId: string
       serverData: unknown
@@ -645,7 +707,7 @@ export class SyncEngine {
         failedCount++
         continue
       }
-      const localRecord = await db.userData.get([this.userId, conflict.itemId, conflict.adapter, targetType, targetId])
+      const localRecord = await db.siteUserData.get([this.userId, conflict.siteId, conflict.itemId, conflict.adapter, targetType, targetId])
       if (!localRecord) {
         missingCount++
         continue
@@ -654,7 +716,7 @@ export class SyncEngine {
       const adapter = getAdapter(conflict.adapter)
       if (!adapter?.merge) {
         // No merge strategy - server wins
-        await db.userData.put({
+        await db.siteUserData.put({
           ...localRecord,
           data: conflict.serverData,
           version: conflict.serverVersion,
@@ -669,7 +731,7 @@ export class SyncEngine {
         const remoteData = adapter.deserialize(JSON.stringify(conflict.serverData))
         const mergedData = adapter.merge(localData, remoteData)
 
-        await db.userData.put({
+        await db.siteUserData.put({
           ...localRecord,
           data: mergedData,
           version: conflict.serverVersion + 1,
@@ -683,6 +745,7 @@ export class SyncEngine {
           JSON.stringify(mergedData),
           conflict.serverVersion + 1,
           {
+            siteId: conflict.siteId,
             targetType: (targetType === 'class' || targetType === 'student' || targetType === 'page') ? targetType : null,
             targetId: targetId || null,
           }
@@ -691,7 +754,7 @@ export class SyncEngine {
         mergedCount++
       } catch {
         // Merge failed - server wins
-        await db.userData.put({
+        await db.siteUserData.put({
           ...localRecord,
           data: conflict.serverData,
           version: conflict.serverVersion,
@@ -718,10 +781,10 @@ export class SyncEngine {
   private async markSynced(items: SyncItem[]): Promise<void> {
     if (!this.userId) return
     for (const item of items) {
-      // 5-element key including userId + targeting (if present)
-      const record = await db.userData.get([this.userId, item.itemId, item.adapter, item.targetType ?? '', item.targetId ?? ''])
+      // 6-element key including userId + siteId + targeting (if present)
+      const record = await db.siteUserData.get([this.userId, item.siteId, item.itemId, item.adapter, item.targetType ?? '', item.targetId ?? ''])
       if (record) {
-        await db.userData.put({
+        await db.siteUserData.put({
           ...record,
           savedToRemote: true,
         })

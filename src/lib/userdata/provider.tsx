@@ -283,8 +283,10 @@ export function useSyncedUserData<T>(
         // Note: page broadcasts need this too so authors see their own public content
         if (isBroadcastMode) {
           try {
+            // Site scoping: broadcasts are per site, like everything else.
+            const siteId = userDataService.getCurrentSite()
             const response = await fetch(
-              `/api/user-data/${encodeURIComponent(componentId)}/${encodeURIComponent(pageId)}?targetType=${targetType}&targetId=${targetId}`
+              `/api/user-data/${encodeURIComponent(componentId)}/${encodeURIComponent(pageId)}?targetType=${targetType}&targetId=${targetId}&siteId=${encodeURIComponent(siteId)}`
             )
             if (response.ok) {
               const serverData = await response.json()
@@ -426,6 +428,7 @@ export function useSyncedUserData<T>(
               JSON.stringify(newData),
               record.version,
               {
+                siteId: record.siteId, // '' / legacy → not queued (stays local)
                 immediate: shouldSyncImmediately, // Immediate in broadcast mode
                 targetType: effectiveTargetType ?? null,
                 targetId: effectiveTargetId ?? null,

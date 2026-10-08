@@ -19,6 +19,7 @@ export interface UserDataKey {
  */
 export interface UserDataRecord<T = any> {
   userId: string          // Owning user — 'anonymous' for not-logged-in writes. Part of the IndexedDB compound primary key so multiple users on one browser are isolated without wiping.
+  siteId: string          // Site the data belongs to (site scoping, src/lib/site-access.ts). '' = no site context (local-only), '__legacy__' = pre-site-scoping row awaiting adoption. Part of the primary key.
   pageId: string          // Database ID of the page
   componentId: string     // Component identifier
   data: T                 // Component-specific data
@@ -252,6 +253,7 @@ export type VersionKind = 'auto' | 'manual' | 'check' | 'run'
 export interface UserDataVersion {
   id?: number                    // Auto-increment primary key
   userId: string                 // Owning user — part of the [userId+pageId+componentId] secondary index so histories are isolated per user
+  siteId?: string                // Site scoping (see UserDataRecord.siteId). Optional only for rows written before Dexie v2; the v2 upgrade stamps them '__legacy__'.
   pageId: string                 // Foreign key to main record
   componentId: string            // Foreign key to main record
   versionNumber: number          // Sequential version number
