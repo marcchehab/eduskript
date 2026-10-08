@@ -96,11 +96,12 @@ export async function GET(
     }
 
     // Build the exam URL - use https for all external hosts, http only for localhost
-    // URL structure: /org/{orgSlug}/{teacherPageSlug}/{skriptSlug}/{pageSlug}
+    // Point straight at /exam/{siteSlug}/{skriptSlug}/{pageSlug}: the /org/... content
+    // route is ISR and redirects exam pages there WITHOUT the query string, which
+    // dropped seb_token (student landed logged out on "Exam locked").
     const host = request.headers.get('host') || 'eduskript.org'
     const protocol = host.startsWith('localhost') ? 'http' : 'https'
-    const orgSlug = process.env.DEFAULT_ORG_SLUG || 'eduskript'
-    const baseExamUrl = `${protocol}://${host}/org/${orgSlug}/${teacherSite.slug}/${page.skript.slug}/${page.slug}`
+    const baseExamUrl = `${protocol}://${host}/exam/${teacherSite.slug}/${page.skript.slug}/${page.slug}`
 
     // Generate one-time token for SEB authentication
     // This allows the user to be authenticated inside SEB without logging in again
