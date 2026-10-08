@@ -17,7 +17,7 @@ export const visibilityConfig: Record<VisibilityState, {
   label: string
   dot: string
   text: string
-  description: (type: 'skript' | 'page') => string
+  description: (type: 'skript' | 'page' | 'front page') => string
 }> = {
   draft: {
     label: 'Draft',
@@ -47,7 +47,11 @@ export function VisibilityDot({ state, className = '' }: { state: VisibilityStat
 }
 
 interface PublishToggleProps {
-  type: 'skript' | 'page'
+  /** 'frontpage' = a front page (skript, site or org): no Unlisted state
+   *  (FrontPage has only isPublished); pass its PATCH `endpoint`. */
+  type: 'skript' | 'page' | 'frontpage'
+  /** PATCH target; defaults to /api/skripts/{itemId} or /api/pages/{itemId}. */
+  endpoint?: string
   itemId: string
   isPublished: boolean
   isUnlisted?: boolean
@@ -79,6 +83,7 @@ export function PublishToggle({
   publicUrl,
   viewBlockedReason,
   onOpenPublic,
+  endpoint: endpointProp,
 }: PublishToggleProps) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState<VisibilityState | null>(null)
@@ -92,11 +97,13 @@ export function PublishToggle({
     const newIsPublished = next !== 'draft'
     const newIsUnlisted = next === 'unlisted'
     try {
-      const endpoint = type === 'skript' ? `/api/skripts/${itemId}` : `/api/pages/${itemId}`
+      const endpoint = endpointProp ?? (type === 'skript' ? `/api/skripts/${itemId}` : `/api/pages/${itemId}`)
       const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isPublished: newIsPublished, isUnlisted: newIsUnlisted }),
+        body: JSON.stringify(type === 'frontpage'
+          ? { isPublished: newIsPublished }
+          : { isPublished: newIsPublished, isUnlisted: newIsUnlisted }),
       })
       if (response.ok) {
         setState(next)
@@ -112,6 +119,9 @@ export function PublishToggle({
   }
 
   const config = visibilityConfig[state]
+  const noun = type === 'frontpage' ? 'front page' : type
+  const Noun = type === 'skript' ? 'Skript' : type === 'page' ? 'Page' : 'Front page'
+  const states = type === 'frontpage' ? ORDER.filter(s => s !== 'unlisted') : ORDER
   const buttonSize = size === 'lg' ? 'default' : 'sm'
 
   return (
@@ -121,7 +131,7 @@ export function PublishToggle({
           variant="ghost"
           size={buttonSize}
           className={`gap-1.5 px-2 ${config.text}`}
-          title={`${type === 'skript' ? 'Skript' : 'Page'} visibility: ${config.label}`}
+          title={`${Noun} visibility: ${config.label}`}
         >
           <VisibilityDot state={state} />
           {showText && <span className="text-xs font-medium">{config.label}</span>}
@@ -129,10 +139,10 @@ export function PublishToggle({
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
         <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
-          {type === 'skript' ? 'Skript' : 'Page'} visibility
+          {Noun} visibility
         </div>
         <div role="radiogroup" className="p-1">
-          {ORDER.map((s) => {
+          {states.map((s) => {
             const c = visibilityConfig[s]
             const selected = s === state
             return (
@@ -154,7 +164,7 @@ export function PublishToggle({
                     <VisibilityDot state={s} />
                     {c.label}
                   </span>
-                  <span className="block text-xs text-muted-foreground">{c.description(type)}</span>
+                  <span className="block text-xs text-muted-foreground">{c.description(noun)}</span>
                 </span>
               </button>
             )
@@ -164,7 +174,7 @@ export function PublishToggle({
           <div className="space-y-2 border-t px-3 py-2.5">
             <PublicLinkRow
               publicUrl={publicUrl}
-              label={`Open ${type}`}
+              label={`Open ${noun}`}
               blockedReason={viewBlockedReason}
               onOpen={onOpenPublic}
             />

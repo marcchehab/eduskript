@@ -9,7 +9,7 @@ import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useUnsavedChangesGuard } from '@/components/dashboard/unsaved-changes-guard'
 import { PublishToggle, VisibilityDot, getVisibilityState, visibilityConfig } from '@/components/dashboard/publish-toggle'
-import { VersionHistory } from '@/components/dashboard/version-history'
+import { SaveWithHistory, PageFolderLabel, FULLSCREEN_ROOT_CLASS } from '@/components/dashboard/page-card-parts'
 import { EditModal } from '@/components/dashboard/edit-modal'
 import { ExportSkriptPanel } from '@/components/dashboard/export-skript-panel'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
@@ -17,9 +17,8 @@ import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManage
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
 import { AIEditChatModal } from '@/components/ai/ai-edit-chat-modal'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
-import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover'
 import { RibbonGroup, RibbonBigButton } from '@/components/dashboard/editor-ribbon'
-import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2, HardDriveDownload } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, Check, Shield, Globe, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, Presentation, Link2, GraduationCap, Wand2, HardDriveDownload, Pencil } from 'lucide-react'
 import { PageCog } from '@/components/icons/settings-icons'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
@@ -113,6 +112,11 @@ interface PageEditorProps {
   site: { id: string; slug: string; organizationId: string | null } | null
   /** Latest PageVersion number the initial content corresponds to (stale-save guard). */
   baseVersion: number
+  /** Front-page mode: edit the skript's front page in this editor (see
+   *  skripts/[skriptSlug]/frontpage/page.tsx). id null = not created yet. */
+  frontPage?: { id: string | null }
+  /** The skript's front page state, for its entry at the top of the Pages list. */
+  skriptFrontPage?: { isPublished: boolean } | null
 }
 
 // The whole-skript AI Edit chat (skript header) is hidden for now — the
@@ -121,7 +125,10 @@ const SHOW_SKRIPT_AI_EDIT = false
 
 const STALE_MESSAGE = 'This page was changed elsewhere since this editor loaded. Copy any unsaved text, then reload to get the latest version.'
 
-export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId, placed, site, baseVersion }: PageEditorProps) {
+export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId, placed, site, baseVersion, frontPage, skriptFrontPage }: PageEditorProps) {
+  const isFrontPage = !!frontPage
+  // Front page: created on first save, so the id can appear later.
+  const [frontPageId, setFrontPageId] = useState<string | null>(frontPage?.id ?? null)
   const [title, setTitle] = useState(page.title || '')
   const [slug, setSlug] = useState(page.slug || '')
   const [description, setDescription] = useState(page.description || '')
@@ -332,8 +339,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
 
   // Load version history
   const loadVersions = useCallback(async () => {
+    if (isFrontPage && !frontPageId) return
     try {
-      const response = await fetch(`/api/pages/${page.id}/versions`)
+      const response = await fetch(isFrontPage ? `/api/frontpage/${frontPageId}/versions` : `/api/pages/${page.id}/versions`)
       if (response.ok) {
         const data = await response.json()
         setVersions(data.versions || [])
@@ -342,7 +350,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     } catch {
       // Fetch aborted during navigation — expected, ignore
     }
-  }, [page.id])
+  }, [page.id, isFrontPage, frontPageId])
 
   // Fetch teacher's classes for exam unlock checkboxes
   useEffect(() => {
@@ -421,6 +429,36 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       alert.showError(STALE_MESSAGE)
       return false
     }
+    if (isFrontPage) {
+      setIsSaving(true)
+      try {
+        const response = await fetch(`/api/frontpage/skript/${skript.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: contentRef.current }),
+        })
+        const data = await response.json().catch(() => null)
+        if (!response.ok) {
+          alert.showError(data?.error || 'Failed to save front page')
+          setIsSaving(false)
+          return false
+        }
+        if (data?.frontPage?.id && !frontPageId) setFrontPageId(data.frontPage.id)
+        setLastSaved(new Date())
+        setHasUnsavedChanges(false)
+        setJustSaved(true)
+        if (justSavedTimer.current) clearTimeout(justSavedTimer.current)
+        justSavedTimer.current = setTimeout(() => setJustSaved(false), 1500)
+        loadVersions()
+      } catch (error) {
+        console.error('Error saving front page:', error)
+        alert.showError('Failed to save front page')
+        setIsSaving(false)
+        return false
+      }
+      setIsSaving(false)
+      return true
+    }
     if (!title.trim() || !slug.trim()) {
       alert.showError('Title and slug are required')
       return false
@@ -484,12 +522,14 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     }
     setIsSaving(false)
     return false
-  }, [title, slug, description, pageType, examSettings, presentationPublic, page.id, page.slug, skript.slug, router, loadVersions, alert, completeStep])
+  }, [title, slug, description, pageType, examSettings, presentationPublic, page.id, page.slug, skript.id, skript.slug, router, loadVersions, alert, completeStep, isFrontPage, frontPageId])
 
   // Handle version restoration
   const handleRestoreVersion = async (versionId: string, versionContent: string) => {
     try {
-      const response = await fetch(`/api/pages/${page.id}/versions/${versionId}/restore`, {
+      const response = await fetch(isFrontPage
+        ? `/api/frontpage/${frontPageId}/versions/${versionId}/restore`
+        : `/api/pages/${page.id}/versions/${versionId}/restore`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })
@@ -502,7 +542,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         // Reload versions to show the new restoration entry
         loadVersions()
         // The restore created a new version; base further saves on it.
-        const fresh = await fetch(`/api/pages/${page.id}`).then(r => (r.ok ? r.json() : null)).catch(() => null)
+        const fresh = isFrontPage ? null : await fetch(`/api/pages/${page.id}`).then(r => (r.ok ? r.json() : null)).catch(() => null)
         if (typeof fresh?.version === 'number') baseVersionRef.current = fresh.version
       } else {
         const data = await response.json()
@@ -544,6 +584,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // server and load the newer state (or mark the editor stale if the user
   // already typed). Without this, saving there overwrote newer content.
   useEffect(() => {
+    if (isFrontPage) return
     let cancelled = false
     fetch(`/api/pages/${page.id}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -567,7 +608,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [page.id, page.slug, skript.slug, router])
+  }, [page.id, page.slug, skript.slug, router, isFrontPage])
 
   // Auto-save every 30 seconds if there are unsaved changes
   useEffect(() => {
@@ -621,6 +662,33 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // highlighted) — passed to the shared shell as an extra "Pages" tab.
   const pagesTabContent = (
     <div className="p-3 max-w-3xl">
+      {/* The skript's front page, edited in this same editor. Same row
+          structure as the page rows below (grip-width spacer instead of the
+          drag handle, since the front page isn't reorderable). */}
+      <div className="h-0.5 mx-2" />
+      <div className={`flex items-center gap-1 rounded-md text-sm transition-colors ${isFrontPage ? 'bg-orange-500/10' : 'hover:bg-muted'}`}>
+        <span className="w-4 h-4 shrink-0 ml-1" aria-hidden />
+        <Link
+          href={`/dashboard/skripts/${skript.slug}/frontpage`}
+          className={`flex items-center gap-2 flex-1 min-w-0 px-1 py-1.5 ${
+            isFrontPage
+              ? 'text-orange-600 dark:text-orange-400 font-medium'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <BookA className="w-4 h-4 shrink-0" />
+          <span className="truncate">Skript front page</span>
+          {(() => {
+            const state = getVisibilityState(isFrontPage ? page.isPublished : !!skriptFrontPage?.isPublished, false)
+            const label = visibilityConfig[state].label
+            return (
+              <span className="shrink-0 px-0.5" title={label} aria-label={label}>
+                <VisibilityDot state={state} />
+              </span>
+            )
+          })()}
+        </Link>
+      </div>
       {pages.map((p, idx) => (
         <Fragment key={p.id}>
           <div className={`h-0.5 mx-2 rounded transition-colors ${dragOverIdx === idx ? 'bg-primary' : 'bg-transparent'}`} />
@@ -732,7 +800,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     <div>
       <div className="flex items-center gap-2 px-3 py-1.5">
         <Link href={siteBuilderHref} className="shrink-0">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" title="Back to site builder">
             <ArrowLeft className="w-4 h-4" />
           </Button>
         </Link>
@@ -758,13 +826,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 type="skript"
                 item={skript}
                 onItemUpdated={handleSkriptUpdated}
+                onDelete={isDeleting ? undefined : handleDeleteSkript}
               />
             </QuestSpotlight>
-            <Link href={`/dashboard/skripts/${skript.slug}/frontpage`}>
-              <Button variant="ghost" size="sm" title="Skript front page">
-                <BookA className="w-4 h-4" />
-              </Button>
-            </Link>
             {SHOW_SKRIPT_AI_EDIT && <Button
               variant="ghost"
               size="sm"
@@ -775,16 +839,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               <Wand2 className="w-4 h-4" />
               <span className="hidden sm:inline text-xs">AI Edit</span>
             </Button>}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDeleteSkript}
-              disabled={isDeleting}
-              title="Delete Skript"
-              className="text-red-600 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
           </div>
         )}
       </div>
@@ -835,6 +889,18 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // anchored here (opened from the Page settings tab).
   const titleRowActions = (
     <div className="flex shrink-0 items-center gap-1 md:gap-2">
+                  {isFrontPage ? (
+                    <PublishToggle
+                      type="frontpage"
+                      itemId={skript.id}
+                      endpoint={`/api/frontpage/skript/${skript.id}`}
+                      isPublished={page.isPublished}
+                      onToggle={() => router.refresh()}
+                      size="sm"
+                      publicUrl={sessionPageSlug ? buildSkriptUrl(skript.slug) : null}
+                      viewBlockedReason={skript.isPublished ? null : 'The skript is a draft, so its front page is not reachable yet. Publish the skript first.'}
+                    />
+                  ) : (
                   <QuestSpotlight step="view_via_eye_icon" label="Try this!">
                     <PublishToggle
                       type="page"
@@ -848,9 +914,10 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       onOpenPublic={() => completeStep('view_via_eye_icon')}
                     />
                   </QuestSpotlight>
+                  )}
                   {/* Page settings: same modal as the skript's settings. Saves
                       title/slug/description directly; the editor state follows. */}
-                  {canEdit && (
+                  {canEdit && !isFrontPage && (
                     <EditModal
                       type="page"
                       item={{ id: page.id, title, slug, description, pageType }}
@@ -866,51 +933,19 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       }}
                     />
                   )}
-                  <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-                    <PopoverAnchor asChild>
-                      <div className="flex items-center">
-                        <QuestSpotlight step="edit_page_content" label="Try this!">
-                          {/* Split button: left part saves (primary + dot while
-                              dirty, quiet "Saved" otherwise); the clock opens
-                              the version history popover. */}
-                          <div className="inline-flex items-stretch">
-                            <Button
-                              onClick={() => void handleSave()}
-                              disabled={isSaving}
-                              size="sm"
-                              variant={hasUnsavedChanges || isSaving ? 'default' : 'outline'}
-                              className={`relative rounded-r-none ${!hasUnsavedChanges && !isSaving ? (justSaved ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground') : ''}`}
-                              title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'All changes saved (Ctrl+S)'}
-                            >
-                              {!hasUnsavedChanges && !isSaving ? <Check className="w-4 h-4 mr-1.5" /> : <Save className="w-4 h-4 mr-1.5" />}
-                              {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Saved'}
-                              {hasUnsavedChanges && (
-                                <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
-                              )}
-                            </Button>
-                            <Button
-                              onClick={() => setHistoryOpen(o => !o)}
-                              size="sm"
-                              variant={hasUnsavedChanges || isSaving ? 'default' : 'outline'}
-                              className={`rounded-l-none border-l-0 px-1.5 ${hasUnsavedChanges || isSaving ? 'border-l border-l-primary-foreground/30' : 'text-muted-foreground'} ${historyOpen ? 'bg-muted' : ''}`}
-                              title={`Version history${versions.length ? ` (${versions.length})` : ''}`}
-                              aria-expanded={historyOpen}
-                            >
-                              <History className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </QuestSpotlight>
-                      </div>
-                    </PopoverAnchor>
-                    <PopoverContent align="end" onOpenAutoFocus={(e) => e.preventDefault()} className="w-[min(640px,90vw)] max-h-[70vh] overflow-y-auto border-blue-400/70 p-2 shadow-lg dark:border-blue-500/60">
-                      <VersionHistory
-                        pageId={page.id}
-                        versions={versions}
-                        currentContent={content}
-                        onRestoreVersion={handleRestoreVersion}
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <QuestSpotlight step="edit_page_content" label="Try this!">
+                    <SaveWithHistory
+                      onSave={() => void handleSave()}
+                      isSaving={isSaving}
+                      hasUnsavedChanges={hasUnsavedChanges}
+                      justSaved={justSaved}
+                      versions={versions}
+                      currentContent={content}
+                      onRestoreVersion={handleRestoreVersion}
+                      historyOpen={historyOpen}
+                      onHistoryOpenChange={setHistoryOpen}
+                    />
+                  </QuestSpotlight>
     </div>
   )
 
@@ -918,19 +953,12 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // of the blue skript card and the orange page card, so the two scopes read
   // apart at a glance without a label row above each card.
   const pageLabelContent = (
-    <>
-      <FilePenLine className="w-3.5 h-3.5" />
-      Page
-      {/* FolderTab is pointer-events-none; the button opts back in. */}
-      <button
-        type="button"
-        onClick={() => setIsFullscreen(!isFullscreen)}
-        title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen editor'}
-        className="pointer-events-auto ml-1 rounded p-0.5 hover:bg-orange-500/15"
-      >
-        {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-      </button>
-    </>
+    <PageFolderLabel
+      icon={isFrontPage ? <BookA className="w-3.5 h-3.5" /> : <FilePenLine className="w-3.5 h-3.5" />}
+      label={isFrontPage ? 'Skript front page' : 'Page'}
+      isFullscreen={isFullscreen}
+      onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+    />
   )
   const skriptLabelContent = (
     <>
@@ -947,7 +975,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           // can flex-1 into the remaining space and let its internal panes
           // (CodeMirror scroller + preview pane) handle their own scroll.
           // No `overflow-auto` here — that would push the toolbar offscreen.
-          ? 'fixed inset-0 z-50 bg-background px-3 pb-3 flex flex-col gap-2'
+          ? FULLSCREEN_ROOT_CLASS
           // Fills the dashboard's scroll area so the page card (and its
           // editor) take all remaining height — no page scroll, no resize bar.
           : 'flex h-full flex-col gap-4'
@@ -963,7 +991,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         onChange={handleShellContentChange}
         onSave={handleSave}
         skriptId={skript.id}
-        pageId={page.id}
+        pageId={isFrontPage ? frontPageId ?? undefined : page.id}
         domain={(session?.user as { pageSlug?: string })?.pageSlug || undefined}
         headerContent={skriptHeaderContent}
         headerLabel={skriptLabelContent}
@@ -972,14 +1000,25 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         manageLabel="Manage:"
         extraTabs={extraTabs}
         tabStorageKey="eduskript:page-editor-tab"
-        aiEdit={{
-          target: { mode: 'page', skriptId: skript.id, pageId: page.id },
-          targetTitle: page.title,
-          targetSubtitle: skript.title,
-        }}
+        aiEdit={isFrontPage
+          ? (frontPageId ? { target: { mode: 'frontpage', frontPageId }, targetTitle: skript.title } : undefined)
+          : {
+              target: { mode: 'page', skriptId: skript.id, pageId: page.id },
+              targetTitle: page.title,
+              targetSubtitle: skript.title,
+            }}
         onAIInlineAccepted={() => completeStep('use_ai_edit')}
         onAIEditApplied={async (newContent) => {
           completeStep('use_ai_edit')
+          // Front-page AI flow doesn't save server-side: drop the content in
+          // as unsaved (same as FrontPageEditor).
+          if (isFrontPage) {
+            if (newContent !== undefined) {
+              setContent(newContent)
+              setHasUnsavedChanges(true)
+            }
+            return
+          }
           if (newContent !== undefined) {
             setContent(newContent)
             setHasUnsavedChanges(false)
@@ -991,7 +1030,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         isAdmin={session?.user?.isAdmin}
         fullscreen={isFullscreen}
         pageLabel={pageLabelContent}
-        layoutRibbonExtra={pageType !== 'exam' && (
+        layoutRibbonExtra={pageType !== 'exam' && !isFrontPage && (
           <RibbonGroup caption="Slides">
             <RibbonBigButton
               icon={<Presentation />}
@@ -1022,16 +1061,28 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             )}
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <Input
-                  type="text"
-                  value={title}
-                  onChange={(e) => {
-                    setTitle(e.target.value)
-                    setHasUnsavedChanges(true)
-                  }}
-                  placeholder="Page title"
-                  className="flex-1 min-w-[140px] h-9 text-lg md:text-xl font-semibold border-transparent hover:border-border focus:border-border"
-                />
+                {/* Faint pencil before the title: signals it's editable in place
+                    without looking like a separate button. */}
+                {isFrontPage ? (
+                  <h2 className="min-w-0 flex-1 truncate px-3 text-lg md:text-xl font-semibold">
+                    {skript.title} <span className="font-normal text-muted-foreground">· front page</span>
+                  </h2>
+                ) : (
+                <label className="group flex min-w-0 flex-1 items-center gap-1 cursor-text">
+                  <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground" />
+                  <Input
+                    type="text"
+                    value={title}
+                    onChange={(e) => {
+                      setTitle(e.target.value)
+                      setHasUnsavedChanges(true)
+                    }}
+                    placeholder="Page title"
+                    title="Click to edit the page title"
+                    className="field-sizing-content min-w-[8ch] max-w-full h-9 text-lg md:text-xl font-semibold border-transparent hover:border-border focus:border-border"
+                  />
+                </label>
+                )}
                 {titleRowActions}
               </div>
 

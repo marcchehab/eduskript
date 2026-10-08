@@ -60,9 +60,25 @@ interface UserSite {
   order: number
 }
 
-// Section header component
-function SectionHeader({ title, isCollapsed }: { title: string; isCollapsed: boolean }) {
-  if (isCollapsed) return null
+/** Two-letter monogram: first letters of the first two words, else the first two characters. */
+function initials(name: string) {
+  const words = name.trim().split(/[\s._-]+/).filter(Boolean)
+  return (words.length > 1 ? words[0][0] + words[1][0] : name.trim().slice(0, 2)).toUpperCase()
+}
+
+// Section header. Collapsed: site/org sections show a divider + monogram so
+// several sites' identical icons can be told apart; other sections show nothing.
+function SectionHeader({ title, isCollapsed, monogram = false }: { title: string; isCollapsed: boolean; monogram?: boolean }) {
+  if (isCollapsed) {
+    if (!monogram) return null
+    return (
+      <div className="mb-1 flex justify-center border-t border-border pt-2" title={title}>
+        <div className="flex h-5 w-8 items-center justify-center rounded border border-border text-[10px] font-semibold leading-none text-muted-foreground">
+          {initials(title)}
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
       {title}
@@ -297,7 +313,7 @@ export function DashboardSidebar() {
               {sites.length > 0 ? (
                 sites.map((site) => (
                   <div key={site.id} className="mb-2">
-                    <SectionHeader title={site.pageName || site.slug} isCollapsed={isCollapsed} />
+                    <SectionHeader title={site.pageName || site.slug} isCollapsed={isCollapsed} monogram />
                     {siteNavItems.map((item) => {
                       const Icon = item.icon
                       const href = `/dashboard/site/${site.id}${item.suffix}`
@@ -351,7 +367,7 @@ export function DashboardSidebar() {
           {/* Organization Sections (for org admins/owners) */}
           {adminOrgs.map((org) => (
             <div key={org.id} className="mt-6">
-              <SectionHeader title={org.name} isCollapsed={isCollapsed} />
+              <SectionHeader title={org.name} isCollapsed={isCollapsed} monogram />
               {orgNavigationItems.map((item) => {
                 const Icon = item.icon
                 const href = `/dashboard/org/${org.id}${item.suffix}`

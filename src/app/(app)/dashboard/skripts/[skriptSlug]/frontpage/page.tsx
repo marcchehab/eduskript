@@ -1,11 +1,9 @@
 import { getServerSession } from 'next-auth'
 import { notFound, redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import { checkSkriptPermissions } from '@/lib/permissions'
-import { FrontPageEditor } from '@/components/dashboard/frontpage-editor'
+import { PageEditor } from '@/components/dashboard/page-editor'
 import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
+import { loadSkriptForEditor, toEditorSkript } from '@/lib/skript-editor-data'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -16,6 +14,12 @@ interface SkriptFrontPageProps {
   }>
 }
 
+/**
+ * Skript front page, edited in the same PageEditor as the skript's pages
+ * (front-page mode: no title/slug/settings, Draft/Published only, saves and
+ * versions go to the FrontPage API). Site/org front pages still use
+ * FrontPageEditor.
+ */
 export default async function SkriptFrontPageEditPage({ params }: SkriptFrontPageProps) {
   const session = await getServerSession(authOptions)
   const { skriptSlug } = await params
@@ -29,55 +33,37 @@ export default async function SkriptFrontPageEditPage({ params }: SkriptFrontPag
     return <UpgradePrompt feature="frontpage" />
   }
 
-  const skript = await prisma.skript.findFirst({
-    where: {
-      slug: skriptSlug,
-      authors: {
-        some: {
-          userId: session.user.id
-        }
-      }
-    },
-    include: {
-      authors: {
-        include: {
-          user: true
-        }
-      },
-      frontPage: true
-    }
-  })
-
-  if (!skript) {
+  const data = await loadSkriptForEditor(skriptSlug, session.user.id, !!session.user.isAdmin)
+  if (!data) {
     notFound()
   }
-
-  const permissions = checkSkriptPermissions(session.user.id, skript.authors)
+  const { skript, permissions, placed, site } = data
 
   if (!permissions.canEdit) {
     redirect(`/dashboard/skripts/${skriptSlug}`)
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } }
-  })
-
-  const previewUrl = user?.sites[0]?.slug
-    ? `/${user.sites[0].slug}/${skriptSlug}`
-    : undefined
-
+  const fp = skript.frontPage
   return (
-    <FrontPageEditor
-      type="skript"
-      frontPage={skript.frontPage}
-      skript={{
-        id: skript.id,
-        slug: skript.slug,
-        title: skript.title,
+    <PageEditor
+      skript={toEditorSkript(skript)}
+      page={{
+        id: fp?.id ?? `frontpage:${skript.id}`,
+        title: 'Skript front page',
+        slug: '',
+        content: fp?.content ?? '',
+        isPublished: fp?.isPublished ?? false,
+        isUnlisted: false,
+        pageType: 'normal',
       }}
-      backUrl={`/dashboard/skripts/${skriptSlug}`}
-      previewUrl={previewUrl}
+      frontPage={{ id: fp?.id ?? null }}
+      skriptFrontPage={fp ? { isPublished: fp.isPublished } : null}
+      canEdit={permissions.canEdit}
+      placed={placed}
+      site={site}
+      baseVersion={0}
+      userPermissions={permissions}
+      currentUserId={session.user.id}
     />
   )
 }

@@ -6,7 +6,7 @@ import { History, RotateCcw, Eye, GitBranch } from 'lucide-react'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 
-interface PageVersion {
+export interface PageVersion {
   id: string
   content: string
   version: number
@@ -46,7 +46,6 @@ function lineChangeStats(before: string, after: string): { added: number; remove
 }
 
 interface VersionHistoryProps {
-  pageId: string
   versions: PageVersion[]
   currentContent: string
   onRestoreVersion: (versionId: string, content: string) => void

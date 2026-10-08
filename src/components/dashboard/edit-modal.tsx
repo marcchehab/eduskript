@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Save, GraduationCap, FileText } from 'lucide-react'
+import { Save, GraduationCap, FileText, Trash2 } from 'lucide-react'
 import { PageCog, SkriptCog } from '@/components/icons/settings-icons'
 
 interface EditModalProps {
@@ -31,13 +31,16 @@ interface EditModalProps {
   onItemUpdated: (newSlug?: string) => void
   /** Called with the saved values before onItemUpdated (page editor syncs its state). */
   onSaved?: (values: { title: string; slug: string; description: string | null; pageType?: string }) => void
-  /** Rendered at the end of the form (page editor: public link). */
+  /** Rendered at the end of the form. */
   extraContent?: React.ReactNode
+  /** Shows a red "Delete …" button at the bottom left; the modal closes first
+   *  and the caller confirms + deletes. */
+  onDelete?: () => void
   triggerClassName?: string
   buttonText?: string
 }
 
-export function EditModal({ type, item, onItemUpdated, onSaved, extraContent, triggerClassName, buttonText }: EditModalProps) {
+export function EditModal({ type, item, onItemUpdated, onSaved, extraContent, onDelete, triggerClassName, buttonText }: EditModalProps) {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
@@ -198,7 +201,18 @@ export function EditModal({ type, item, onItemUpdated, onSaved, extraContent, tr
               <div className="text-destructive text-sm">{error}</div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="sm:items-center">
+            {onDelete && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => { setOpen(false); onDelete() }}
+                className="mr-auto text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete {type}
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
