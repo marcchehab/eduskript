@@ -1,9 +1,11 @@
 /**
  * User Data Manifest API
  *
- * GET /api/user-data/manifest
- * Returns a list of all user data items with their versions and timestamps.
- * Used by the client to determine what needs to be synced.
+ * GET /api/user-data/manifest?siteId=…
+ * Returns the caller's personal user data items ON ONE SITE with their
+ * versions and timestamps. Used by the client to determine what needs to be
+ * synced. siteId is required: data is site-scoped (src/lib/site-access.ts),
+ * there is no account-wide manifest anymore.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,7 +13,6 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getItemIdsForSite } from '@/lib/site-pages'
 
 export interface ManifestItem {
   adapter: string
@@ -45,19 +46,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Scope to the requesting site when known — each custom domain / org route
-    // is its own browser origin with its own empty IndexedDB, so an unscoped
-    // manifest pulls in every UserData row across every site the teacher owns
-    // (thousands for an active user) even though this origin only ever needs
-    // the current site's. siteId is optional: dashboard/account-wide callers
-    // omit it and get the full account manifest, as before.
+    // Rows carry their site, so the filter is a plain column match. Personal
+    // rows only — targeted rows (broadcasts/public layer) are loaded per item
+    // by the client, where authorization is checked.
     const siteId = request.nextUrl.searchParams.get('siteId')
-    const itemIdFilter = siteId ? await getItemIdsForSite(siteId) : null
+    if (!siteId) {
+      return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
+    }
 
     const items = await prisma.userData.findMany({
       where: {
         userId,
-        ...(itemIdFilter ? { itemId: { in: itemIdFilter } } : {}),
+        siteId,
+        targetType: null,
+        targetId: null,
       },
       select: {
         adapter: true,

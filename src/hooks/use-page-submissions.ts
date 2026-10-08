@@ -18,12 +18,15 @@ export type { PageSubmissionRow }
 
 interface UsePageSubmissionsArgs {
   pageId: string
+  /** Site whose answers to list (site scoping). Required by the API. */
+  siteId: string | null
   /** Set false to pause polling (e.g., toolbar collapsed off-screen). */
   enabled?: boolean
 }
 
 interface UsePageSubmissionsResult {
-  /** False until the first response lands; after that, true only for page authors. */
+  /** False until the first response lands; after that, true only for managers
+   *  of the site (personal owner / org owner+admin). Name kept for history. */
   isAuthor: boolean
   /** True before the first response. Use to gate the initial "is the viewer an author?" render. */
   isResolving: boolean
@@ -44,6 +47,7 @@ const SURVEY_SESSION_KEY = (pageId: string) => `survey:${pageId}:sessionId`
 
 export function usePageSubmissions({
   pageId,
+  siteId,
   enabled = true,
 }: UsePageSubmissionsArgs): UsePageSubmissionsResult {
   const [isAuthor, setIsAuthor] = useState(false)
@@ -55,7 +59,7 @@ export function usePageSubmissions({
   const refresh = useCallback(() => setRefetchToken(n => n + 1), [])
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !siteId) {
       setSubmissions([])
       setIsAuthor(false)
       setYourAnonymousUserId(null)
@@ -75,9 +79,9 @@ export function usePageSubmissions({
       sessionId = window.localStorage.getItem(SURVEY_SESSION_KEY(pageId))
     } catch { /* localStorage unavailable */ }
 
-    const url = sessionId
-      ? `/api/pages/${pageId}/submissions?sessionId=${encodeURIComponent(sessionId)}`
-      : `/api/pages/${pageId}/submissions`
+    const qs = new URLSearchParams({ siteId })
+    if (sessionId) qs.set('sessionId', sessionId)
+    const url = `/api/pages/${pageId}/submissions?${qs.toString()}`
 
     const load = async () => {
       try {
@@ -109,7 +113,7 @@ export function usePageSubmissions({
       cancelled = true
       if (interval) clearInterval(interval)
     }
-  }, [pageId, enabled, refetchToken])
+  }, [pageId, siteId, enabled, refetchToken])
 
   return { isAuthor, isResolving, submissions, yourAnonymousUserId, refresh }
 }

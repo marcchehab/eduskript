@@ -1,7 +1,10 @@
 /**
  * Public layers fetch
  *
- * GET /api/user-data/public/[pageId]
+ * GET /api/user-data/public/[pageId]?siteId=…
+ *
+ * Site scoping: the public layer is per (page, site); without siteId the
+ * response is empty.
  *
  * Returns every public (page-broadcast) layer for a page — annotations, snaps,
  * sticky notes — in one round-trip. Mirrors getPublicLayers() in
@@ -28,11 +31,12 @@ interface RouteParams {
   params: Promise<{ pageId: string }>
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { pageId } = await params
     const decodedPageId = decodeURIComponent(pageId)
-    const layers = await getPublicLayers(decodedPageId)
+    const siteId = new URL(request.url).searchParams.get('siteId')
+    const layers = await getPublicLayers(decodedPageId, siteId)
     return NextResponse.json(layers)
   } catch (error) {
     console.error('[user-data/public] Error:', error)

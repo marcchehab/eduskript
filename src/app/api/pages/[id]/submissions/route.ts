@@ -1,7 +1,7 @@
 /**
  * Page submissions API — one row per user who has any userData on the page.
  *
- * GET /api/pages/[id]/submissions
+ * GET /api/pages/[id]/submissions?siteId=…
  *
  * Returns the list of distinct users (including anonymous survey shell users)
  * that have at least one userData row scoped to this page, with an aggregate
@@ -12,18 +12,18 @@
  * telemetry, and the survey-meta bookkeeping record. Users that only have
  * those rows still appear (count = 0) so a teacher can wipe their state too.
  *
- * Auth: page authors only (resolved via checkPagePermissions, inherits from
- * skript/collection). Anyone else → 403.
+ * Auth (site scoping, src/lib/site-access.ts): managers of `siteId` only —
+ * personal-site owner or org owner/admin. Rows are filtered to that site.
+ * Page authorship grants nothing; there is no superadmin bypass.
  *
  * The id may also be a FrontPage id — site/org landing pages mount the same
- * toolbar and scope their userData to it. Those are authorized on site
- * ownership (site.userId, or owner/admin of the site's organization).
+ * toolbar and scope their userData to it.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { checkPagePermissions } from '@/lib/permissions'
+import { getSiteAccess } from '@/lib/site-access'
 import { generatePseudonym } from '@/lib/privacy/pseudonym'
 
 // UUID v4 shape — the survey provider mints sessionIds as UUIDs (see
@@ -49,7 +49,7 @@ export interface PageSubmissionRow {
 }
 
 export interface PageSubmissionsResponse {
-  /** True when the caller is a page author. The toolbar self-gates on this. */
+  /** True when the caller manages the site (name kept for history). */
   isAuthor: boolean
   /** Empty for non-authors (auth gate doubles as data gate). */
   submissions: PageSubmissionRow[]
@@ -84,71 +84,39 @@ export async function GET(
       return NextResponse.json(empty)
     }
 
+    // Site scoping (src/lib/site-access.ts): answers belong to the SITE they
+    // were given on. Only the site's managers (personal owner / org
+    // owner+admin) see them — no superadmin bypass, authorship grants nothing.
+    const siteId = req.nextUrl.searchParams.get('siteId')
+    const access = await getSiteAccess(session.user.id, siteId)
+    if (!siteId || !access?.canManage) {
+      return NextResponse.json(empty)
+    }
+
     const page = await prisma.page.findUnique({
       where: { id: pageId },
-      include: {
-        authors: { include: { user: { select: { id: true } } } },
-        skript: {
-          include: {
-            authors: { include: { user: { select: { id: true } } } },
-          },
-        },
+      select: {
+        pageType: true,
+        authors: { select: { userId: true } },
+        skript: { select: { authors: { select: { userId: true } } } },
       },
     })
 
-    // Authors of the item, used both as the auth gate and to exclude
-    // teachers from the respondent roster below.
-    let authorIds: Set<string>
-
-    if (page) {
-      const perms = checkPagePermissions(
-        session.user.id,
-        page.authors,
-        page.skript.authors,
-        session.user.isAdmin
-      )
-
-      if (!perms.canEdit) {
-        return NextResponse.json(empty)
-      }
-
-      authorIds = new Set<string>([
-        ...page.authors.map(a => a.user.id),
-        ...page.skript.authors.map(a => a.user.id),
-      ])
-    } else {
-      // FrontPage ids reach this route too: the site/org landing pages mount
-      // the same teacher toolbar with `frontPage.id` as the pageId (see
-      // app/[domain]/page.tsx and app/org/[orgSlug]/page.tsx), and userData
-      // written by components on a frontpage is scoped to that id. There is
-      // no Page row, so authorship is site ownership: the site's owner user,
-      // or an owner/admin of the org that owns the site.
-      const frontPage = await prisma.frontPage.findUnique({
-        where: { id: pageId },
-        select: { site: { select: { userId: true, organizationId: true } } },
-      })
-
-      if (!frontPage?.site) {
-        return NextResponse.json(empty)
-      }
-
-      const { userId: siteUserId, organizationId } = frontPage.site
-      const orgAdmins = organizationId
-        ? await prisma.organizationMember.findMany({
-            where: { organizationId, role: { in: ['owner', 'admin'] } },
-            select: { userId: true },
-          })
-        : []
-
-      authorIds = new Set<string>([
-        ...(siteUserId ? [siteUserId] : []),
-        ...orgAdmins.map(m => m.userId),
-      ])
-
-      if (!authorIds.has(session.user.id) && !session.user.isAdmin) {
-        return NextResponse.json(empty)
-      }
-    }
+    // Managers and content authors are not respondents: a co-author or the
+    // owner who once previewed the page must not show up as a "student".
+    const managers = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: {
+        userId: true,
+        organization: { select: { members: { where: { role: { in: ['owner', 'admin'] } }, select: { userId: true } } } },
+      },
+    })
+    const authorIds = new Set<string>([
+      ...(managers?.userId ? [managers.userId] : []),
+      ...(managers?.organization?.members.map(m => m.userId) ?? []),
+      ...(page?.authors.map(a => a.userId) ?? []),
+      ...(page?.skript.authors.map(a => a.userId) ?? []),
+    ])
 
     // Optional sessionId lookup: caller passes their browser's
     // localStorage `survey:${pageId}:sessionId` so we can tell them which
@@ -178,7 +146,7 @@ export async function GET(
     // we group in JS rather than via groupBy to keep one round-trip and have
     // adapter strings available for the answer-vs-markup classification.
     const rows = await prisma.userData.findMany({
-      where: { itemId: pageId },
+      where: { itemId: pageId, siteId },
       select: {
         userId: true,
         adapter: true,
@@ -211,7 +179,7 @@ export async function GET(
         },
       }),
       prisma.examSubmission.findMany({
-        where: { pageId, studentId: { in: userIds } },
+        where: { pageId, siteId, studentId: { in: userIds } },
         select: { studentId: true, submittedAt: true },
       }),
     ])

@@ -1,8 +1,9 @@
 /**
  * User Data Item API
  *
- * GET /api/user-data/[adapter]/[itemId]
- * Fetch a single user data item.
+ * GET /api/user-data/[adapter]/[itemId]?siteId=…[&targetType=&targetId=]
+ * Fetch a single user data item ON ONE SITE (site scoping,
+ * src/lib/site-access.ts). siteId is required; without it nothing is returned.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,16 +27,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(request.url)
     const targetType = searchParams.get('targetType') as 'class' | 'student' | 'page' | null
     const targetId = searchParams.get('targetId')
+    const siteId = searchParams.get('siteId')
+    if (!siteId) {
+      return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
+    }
 
-    // Public page annotations can be read by anyone (no auth required)
+    // Public page annotations can be read by anyone (no auth required). The
+    // caller's own row wins (a site manager editing their public layer must
+    // continue from THEIR row, not a co-manager's); else the site's first row.
     if (targetType === 'page') {
-      const item = await prisma.userData.findFirst({
-        where: {
-          adapter,
-          itemId: decodedItemId,
-          targetType: 'page',
-        },
-      })
+      const session = await getServerSession(authOptions)
+      const where = { adapter, itemId: decodedItemId, targetType: 'page', siteId }
+      const item =
+        (session?.user?.id
+          ? await prisma.userData.findFirst({ where: { ...where, userId: session.user.id } })
+          : null) ??
+        await prisma.userData.findFirst({ where, orderBy: { createdAt: 'asc' } })
 
       if (!item) {
         return NextResponse.json({
@@ -68,6 +75,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const item = await prisma.userData.findFirst({
       where: {
         userId,
+        siteId,
         adapter,
         itemId: decodedItemId,
         targetType: targetType || null,
@@ -113,11 +121,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const userId = session.user.id
     const { adapter, itemId } = await params
     const decodedItemId = decodeURIComponent(itemId)
+    const siteId = new URL(request.url).searchParams.get('siteId')
+    if (!siteId) {
+      return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
+    }
 
-    // Delete the item if it exists
+    // Delete the caller's item on that site if it exists
     await prisma.userData.deleteMany({
       where: {
         userId,
+        siteId,
         adapter,
         itemId: decodedItemId,
       },

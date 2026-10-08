@@ -55,6 +55,7 @@ import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useLayerVisibility } from '@/contexts/layer-visibility-context'
 import { useSession } from 'next-auth/react'
+import { useCurrentSite } from '@/contexts/current-site-context'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -202,6 +203,8 @@ interface StickyNotesLayerProps {
 
 export function StickyNotesLayer({ pageId, children, isExamStudent, publicStickyNotes }: StickyNotesLayerProps) {
   const { data: session } = useSession()
+  // Public layer is per (page, site) — src/lib/site-access.ts.
+  const { siteId: currentSiteId } = useCurrentSite()
   const { viewMode, isTeacher, selectedClass, selectedStudent } = useTeacherClass()
   const isStudent = session?.user?.accountType === 'student' || isExamStudent
   const { isLayerVisible } = useLayerVisibility()
@@ -267,7 +270,7 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
         // hitting /api/user-data/sticky-notes/<id> — same data, and that
         // endpoint is cached server-side (getPublicLayers), so this costs no
         // DB query. It already returns the notes flattened out of the wrapper.
-        const res = await fetch(`/api/user-data/public/${encodeURIComponent(pageId)}`)
+        const res = await fetch(`/api/user-data/public/${encodeURIComponent(pageId)}?siteId=${encodeURIComponent(currentSiteId ?? '')}`)
         if (!res.ok || cancelled) return
         const json = await res.json() as { publicStickyNotes?: StickyNote[] }
         if (cancelled) return
@@ -298,7 +301,7 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
       document.removeEventListener('visibilitychange', refreshThrottled)
       window.removeEventListener('focus', refreshThrottled)
     }
-  }, [isTeacher, pageId])
+  }, [isTeacher, pageId, currentSiteId])
 
   // For teachers: load page-broadcast sticky notes as a read-only reference layer
   // when NOT actively editing page-broadcast (mirrors pageBroadcastData in annotation-layer).

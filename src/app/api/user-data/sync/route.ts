@@ -6,21 +6,35 @@
  *
  * For snaps: automatically uploads base64 images to S3 and replaces with URLs
  * For teacher broadcasts: saves with targetType/targetId and publishes SSE events
+ *
+ * Site scoping (src/lib/site-access.ts): every item names the site it belongs
+ * to. An item is accepted only when its page/front page/skript is PLACED on
+ * that site; otherwise it is returned in `rejected` (the client keeps it
+ * unsynced, nothing is lost). Writes are keyed (user, site, adapter, item,
+ * target). Targeted writes:
+ *   - targetType 'page' (public layer): caller must MANAGE the site
+ *     (personal owner / org owner+admin). No superadmin bypass, no
+ *     authorship grant.
+ *   - targetType 'class' | 'student': caller must OWN the (personal) site and
+ *     the class / have the student in a class. Org sites have no classes.
+ * SEB exam-session writes must target the session's site.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidateTag } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { getSiteAccess, isItemPlacedOnSite, type SiteAccess } from '@/lib/site-access'
+import { revalidateItemOnSite } from '@/lib/site-revalidate'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { uploadSnapImage, deleteSnapImage, isS3Configured } from '@/lib/s3'
 import { eventBus } from '@/lib/events'
 
 interface SyncItem {
+  siteId: string
   adapter: string
   itemId: string
   data: string
@@ -35,10 +49,12 @@ interface TeacherBroadcast {
   targetType: 'class' | 'student'
   targetId: string
   pageId: string
+  siteId: string
   adapter: string
 }
 
 interface ConflictItem {
+  siteId: string
   adapter: string
   itemId: string
   serverData: unknown
@@ -72,50 +88,32 @@ interface UploadedSnap {
 
 interface QuizSubmission {
   pageId: string
+  siteId: string
   questionId: string
 }
 
-/**
- * Check if user has author permission on a page (directly or via skript/collection)
- */
-async function canCreatePageAnnotations(userId: string, pageId: string, isAdmin?: boolean): Promise<boolean> {
-  // Site admins can always create page annotations
-  if (isAdmin) return true
-
-  // Check PageAuthor
-  const pageAuthor = await prisma.pageAuthor.findFirst({
-    where: { pageId, userId, permission: 'author' }
-  })
-  if (pageAuthor) return true
-
-  // Get the page with its skript
-  const page = await prisma.page.findUnique({
-    where: { id: pageId },
-    select: { skriptId: true }
-  })
-
-  if (!page?.skriptId) return false
-
-  // Page-author rights come from SkriptAuthor only — collection ownership
-  // no longer inherits to skripts.
-  const skriptAuthor = await prisma.skriptAuthor.findFirst({
-    where: { skriptId: page.skriptId, userId, permission: 'author' }
-  })
-  return !!skriptAuthor
+interface RejectedItem {
+  siteId: string
+  adapter: string
+  itemId: string
+  targetType?: string | null
+  targetId?: string | null
+  reason: string
 }
 
 export async function POST(request: NextRequest) {
   try {
     let userId: string | null = null
     let isTeacher = false
-    let isAdmin = false
+    // SEB exam session: writes are pinned to the session's site ('' = legacy
+    // session from before site scoping → any placed site is accepted).
+    let examSessionSiteId: string | null = null
 
     // Try NextAuth session first
     const session = await getServerSession(authOptions)
     if (session?.user?.id) {
       userId = session.user.id
       isTeacher = session.user.accountType === 'teacher'
-      isAdmin = !!session.user.isAdmin
 
       // Free teachers stay IndexedDB-only — no cloud sync, no S3 snaps,
       // no broadcasts. Students inherit their teacher's plan via class
@@ -138,13 +136,13 @@ export async function POST(request: NextRequest) {
             // key `id`. Looking up by `id` always missed → SEB students 401'd
             // and live sync silently failed. Matches validateExamSession().
             where: { sessionId: examSessionCookie },
-            select: { userId: true, expiresAt: true }
+            select: { userId: true, expiresAt: true, siteId: true }
           })
           if (examSession && new Date(examSession.expiresAt) > new Date()) {
             userId = examSession.userId
             // Exam sessions are for students - they can save personal data but not broadcast
             isTeacher = false
-            isAdmin = false
+            examSessionSiteId = examSession.siteId
           }
         } catch (error) {
           console.error('[sync] Failed to validate exam session:', error)
@@ -157,10 +155,60 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const items: SyncItem[] = body.items
+    const rawItems: SyncItem[] = body.items
 
-    if (!Array.isArray(items)) {
+    if (!Array.isArray(rawItems)) {
       return NextResponse.json({ error: 'Invalid request: items must be an array' }, { status: 400 })
+    }
+
+    // ---- Site scoping: validate every item's site before anything else ----
+    // Per-request memo: a batch usually carries many adapters of one page.
+    const rejected: RejectedItem[] = []
+    const placementMemo = new Map<string, Promise<boolean>>()
+    const accessMemo = new Map<string, Promise<SiteAccess | null>>()
+    const placed = (itemId: string, siteId: string) => {
+      const k = `${siteId}\u0000${itemId}`
+      if (!placementMemo.has(k)) placementMemo.set(k, isItemPlacedOnSite(itemId, siteId))
+      return placementMemo.get(k)!
+    }
+    const access = (siteId: string) => {
+      if (!accessMemo.has(siteId)) accessMemo.set(siteId, getSiteAccess(userId, siteId))
+      return accessMemo.get(siteId)!
+    }
+    const reject = (item: SyncItem, reason: string) => rejected.push({
+      siteId: item.siteId, adapter: item.adapter, itemId: item.itemId,
+      targetType: item.targetType ?? null, targetId: item.targetId ?? null, reason,
+    })
+
+    const items: SyncItem[] = []
+    for (const item of rawItems) {
+      if (!item || typeof item.siteId !== 'string' || !item.siteId) {
+        reject(item, 'missing siteId')
+        continue
+      }
+      if (examSessionSiteId && item.siteId !== examSessionSiteId) {
+        reject(item, 'exam session is bound to another site')
+        continue
+      }
+      if (!(await placed(item.itemId, item.siteId))) {
+        reject(item, 'item is not placed on this site')
+        continue
+      }
+      if (item.targetType === 'page') {
+        // Public layer: site managers only. No admin bypass, authorship grants nothing.
+        if (!(await access(item.siteId))?.canManage) {
+          reject(item, 'only the site owner / org admins can write the public layer')
+          continue
+        }
+      } else if (item.targetType && item.targetId) {
+        // Class / student broadcasts: only on the viewer's own personal site
+        // (org sites have no classes). Class/student ownership is checked below.
+        if (!isTeacher || !(await access(item.siteId))?.isOwner) {
+          reject(item, 'class broadcasts are only allowed on your own site')
+          continue
+        }
+      }
+      items.push(item)
     }
 
     const conflicts: ConflictItem[] = []
@@ -171,30 +219,7 @@ export async function POST(request: NextRequest) {
     const teacherBroadcasts: TeacherBroadcast[] = []
 
     // For targeted items, validate authorization upfront
-    const targetedItems = items.filter(item => item.targetType && item.targetId)
-    const pageTargetedItems = items.filter(item => item.targetType === 'page')
     const classStudentTargetedItems = items.filter(item => item.targetType && item.targetType !== 'page' && item.targetId)
-
-    // Class/student targeting requires teacher role
-    if (classStudentTargetedItems.length > 0 && !isTeacher) {
-      return NextResponse.json(
-        { error: 'Only teachers can save class/student targeted data' },
-        { status: 403 }
-      )
-    }
-
-    // Page targeting requires author permission on the page
-    if (pageTargetedItems.length > 0) {
-      for (const item of pageTargetedItems) {
-        const canCreate = await canCreatePageAnnotations(userId, item.itemId, isAdmin)
-        if (!canCreate) {
-          return NextResponse.json(
-            { error: 'You do not have author permission on this page' },
-            { status: 403 }
-          )
-        }
-      }
-    }
 
     // Validate teacher owns the classes/students for all class/student targeted items
     if (classStudentTargetedItems.length > 0) {
@@ -270,6 +295,7 @@ export async function POST(request: NextRequest) {
         const existing = await prisma.userData.findFirst({
           where: {
             userId,
+            siteId: item.siteId,
             adapter: item.adapter,
             itemId: item.itemId,
             targetType: targetType,
@@ -281,6 +307,7 @@ export async function POST(request: NextRequest) {
           // Server has newer version - conflict
           // Include targeting info so client can resolve conflict correctly
           conflicts.push({
+            siteId: item.siteId,
             adapter: item.adapter,
             itemId: item.itemId,
             serverData: existing.data,
@@ -360,6 +387,7 @@ export async function POST(request: NextRequest) {
           await prisma.userData.create({
             data: {
               userId,
+              siteId: item.siteId,
               adapter: item.adapter,
               itemId: item.itemId,
               data: parsedData as object,
@@ -370,14 +398,16 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        synced.push(`${item.adapter}:${item.itemId}`)
+        synced.push(`${item.siteId}:${item.adapter}:${item.itemId}`)
 
-        // Track teacher broadcasts for SSE notification
-        if (targetType && targetId) {
+        // Track teacher broadcasts for SSE notification (page-targeted public
+        // layer rows are handled by ISR invalidation below, not SSE)
+        if (targetType && targetType !== 'page' && targetId) {
           teacherBroadcasts.push({
             targetType: targetType as 'class' | 'student',
             targetId,
             pageId: item.itemId,
+            siteId: item.siteId,
             adapter: item.adapter,
           })
         }
@@ -389,6 +419,7 @@ export async function POST(request: NextRequest) {
           if (quizData.isSubmitted) {
             quizSubmissions.push({
               pageId: item.itemId,
+              siteId: item.siteId,
               questionId: item.adapter
             })
           }
@@ -424,6 +455,7 @@ export async function POST(request: NextRequest) {
               type: 'quiz-submission',
               classId: membership.classId,
               pageId: submission.pageId,
+              siteId: submission.siteId,
               questionId: submission.questionId,
               studentPseudonym,
               timestamp: Date.now()
@@ -452,16 +484,17 @@ export async function POST(request: NextRequest) {
           })
 
           if (memberships.length > 0) {
-            // Deduplicate by pageId to avoid spamming
-            const pageIds = [...new Set(personalItems.map(item => item.itemId))]
+            // Deduplicate by (site, page) to avoid spamming
+            const pageSites = [...new Map(personalItems.map(item => [`${item.siteId}:${item.itemId}`, item])).values()]
 
-            for (const pageId of pageIds) {
+            for (const { itemId: pageId, siteId } of pageSites) {
               for (const membership of memberships) {
                 await eventBus.publish(`class:${membership.classId}:teacher`, {
                   type: 'student-work-update',
                   studentId: userId,
                   classId: membership.classId,
                   pageId,
+                  siteId,
                   timestamp: Date.now()
                 })
               }
@@ -480,7 +513,7 @@ export async function POST(request: NextRequest) {
     if (teacherBroadcasts.length > 0) {
       const uniqueBroadcasts = new Map<string, typeof teacherBroadcasts[0]>()
       for (const broadcast of teacherBroadcasts) {
-        const key = `${broadcast.targetType}:${broadcast.targetId}:${broadcast.pageId}`
+        const key = `${broadcast.targetType}:${broadcast.targetId}:${broadcast.siteId}:${broadcast.pageId}`
         // Keep the first occurrence (adapter doesn't matter for notification)
         if (!uniqueBroadcasts.has(key)) {
           uniqueBroadcasts.set(key, broadcast)
@@ -495,6 +528,7 @@ export async function POST(request: NextRequest) {
               type: 'teacher-annotations-update',
               classId: broadcast.targetId,
               pageId: broadcast.pageId,
+              siteId: broadcast.siteId,
               // Don't include full data in event - clients will refetch
               timestamp: Date.now(),
             })
@@ -504,6 +538,7 @@ export async function POST(request: NextRequest) {
               type: 'teacher-feedback',
               studentId: broadcast.targetId,
               pageId: broadcast.pageId,
+              siteId: broadcast.siteId,
               adapter: broadcast.adapter,
               timestamp: Date.now(),
             })
@@ -517,201 +552,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Invalidate ISR cache for page-targeted public layers (drawn annotations,
-    // snaps, sticky notes). Each is SSR-prefetched in src/lib/public-page-data.ts
-    // and rendered at first paint, so the cached HTML must be regenerated when
-    // any of them changes — otherwise visitors see stale public content until
-    // the next deploy.
+    // snaps, sticky notes). Each is SSR-prefetched per (page, site) in
+    // src/lib/public-page-data.ts and rendered at first paint, so the cached
+    // layer data (tag) and the ONE affected site's HTML (path) must be
+    // regenerated — otherwise visitors see stale public content.
     const PUBLIC_REVALIDATING_ADAPTERS = new Set(['annotations', 'snaps', 'sticky-notes'])
     const pageAnnotationItems = items.filter(
       item => item.targetType === 'page'
         && PUBLIC_REVALIDATING_ADAPTERS.has(item.adapter)
-        && synced.includes(`${item.adapter}:${item.itemId}`)
+        && synced.includes(`${item.siteId}:${item.adapter}:${item.itemId}`)
     )
 
     if (pageAnnotationItems.length > 0) {
       try {
-        // Get all unique pageIds that were updated
+        // Drop the cached public layers first — getPublicLayers() keys on this
+        // tag and caches forever. Independent of the path revalidation below.
         const pageIds = [...new Set(pageAnnotationItems.map(item => item.itemId))]
-
-        // Drop the cached public layers first — getPublicLayers() in
-        // src/lib/public-page-data.ts keys on this tag and caches forever.
-        // Must happen before the path revalidation below, and independently of
-        // it: the path lookup can fail to resolve a slug, and stale layers are
-        // worse than an extra revalidate.
         for (const pageId of pageIds) {
           revalidateTag(CACHE_TAGS.page(pageId), { expire: 0 })
         }
-
-        // Look up page paths for cache invalidation
-        for (const pageId of pageIds) {
-          // First try to find it as a regular page
-          const page = await prisma.page.findUnique({
-            where: { id: pageId },
-            select: {
-              slug: true,
-              skript: {
-                select: {
-                  slug: true,
-                  authors: {
-                    select: {
-                      user: {
-                        select: {
-                          sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
-                        },
-                      },
-                    },
-                  },
-                  collectionSkripts: {
-                    select: {
-                      collectionId: true,
-                      collection: {
-                        select: {
-                          site: { select: { slug: true } },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          })
-
-          if (page?.skript) {
-            const skriptSlug = page.skript.slug
-            const contentPageSlug = page.slug
-
-            // Revalidate teacher paths via author→site directly. The collection
-            // loop below misses skripts that aren't in any collection (e.g. survey
-            // skripts created outside the dashboard's collection-default flow) —
-            // those are still routable at /{teacherSlug}/{skriptSlug}/{pageSlug}
-            // via the SkriptAuthor relation, so the cache must invalidate there too.
-            const revalidatedTeacherSlugs = new Set<string>()
-            for (const author of page.skript.authors) {
-              const teacherSlug = author.user?.sites[0]?.slug
-              if (teacherSlug && !revalidatedTeacherSlugs.has(teacherSlug)) {
-                revalidatePath(`/${teacherSlug}/${skriptSlug}/${contentPageSlug}`)
-                revalidatedTeacherSlugs.add(teacherSlug)
-              }
-            }
-
-            // Invalidate paths for the page-owning teacher domain via collection.
-            // Collection ownership is now 1:1 with a site, so at most one slug per
-            // collection. Dedup against the author loop above.
-            for (const cs of page.skript.collectionSkripts) {
-              if (!cs.collection) continue
-              const pageSlug = cs.collection.site?.slug
-              if (pageSlug && !revalidatedTeacherSlugs.has(pageSlug)) {
-                revalidatePath(`/${pageSlug}/${skriptSlug}/${contentPageSlug}`)
-                revalidatedTeacherSlugs.add(pageSlug)
-              }
-            }
-
-            // Also check if page is accessible via any organization
-            const collectionIds = page.skript.collectionSkripts
-              .map(cs => cs.collectionId)
-              .filter((id): id is string => Boolean(id))
-
-            if (collectionIds.length > 0) {
-              const orgLayouts = await prisma.pageLayout.findMany({
-                where: {
-                  site: { organizationId: { not: null } },
-                  items: {
-                    some: {
-                      OR: [
-                        { type: 'collection', contentId: { in: collectionIds } },
-                        { type: 'skript', contentId: page.skript.slug }
-                      ]
-                    }
-                  }
-                },
-                select: {
-                  site: { select: { slug: true } }
-                }
-              })
-
-              for (const orgLayout of orgLayouts) {
-                const orgSlug = orgLayout.site?.slug
-                if (orgSlug) {
-                  // Org content routes are skript-only: /org/{orgSlug}/c/{skriptSlug}/{pageSlug}
-                  revalidatePath(`/org/${orgSlug}/c/${skriptSlug}/${contentPageSlug}`)
-                }
-              }
-            }
-            continue // Handled as regular page, skip front page check
-          }
-
-          // Not a regular page - check if it's a front page
-          const frontPage = await prisma.frontPage.findUnique({
-            where: { id: pageId },
-            select: {
-              skriptId: true,
-              site: {
-                select: {
-                  slug: true,
-                  userId: true,
-                  organizationId: true,
-                },
-              },
-              skript: {
-                select: {
-                  slug: true,
-                  collectionSkripts: {
-                    select: {
-                      collection: {
-                        select: {
-                          site: { select: { slug: true } },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          })
-
-          if (frontPage) {
-            // Site-level front page on a teacher's page: /{slug}
-            if (frontPage.site?.userId && frontPage.site.slug) {
-              revalidatePath(`/${frontPage.site.slug}`)
-            }
-
-            // Site-level front page on an org page: /org/{slug}
-            if (frontPage.site?.organizationId && frontPage.site.slug) {
-              revalidatePath(`/org/${frontPage.site.slug}`)
-            }
-
-            // Skript front page: /{slug}/{skriptSlug}
-            if (frontPage.skriptId && frontPage.skript) {
-              const skriptSlug = frontPage.skript.slug
-              for (const cs of frontPage.skript.collectionSkripts) {
-                if (!cs.collection) continue
-                const pageSlug = cs.collection.site?.slug
-                if (pageSlug) {
-                  revalidatePath(`/${pageSlug}/${skriptSlug}`)
-                }
-              }
-
-              // Also check orgs that have this skript in their layout
-              const orgLayouts = await prisma.pageLayout.findMany({
-                where: {
-                  site: { organizationId: { not: null } },
-                  items: {
-                    some: { type: 'skript', contentId: skriptSlug }
-                  }
-                },
-                select: {
-                  site: { select: { slug: true } }
-                }
-              })
-
-              for (const orgLayout of orgLayouts) {
-                const orgSlug = orgLayout.site?.slug
-                if (orgSlug) {
-                  revalidatePath(`/org/${orgSlug}/c/${skriptSlug}`)
-                }
-              }
-            }
-          }
+        const pairs = [...new Map(pageAnnotationItems.map(i => [`${i.siteId}:${i.itemId}`, i])).values()]
+        for (const { itemId, siteId } of pairs) {
+          await revalidateItemOnSite(itemId, siteId)
         }
       } catch (err) {
         console.error('[user-data/sync] Failed to invalidate ISR cache:', err)
@@ -723,6 +585,8 @@ export async function POST(request: NextRequest) {
       ok: true,
       synced: synced.length,
       conflicts,
+      // Items refused by site scoping. The client keeps them unsynced locally.
+      rejected: rejected.length > 0 ? rejected : undefined,
       uploadedSnaps: uploadedSnaps.length > 0 ? uploadedSnaps : undefined,
       s3Errors: s3Errors.length > 0 ? s3Errors : undefined,
     })

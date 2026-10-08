@@ -2,7 +2,8 @@
  * User Data Bulk Fetch API
  *
  * POST /api/user-data/bulk-fetch
- * Body: { items: [{ adapter, itemId }] }
+ * Body: { siteId, items: [{ adapter, itemId }] }
+ * siteId is required (site scoping, src/lib/site-access.ts).
  *
  * Returns matching personal records in a single round trip. Used by
  * sync-engine.initialSync to avoid N+1 GETs against /[adapter]/[itemId]
@@ -18,6 +19,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 interface BulkFetchRequest {
+  siteId: string
   items: Array<{ adapter: string; itemId: string }>
 }
 
@@ -43,6 +45,10 @@ export async function POST(request: NextRequest) {
     const requested = body.items
     if (!Array.isArray(requested)) {
       return NextResponse.json({ error: 'items must be an array' }, { status: 400 })
+    }
+    const siteId = typeof body.siteId === 'string' ? body.siteId : ''
+    if (!siteId) {
+      return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
     }
     if (requested.length === 0) {
       return NextResponse.json({ items: [] })
@@ -70,6 +76,7 @@ export async function POST(request: NextRequest) {
       const rows = await prisma.userData.findMany({
         where: {
           userId,
+          siteId,
           adapter,
           itemId: { in: Array.from(itemIds) },
           targetType: null,

@@ -111,6 +111,8 @@ import { useDragPan } from '@/hooks/use-drag-pan'
 import { useStudentWork } from '@/hooks/use-student-work'
 import { parseStrokes, type AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useSession } from 'next-auth/react'
+import { useCurrentSite } from '@/contexts/current-site-context'
+import { useSiteAccess } from '@/hooks/use-site-access'
 import type { Snap } from '@/types/snap'
 import { PasteSnapHandler } from './paste-snap-handler'
 import { SnapsDisplay, type StudentWorkSnap, type SnapOverridesData, type SnapPositionOverride, type SnapPositionOverrides } from './snaps-display'
@@ -146,8 +148,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const { selectedClass, setSelectedClass, selectedStudent, setSelectedStudent, broadcastToPage, setBroadcastToPage, viewMode, isTeacher } = useTeacherClass()
   const { setAnnotationVersionMismatch, setOnClearAnnotations } = useUserDataContext()
 
-  // Client-side check for page author permission (ISR pages can't compute this server-side)
-  const [isPageAuthor, setIsPageAuthor] = useState(isPageAuthorProp)
+  // "May write this page's PUBLIC layer" — under site scoping that is the
+  // site's manager (personal owner / org owner+admin, src/lib/site-access.ts),
+  // NOT the page author. Resolved client-side (ISR pages can't read the
+  // session). The name is kept for the many downstream uses.
+  const { siteId: currentSiteId } = useCurrentSite()
+  const siteAccess = useSiteAccess(currentSiteId)
+  const isPageAuthor = isPageAuthorProp || siteAccess.canManage
 
   // Gates the dev-only zoom-readout portal below. `typeof document !==
   // 'undefined'` is true during the client's hydration pass too (not just
@@ -201,28 +208,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     fetchClasses()
   }, [isTeacher, pageId])
 
-  // Fetch page author permission client-side (ISR pages can't compute this server-side)
-  useEffect(() => {
-    // Skip if already true from prop (non-ISR page) or no session
-    if (isPageAuthorProp || !session?.user) return
-
-    const checkPermission = async () => {
-      try {
-        const res = await fetch(`/api/pages/${encodeURIComponent(pageId)}/author-check`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data.isPageAuthor) {
-            setIsPageAuthor(true)
-          }
-        }
-      } catch (e) {
-        console.error('Failed to check page author permission:', e)
-      }
-    }
-
-    checkPermission()
-  }, [pageId, session?.user, isPageAuthorProp])
-
   // Public layers (page-broadcast annotations + snaps) for non-author viewers.
   // SSR prop seeds first paint; we always reconcile with the server on mount
   // and on visibility/focus, since revalidatePath() only clears the receiving
@@ -240,7 +225,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     let cancelled = false
     const refresh = async () => {
       try {
-        const res = await fetch(`/api/user-data/public/${encodeURIComponent(pageId)}`)
+        const res = await fetch(`/api/user-data/public/${encodeURIComponent(pageId)}?siteId=${encodeURIComponent(currentSiteId ?? '')}`)
         if (!res.ok || cancelled) return
         const json = await res.json() as { publicAnnotations?: PublicAnnotation[]; publicSnaps?: PublicSnap[] }
         if (cancelled) return
@@ -272,7 +257,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       document.removeEventListener('visibilitychange', refreshThrottled)
       window.removeEventListener('focus', refreshThrottled)
     }
-  }, [isPageAuthor, pageId])
+  }, [isPageAuthor, pageId, currentSiteId])
 
   // Fetch students when a class is selected (with annotation status for current page)
   useEffect(() => {

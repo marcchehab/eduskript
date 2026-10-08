@@ -40,6 +40,8 @@ export interface TeacherAnnotationsUpdateEvent {
   type: 'teacher-annotations-update'
   classId: string
   pageId: string
+  /** Site the data belongs to (site scoping). Optional for old publishers. */
+  siteId?: string
   timestamp: number
 }
 
@@ -52,6 +54,8 @@ export interface TeacherFeedbackEvent {
   studentId: string
   pageId: string
   adapter: string  // 'annotations', etc.
+  /** Site the data belongs to (site scoping). Optional for old publishers. */
+  siteId?: string
   timestamp: number
 }
 
@@ -64,6 +68,8 @@ export interface QuizSubmissionEvent {
   pageId: string
   questionId: string
   studentPseudonym: string
+  /** Site the data belongs to (site scoping). Optional for old publishers. */
+  siteId?: string
   timestamp: number
 }
 
@@ -144,6 +150,8 @@ export interface StudentWorkUpdateEvent {
   studentId: string
   classId: string
   pageId: string
+  /** Site the data belongs to (site scoping). Optional for old publishers. */
+  siteId?: string
   timestamp: number
 }
 

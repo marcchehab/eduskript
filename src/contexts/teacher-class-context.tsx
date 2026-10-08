@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useSession } from 'next-auth/react'
 import { createLogger } from '@/lib/logger'
+import { useCurrentSite } from '@/contexts/current-site-context'
+import { useSiteAccess } from '@/hooks/use-site-access'
 
 const log = createLogger('teacher:context')
 
@@ -79,6 +81,13 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   const isTeacher = session?.user?.accountType === 'teacher'
+  // Site scoping (src/lib/site-access.ts): the stored selection is global per
+  // browser, but a broadcast target is only valid on a site the viewer
+  // manages — public layer: site managers; class/student: own personal site
+  // only (org sites have no classes). Enforced in viewMode below, so a class
+  // picked on site A never turns strokes on site B into a class broadcast.
+  const { siteId: currentSiteId } = useCurrentSite()
+  const siteAccess = useSiteAccess(currentSiteId)
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -223,9 +232,11 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
       else if (selectedStudent) mode = 'student-view'
       else if (selectedClass) mode = 'class-broadcast'
     }
+    if (mode === 'page-broadcast' && !siteAccess.canManage) mode = 'my-view'
+    if ((mode === 'class-broadcast' || mode === 'student-view') && !siteAccess.isOwner) mode = 'my-view'
     log('viewMode computed', { mode, broadcastingPaused, broadcastToPage, selectedClassId: selectedClass?.id, selectedStudentId: selectedStudent?.id })
     return mode
-  }, [broadcastingPaused, broadcastToPage, selectedClass, selectedStudent])
+  }, [broadcastingPaused, broadcastToPage, selectedClass, selectedStudent, siteAccess.canManage, siteAccess.isOwner])
 
   // Clear selection if user is not a teacher
   useEffect(() => {

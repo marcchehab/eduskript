@@ -7,10 +7,14 @@
  * (id="annotation-toolbar") at the bottom, which now holds only drawing
  * tools and personal-view toggles.
  *
- * Visibility:
- *  - Own [domain] site only (session.user.pageSlug === teacher.pageSlug), OR
- *  - Org pages the viewer authored (the mount points enforce this).
- *  - AND paid teacher, AND has ≥ 1 class.
+ * Visibility (site scoping, src/lib/site-access.ts — self-gated client-side
+ * via /api/sites/[siteId]/access so ISR mounts stay static):
+ *  - Personal site the viewer OWNS (any of their sites, not just the primary),
+ *    AND has ≥ 1 class — full class toolbar.
+ *  - Org site where the viewer is org owner/admin — no classes exist there:
+ *    audience is Public | Off plus the answers roster for the whole site.
+ *  - Nowhere else (not on other teachers' sites, not for co-authors).
+ *  - AND paid teacher.
  *
  * Row 1 (always visible): audience dropdown (class | Public | Off), master
  * broadcast toggle, selected-student chip, exam state (exam pages),
@@ -79,6 +83,7 @@ import {
 } from '@/hooks/use-exam-audit'
 import { usePageSubmissions, type PageSubmissionRow } from '@/hooks/use-page-submissions'
 import { useIsPaid } from '@/hooks/use-billing'
+import { useSiteAccess } from '@/hooks/use-site-access'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 import { CredentialsDialog, TransferAnswersDialog, type TempCredentials } from './temp-user-dialogs'
 import { cn } from '@/lib/utils'
@@ -101,23 +106,10 @@ interface ClassToolbarProps {
   /** Classes unlocked for this exam. Empty on non-exam pages. */
   unlockedClasses: PageClass[]
   /**
-   * Owner pageSlug of the site this page belongs to. When set, the toolbar
-   * self-gates on `session.user.pageSlug === requireOwnerSlug` so it only
-   * appears on the viewer's own [domain] site. Omit/pass null on routes
-   * where the mount has already validated visibility (e.g. org pages that
-   * gate on `isPageAuthor`).
+   * Site the page is rendered on (route context). The toolbar self-gates on
+   * the viewer managing this site; null → never shown.
    */
-  requireOwnerSlug?: string | null
-  /**
-   * Client-side page-authorship gate for ISR routes that can't read the
-   * session server-side. When true, the toolbar additionally hides itself
-   * until `usePageSubmissions().isAuthor` confirms the viewer authored this
-   * page. Used by the org `/c/` content route (see
-   * app/org/[orgSlug]/c/[skriptSlug]/[pageSlug]/page.tsx), which is ISR and
-   * has no stable owner slug to match against. Force-dynamic org mounts gate
-   * on server-side `isPageAuthor` instead and leave this false.
-   */
-  gateOnPageAuthor?: boolean
+  siteId: string | null
 }
 
 type SortKey = 'name' | 'email' | 'status' | 'answers' | 'activity'
@@ -166,26 +158,31 @@ function ClassToolbarInner({
   pageId,
   pageType,
   unlockedClasses,
-  requireOwnerSlug = null,
-  gateOnPageAuthor = false,
+  siteId,
 }: ClassToolbarProps) {
   const isExam = pageType === 'exam'
   const { data: session, status: sessionStatus } = useSession()
   const isPaid = useIsPaid()
   const { sidebarCollapsed } = useLayout()
   const isTeacherAccount = session?.user?.accountType === 'teacher'
-  const viewerPageSlug = session?.user?.pageSlug ?? null
-  // Own-site check: only relevant when caller pinned a specific owner slug
-  // (e.g. on [domain] routes). Org-page mounts pass null and rely on their
-  // own server-side isPageAuthor gate.
-  const isOwnSite = requireOwnerSlug === null || viewerPageSlug === requireOwnerSlug
+  // Site scoping: personal-site owner → classes; org owner/admin → public
+  // layer + site-wide answers, no classes.
+  const siteAccess = useSiteAccess(siteId)
+  const isOwnSite = siteAccess.isOwner
+  const isOrgManager = siteAccess.kind === 'org' && siteAccess.canManage
 
   // Teacher's classes — used for both the audience dropdown and the
   // has-≥1-class visibility gate. Fetched once per page; the same
   // /api/classes?pageId=… that `annotation-layer.tsx` consumes.
   const [teacherClasses, setTeacherClasses] = useState<PageClass[] | null>(null)
   useEffect(() => {
-    if (!isTeacherAccount || !isPaid || !isOwnSite) return
+    if (!isTeacherAccount || !isPaid) return
+    if (isOrgManager) {
+      // Org sites have no classes.
+      setTeacherClasses([])
+      return
+    }
+    if (!isOwnSite) return
     let cancelled = false
     fetch(`/api/classes?pageId=${encodeURIComponent(pageId)}`, {
       credentials: 'include',
@@ -200,7 +197,7 @@ function ClassToolbarInner({
         if (!cancelled) setTeacherClasses([])
       })
     return () => { cancelled = true }
-  }, [pageId, isTeacherAccount, isPaid, isOwnSite])
+  }, [pageId, isTeacherAccount, isPaid, isOwnSite, isOrgManager])
 
   const {
     selectedClass,
@@ -244,12 +241,11 @@ function ClassToolbarInner({
   })
 
   const {
-    isAuthor,
     isResolving,
     submissions,
     yourAnonymousUserId,
     refresh: refreshSubmissions,
-  } = usePageSubmissions({ pageId })
+  } = usePageSubmissions({ pageId, siteId, enabled: siteAccess.canManage && isTeacherAccount })
 
   // Exam audit log drives the "took Nm" caption + per-student timeline
   // tooltip. Only meaningful on exam pages, so dormant otherwise.
@@ -466,7 +462,7 @@ function ClassToolbarInner({
       const response = await fetch(`/api/exams/${pageId}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classId: selectedClass.id, studentId: studentId ?? undefined, state: newState }),
+        body: JSON.stringify({ classId: selectedClass.id, studentId: studentId ?? undefined, state: newState, siteId }),
       })
       if (response.ok) refreshRoster()
     } catch (error) {
@@ -490,7 +486,7 @@ function ClassToolbarInner({
       const response = await fetch(`/api/exams/${pageId}/students`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, classId: selectedClass.id, action: 'reopen' }),
+        body: JSON.stringify({ studentId, classId: selectedClass.id, action: 'reopen', siteId }),
       })
       if (response.ok) {
         refreshAll()
@@ -515,7 +511,7 @@ function ClassToolbarInner({
       const response = await fetch(`/api/exams/${pageId}/students`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, classId: selectedClass.id, action: 'force-submit' }),
+        body: JSON.stringify({ studentId, classId: selectedClass.id, action: 'force-submit', siteId }),
       })
       if (response.ok) {
         refreshAll()
@@ -534,7 +530,7 @@ function ClassToolbarInner({
     setDeletingUser(row.userId)
     try {
       const response = await fetch(
-        `/api/pages/${pageId}/submissions/${row.userId}`,
+        `/api/pages/${pageId}/submissions/${row.userId}?siteId=${encodeURIComponent(siteId ?? '')}`,
         { method: 'DELETE' }
       )
       if (response.ok) {
@@ -565,18 +561,13 @@ function ClassToolbarInner({
   // teacher on their own site with ≥ 1 class. Lets the toolbar mount
   // unconditionally on ISR-cached public pages without flashing.
   //
-  // The `isAuthor` flag from `usePageSubmissions` is kept further down as
-  // defense-in-depth for destructive actions (delete/reopen), but it is no
-  // longer the top-level visibility gate — own-site (or org-mount-time
-  // isPageAuthor) is.
-  if (sessionStatus === 'loading' || teacherClasses === null) return null
+  // Visibility = site management (useSiteAccess); the server re-checks it on
+  // every data/destructive request.
+  if (sessionStatus === 'loading' || !siteAccess.resolved || teacherClasses === null) return null
   if (!isTeacherAccount || !isPaid) return null
-  if (!isOwnSite) return null
-  if (teacherClasses.length === 0) return null
+  if (!isOwnSite && !isOrgManager) return null
+  if (isOwnSite && teacherClasses.length === 0) return null
   if (isResolving) return null
-  // ISR org-content mounts have no owner slug to match; hold the toolbar
-  // until the server-verified author flag lands (see gateOnPageAuthor).
-  if (gateOnPageAuthor && !isAuthor) return null
 
   // Empty-shell case: exam page with no unlocked classes AND no submissions.
   if (isExam && unlockedClasses.length === 0 && submissions.length === 0) {
