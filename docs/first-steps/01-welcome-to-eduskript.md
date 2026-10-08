@@ -9,7 +9,7 @@ To get started, login and/or **<span class="es-color-red">click your profile but
 
 ![](frontpage.excalidraw.light.svg)
 
-## The Page Builder
+## The Site Builder
 
 **<span class="es-color-blue">Place skripts on your public page (blue)</span>** by dragging them **<span class="es-color-red">from your library (red)</span>**.
 

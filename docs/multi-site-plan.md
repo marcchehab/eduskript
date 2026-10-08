@@ -4,7 +4,7 @@ Let one **User** own multiple **Sites**. Today it's 1:1 (`Site.userId @unique`, 
 
 ## Status (2026-07-18)
 
-**All phases done & validated** (type-check + lint + 997 tests + prod build all green): the schema change + migration `20260718073728_multi_site_support`, the ~60-file query migration, session token, MCP (Phases 1/2/5/6); and the dashboard (Phase 3, **site-scoped URLs** chosen) + superadmin provisioning (Phase 4). New routes: `/dashboard/site/[siteId]/{page-builder,frontpage}`, `/api/sites/[siteId]/{page-layout,frontpage}`, `/api/user/sites`, `/api/admin/users/[id]/sites`. Sidebar stacks: sites → orgs → account → admin. **Deferred (fast-follow):** per-site Settings and Plugins still operate at the user/primary level.
+**All phases done & validated** (type-check + lint + 997 tests + prod build all green): the schema change + migration `20260718073728_multi_site_support`, the ~60-file query migration, session token, MCP (Phases 1/2/5/6); and the dashboard (Phase 3, **site-scoped URLs** chosen) + superadmin provisioning (Phase 4). New routes: `/dashboard/site/[siteId]/{site-builder,frontpage}`, `/api/sites/[siteId]/{page-layout,frontpage}`, `/api/user/sites`, `/api/admin/users/[id]/sites`. Sidebar stacks: sites → orgs → account → admin. **Deferred (fast-follow):** per-site Settings and Plugins still operate at the user/primary level.
 
 ## Locked decisions
 
@@ -38,9 +38,9 @@ Relax the constraint, then fix every query that assumes uniqueness. Prisma **won
 - Fix `cross-domain` + `cross-domain-callback` token grafts (`api/auth/cross-domain*`) to use the target site, not "the" site.
 
 ### 3. Dashboard sidebar + routing (the bulk, ~2–3 days)
-- Add a site dimension to dashboard routes — e.g. `/dashboard/site/[siteId]/page-builder`, `.../frontpage`, `.../plugins`. Active site = route param (no top-nav dropdown).
-- **Sidebar stacking order** (per the design): each **Site** as its own block (page builder, plugins, frontpage, settings), then **Orgs**, then **user-admin**, then **superadmin**. A 1-site teacher sees one site block — visually unchanged from today.
-- Thread `siteId` through `PageBuilderInterface`, frontpage editor, and the per-setting pages (all currently bind implicitly to "the user's site").
+- Add a site dimension to dashboard routes — e.g. `/dashboard/site/[siteId]/site-builder`, `.../frontpage`, `.../plugins`. Active site = route param (no top-nav dropdown).
+- **Sidebar stacking order** (per the design): each **Site** as its own block (site builder, plugins, frontpage, settings), then **Orgs**, then **user-admin**, then **superadmin**. A 1-site teacher sees one site block — visually unchanged from today.
+- Thread `siteId` through `SiteBuilderInterface`, frontpage editor, and the per-setting pages (all currently bind implicitly to "the user's site").
 
 ### 4. Superadmin site provisioning (~0.5 day)
 - In the existing admin users UI (`api/admin/users/*`), add "grant additional site" — create a `Site` with a new global slug + `userId`. Remove the implicit one-site assumption in admin upserts.

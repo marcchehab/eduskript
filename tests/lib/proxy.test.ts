@@ -95,7 +95,7 @@ describe('proxy routing', () => {
       const { proxy } = await import('@/proxy')
       const { NextResponse } = await import('next/server')
 
-      const request = createMockRequest('localhost:3000', '/dashboard/page-builder')
+      const request = createMockRequest('localhost:3000', '/dashboard/site-builder')
       await proxy(request as any)
 
       expect(NextResponse.next).toHaveBeenCalled()

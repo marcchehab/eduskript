@@ -31,6 +31,7 @@ import { prisma } from '@/lib/prisma'
 import {
   ValidationError,
   NotFoundError,
+  StaleContentError,
   updatePageForUser,
   restorePageVersionForUser,
   listPageVersionsForUser,
@@ -335,5 +336,39 @@ describe('listPageVersionsForUser', () => {
     await expect(
       listPageVersionsForUser('user-1', 'page-1'),
     ).rejects.toBeInstanceOf(NotFoundError)
+  })
+})
+
+describe('updatePageForUser — stale-content guard (baseVersion)', () => {
+  it('rejects a content change based on an older version', async () => {
+    vi.mocked(prisma.page.findFirst).mockResolvedValue(baseExistingPage as never)
+
+    await expect(
+      updatePageForUser('user-1', 'page-1', { content: '# Edited in an outdated editor', baseVersion: 0 }),
+    ).rejects.toBeInstanceOf(StaleContentError)
+
+    expect(prisma.page.update).not.toHaveBeenCalled()
+    expect(prisma.pageVersion.create).not.toHaveBeenCalled()
+  })
+
+  it('accepts a content change based on the latest version and returns the new version', async () => {
+    vi.mocked(prisma.page.findFirst).mockResolvedValue(baseExistingPage as never)
+    vi.mocked(prisma.page.update).mockResolvedValue({ ...baseExistingPage } as never)
+
+    const result = await updatePageForUser('user-1', 'page-1', { content: '# Edited', baseVersion: 1 })
+
+    expect(result.version).toBe(2)
+    expect(prisma.pageVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ version: 2 }) }),
+    )
+  })
+
+  it('ignores baseVersion when content is unchanged (metadata-only save)', async () => {
+    vi.mocked(prisma.page.findFirst).mockResolvedValue(baseExistingPage as never)
+    vi.mocked(prisma.page.update).mockResolvedValue({ ...baseExistingPage } as never)
+
+    await expect(
+      updatePageForUser('user-1', 'page-1', { title: 'Renamed', baseVersion: 0 }),
+    ).resolves.toBeDefined()
   })
 })

@@ -194,8 +194,8 @@ All files        |   93.26 |       75 |    92.3 |   92.47 |
 ### 3. Dashboard Components (0% coverage) 🟡 MEDIUM PRIORITY
 
 **Core Dashboard**
-- `src/components/dashboard/page-builder-interface.tsx` ⭐ CRITICAL
-- `src/components/dashboard/page-builder.tsx` - Visual page builder
+- `src/components/dashboard/site-builder-interface.tsx` ⭐ CRITICAL
+- `src/components/dashboard/site-builder.tsx` - Visual site builder
 - `src/components/dashboard/content-library.tsx` - Content browser
 - `src/components/dashboard/draggable-content.tsx` - Drag-and-drop items
 
@@ -411,7 +411,7 @@ All files        |   93.26 |       75 |    92.3 |   92.47 |
 **Goal**: Validate UI components and user interactions
 
 1. **Dashboard Component Tests** (Estimated: 50-70 tests)
-   - [ ] Page builder interface with drag-and-drop
+   - [ ] Site builder interface with drag-and-drop
    - [ ] Content library with filtering
    - [ ] Editors (markdown, excalidraw)
    - [ ] Modal workflows
@@ -471,7 +471,7 @@ All files        |   93.26 |       75 |    92.3 |   92.47 |
    - [ ] User signup and email verification
    - [ ] Login flow
    - [ ] Create collection → skript → pages workflow
-   - [ ] Drag-and-drop page builder
+   - [ ] Drag-and-drop site builder
    - [ ] Permission sharing workflows
    - [ ] Collaboration requests
    - [ ] Public page viewing
@@ -737,7 +737,7 @@ pnpm test:coverage     # Coverage report
 ### Concerns ⚠️
 
 1. **Missing Tests for Complex Features**
-   - Page builder (drag-and-drop)
+   - Site builder (drag-and-drop)
    - Markdown processing pipeline
    - File storage system
 
@@ -799,7 +799,7 @@ tests/
 │   │   ├── tooltip.test.tsx          # NEW
 │   │   └── ...                       # NEW: All UI components
 │   ├── dashboard/
-│   │   ├── page-builder.test.tsx     # NEW: Critical
+│   │   ├── site-builder.test.tsx     # NEW: Critical
 │   │   ├── content-library.test.tsx  # NEW
 │   │   ├── editors.test.tsx          # NEW
 │   │   └── ...                       # NEW: All dashboard components
@@ -811,7 +811,7 @@ tests/
     ├── auth-flow.spec.ts             # NEW: Signup/login
     ├── content-creation.spec.ts      # NEW: Create workflow
     ├── collaboration.spec.ts         # NEW: Sharing workflow
-    ├── page-builder.spec.ts          # NEW: Drag-and-drop
+    ├── site-builder.spec.ts          # NEW: Drag-and-drop
     └── ...                           # NEW: Critical user flows
 ```
 
@@ -867,7 +867,7 @@ tests/
 ### 3. Frontend Performance Tests
 
 - [ ] Markdown rendering time
-- [ ] Page builder responsiveness
+- [ ] Site builder responsiveness
 - [ ] Annotation canvas performance
 - [ ] Image loading optimization
 
@@ -901,7 +901,7 @@ The Eduskript project has a **solid foundation** for testing with excellent cove
    - Test transaction integrity
 
 3. **Component Testing** (Weeks 5-6)
-   - Start with page builder (most complex)
+   - Start with site builder (most complex)
    - Test dashboard components
    - Test public components
 

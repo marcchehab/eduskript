@@ -9,7 +9,7 @@
  *
  * The bouncing label is portaled to document.body with fixed positioning:
  * several targets sit inside overflow-hidden containers (new-skript /
- * new-page areas in the page builder), which clipped an absolutely
+ * new-page areas in the site builder), which clipped an absolutely
  * positioned label hanging above the wrapper. Position is re-measured on
  * scroll (capture, to catch inner scroll containers) and resize; no
  * per-frame tracking, so the label can lag briefly during e.g. animated

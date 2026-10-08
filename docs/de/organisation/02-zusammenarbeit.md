@@ -126,7 +126,7 @@ Beim Annehmen öffnet sich ein Diskussionsthread, in dem ihr aushandeln könnt, 
 Wenn du Inhalte mit einer Kollegin oder einem Kollegen teilst:
 
 - Erscheinen sie in deren Bereich **shared with me**
-- Zeigt deren Page Builder die eigenen Inhalte + die geteilte Sammlung/das geteilte Skript/die geteilte Seite
+- Zeigt deren Site Builder die eigenen Inhalte + die geteilte Sammlung/das geteilte Skript/die geteilte Seite
 - Sind die geteilten Inhalte visuell markiert (anderer Hintergrund oder Label «shared by Marie»)
 - Können sie diese in ihrer Hauptansicht anpinnen, wenn sie sie prominenter haben möchten
 

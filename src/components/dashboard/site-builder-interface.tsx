@@ -3,7 +3,7 @@
 import { DragDropContext, DropResult, DragStart } from '@hello-pangea/dnd'
 import { useState, useEffect } from 'react'
 import { ContentLibrary } from './content-library'
-import { PageBuilder } from './page-builder'
+import { SiteBuilder } from './site-builder'
 import { EmptyPageDragHint } from './empty-page-drag-hint'
 import { useSession } from 'next-auth/react'
 import { checkSkriptPermissions } from '@/lib/permissions'
@@ -53,7 +53,7 @@ interface DragData {
   sourceItem?: PageItem
 }
 
-export interface PageBuilderContext {
+export interface SiteBuilderContext {
   type: 'user' | 'organization'
   organizationId?: string
   organizationSlug?: string
@@ -68,11 +68,11 @@ export interface PageBuilderContext {
   customDomain?: string | null
 }
 
-interface PageBuilderInterfaceProps {
-  context?: PageBuilderContext
+interface SiteBuilderInterfaceProps {
+  context?: SiteBuilderContext
 }
 
-export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilderInterfaceProps) {
+export function SiteBuilderInterface({ context = { type: 'user' } }: SiteBuilderInterfaceProps) {
   // Determine API endpoints based on context: org site, a specific user site,
   // or the user's primary site (legacy no-siteId path).
   const pageLayoutEndpoint =
@@ -88,7 +88,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
   const [expandedCollections, setExpandedCollections] = useState<string[]>([])
   const [libraryData, setLibraryData] = useState<{ collections: any[], skripts: any[] }>({ collections: [], skripts: [] })
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  // Last collection edited in the page builder (rename / accent colour). Fed to
+  // Last collection edited in the site builder (rename / accent colour). Fed to
   // ContentLibrary so its card updates in place without waiting for a refetch.
   const [libraryCollectionUpdate, setLibraryCollectionUpdate] = useState<
     { id: string; title: string; accentColor?: string | null } | null
@@ -114,7 +114,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           )
         }
       } catch {
-        // Silent error - will show empty page builder
+        // Silent error - will show empty site builder
       } finally {
         setLoading(false)
       }
@@ -369,7 +369,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     if (destinationId.startsWith('root-gap-')) {
       // Gap-strip drop. The droppableId encodes the insertion position in
       // the root list (0..items.length). Gap strips are how root-level
-      // moves happen now that the outer page-builder droppable is disabled
+      // moves happen now that the outer site-builder droppable is disabled
       // when items exist — they isolate root drops from collection-internal
       // ones so @hello-pangea/dnd doesn't shadow nested droppables.
       const insertIndex = parseInt(destinationId.replace('root-gap-', ''), 10)
@@ -457,7 +457,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           hasChanges = true
         }
       }
-    } else if (destinationId === 'page-builder') {
+    } else if (destinationId === 'site-builder') {
       // Drop to root level
       if (dragData?.type === 'collection') {
         if (dragData.fromLibrary && !pageItems.some(item => item.id === dragData.id && item.type === dragData.type)) {
@@ -496,7 +496,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           // Auto-expand the newly added collection to show its skripts
           setExpandedCollections(prev => [...new Set([...prev, dragData.id])])
         } else if (!dragData.fromLibrary) {
-          // Reorder existing collection within page builder
+          // Reorder existing collection within site builder
           const sourceIndex = updatedItems.findIndex(item => item.id === dragData.id)
           if (sourceIndex !== -1 && sourceIndex !== destination.index) {
             // Remove from current position
@@ -767,7 +767,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
 
   // Display string for the View button — the public page address without
   // protocol. A verified primary custom domain (e.g. "informatikgarten.ch")
-  // takes over the site's URL entirely (see PageBuilderContext.customDomain);
+  // takes over the site's URL entirely (see SiteBuilderContext.customDomain);
   // otherwise falls back to "eduskript.org/org/my-org" or "eduskript.org/my-page".
   // Mirrors the URL handlePreview() actually opens.
   const publicUrlPath =
@@ -782,7 +782,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     ? context.customDomain
     : publicUrlPath ? `${process.env.NEXT_PUBLIC_APP_HOSTNAME}${publicUrlPath}` : null
 
-  // Syncs a collection rename/recolour (from the page builder's inline
+  // Syncs a collection rename/recolour (from the site builder's inline
   // editor or the library's) into both places without a full reload.
   const handleCollectionUpdate = (updated: { id: string; title: string; accentColor?: string | null }) => {
     setPageItems(items =>
@@ -833,7 +833,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
       >
         <div className="flex gap-6 h-[calc(100vh-120px)]">
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-muted-foreground">Loading page builder...</p>
+            <p className="text-muted-foreground">Loading site builder...</p>
           </div>
           <div className="w-80 shrink-0">
             <ContentLibrary
@@ -855,9 +855,9 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-6 min-h-[400px]">
-        {/* Page Builder - Left Side */}
+        {/* Site Builder - Left Side */}
         <div className="flex-1 flex flex-col gap-6">
-          <PageBuilder
+          <SiteBuilder
             items={pageItems}
             onItemsChange={handleItemsChange}
             onPreview={handlePreview}

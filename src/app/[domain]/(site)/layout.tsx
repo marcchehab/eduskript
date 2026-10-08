@@ -40,7 +40,7 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
   const teacher = await getTeacherWithLayout(domain)
   if (!teacher) notFound()
 
-  // Interleaved collections + root skripts in exact page-builder order.
+  // Interleaved collections + root skripts in exact site-builder order.
   // Shared with the org routes (src/lib/sidebar-items.ts) so eduskript.org
   // and custom-domain sidebars render identically. Treat an empty/null
   // sidebarBehavior as full (matches the Prisma default and the fallback

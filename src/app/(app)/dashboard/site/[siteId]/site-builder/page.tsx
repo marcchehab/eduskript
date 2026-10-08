@@ -1,10 +1,10 @@
-import { PageBuilderInterface } from '@/components/dashboard/page-builder-interface'
+import { SiteBuilderInterface } from '@/components/dashboard/site-builder-interface'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { notFound, redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 
-export default async function SitePageBuilderPage({
+export default async function SiteScopedSiteBuilderPage({
   params,
 }: {
   params: Promise<{ siteId: string }>
@@ -39,13 +39,13 @@ export default async function SitePageBuilderPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Page Builder</h1>
+        <h1 className="text-3xl font-bold text-foreground">Site Builder</h1>
         <p className="text-muted-foreground mt-2">
           Building <span className="font-medium">{site.pageName || site.slug}</span> — drag content from your library
         </p>
       </div>
 
-      <PageBuilderInterface
+      <SiteBuilderInterface
         context={{
           type: 'user',
           siteId: site.id,

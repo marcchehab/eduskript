@@ -5,7 +5,7 @@ import { BookOpen, FileText, Eye, Edit, GripVertical, Trash2 } from 'lucide-reac
 import { Button } from '@/components/ui/button'
 import { PermissionIndicator } from './permission-indicator'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
-import { CollectionTitleInlineEditor, type CollectionUpdate } from './page-builder'
+import { CollectionTitleInlineEditor, type CollectionUpdate } from './site-builder'
 import { cn } from '@/lib/utils'
 import { SkriptAuthor, User } from '@prisma/client'
 import Link from 'next/link'
@@ -23,7 +23,7 @@ interface DraggableCollectionProps extends BaseContentProps {
   type: 'collection'
   skriptCount: number
   // Hex accent colour from the collection. Tints the BookOpen icon to match
-  // the page builder + public sidebar. Null/undefined keeps the default
+  // the site builder + public sidebar. Null/undefined keeps the default
   // primary blue.
   accentColor?: string | null
   // Delete the collection. When provided, renders a trash button mirroring
@@ -31,7 +31,7 @@ interface DraggableCollectionProps extends BaseContentProps {
   // library only shows yours, so we don't render co-author chips on
   // collection cards anymore.
   onDelete?: (id: string) => void
-  // Rename the collection inline (shared editor with the page builder's
+  // Rename the collection inline (shared editor with the site builder's
   // collection rows). Omit to render the title as plain, non-editable text.
   onUpdated?: (collection: CollectionUpdate) => void
 }
@@ -73,8 +73,8 @@ export function DraggableCollection({
           )}
         >
           <div className="flex items-start gap-3 p-3 relative">
-            {/* Collections are managed via page builder - no standalone edit
-                page. The delete button mirrors the page-builder item's
+            {/* Collections are managed via site builder - no standalone edit
+                page. The delete button mirrors the site-builder item's
                 remove button (same corner/size); ConfirmationDialog gates it
                 with a modal rather than a browser confirm(). */}
             {onDelete && (
@@ -191,12 +191,14 @@ export function DraggableSkript({
                 href={`/dashboard/skripts/${slug}`}
                 className="absolute top-2 right-2 z-10"
                 onMouseDown={(e) => e.stopPropagation()}
+                // stopPropagation on the Link itself: on the inner button it
+                // kept next/link's handler from running -> full page reload.
+                onClick={(e) => e.stopPropagation()}
               >
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-5 w-5 p-0"
-                  onClick={(e) => e.stopPropagation()}
                   title="Edit skript"
                 >
                   <Edit className="w-4 h-4" />

@@ -86,7 +86,7 @@ When working in these areas, read the corresponding doc:
 - `src/proxy.ts` — proxy (no subdomain routing)
 - `src/lib/auth.ts`, `src/lib/permissions.ts`, `src/lib/prisma.ts`
 - `src/components/root-shell.tsx` (shared `<html>` shell), `src/app/(app)/layout.tsx`, `src/app/(app)/dashboard/`, `src/app/[domain]/` + `src/app/org/[orgSlug]/` (tenant root layouts, SSR `<html lang>`; each has `not-found.tsx`)
-- `src/components/dashboard/page-builder*.tsx` — drag-and-drop page builder
+- `src/components/dashboard/site-builder*.tsx` — drag-and-drop site builder
 - `src/components/markdown/markdown-renderer.tsx` — primary markdown processor
 - `src/lib/markdown.ts` — markdown *utilities* (slug, excerpt, validate), not a processor
 - `src/types/index.ts`

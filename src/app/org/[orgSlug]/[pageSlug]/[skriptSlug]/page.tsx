@@ -128,7 +128,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       }]
 
   const teacherSite = teacher.sites[0]
-  // Full mode: interleaved page-builder sidebar shared with the [domain]
+  // Full mode: interleaved site-builder sidebar shared with the [domain]
   // layout (includes root skripts). Contextual keeps the single-skript
   // structure above.
   const sidebarData = (teacherSite?.sidebarBehavior || 'full') === 'full'

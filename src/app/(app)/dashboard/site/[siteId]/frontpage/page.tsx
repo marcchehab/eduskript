@@ -33,7 +33,7 @@ export default async function SiteFrontpagePage({
       type="user"
       siteId={site.id}
       frontPage={frontPage}
-      backUrl={`/dashboard/site/${site.id}/page-builder`}
+      backUrl={`/dashboard/site/${site.id}/site-builder`}
       previewUrl={`/${site.slug}`}
     />
   )

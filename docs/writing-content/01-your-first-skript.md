@@ -41,7 +41,7 @@ Your public page is now live at `eduskript.org/<your-slug>`. It's empty until yo
 
 The fastest path:
 
-1. **Dashboard → Page builder** — this is your home base for organizing content
+1. **Dashboard → Site builder** — this is your home base for organizing content
 2. Click **+ New collection** — give it a title (e.g., "Introduction to Statistics")
 3. Inside the collection, click **+ New skript** — (e.g., "Descriptive Statistics")
 4. Inside the skript, click **+ New page** — (e.g., "Mean and Median")
@@ -51,7 +51,7 @@ The fastest path:
 That's it — your page is live at `eduskript.org/<slug>/intro-stats/descriptive/mean-median`.
 
 > [!tip] Drag everything
-> Collections, skripts, and pages are all drag-and-drop reorderable in the page builder. Drag a skript from one collection into another. Drag a page up or down to change its order in the sidebar. Permission rules apply (see *Collaboration*).
+> Collections, skripts, and pages are all drag-and-drop reorderable in the site builder. Drag a skript from one collection into another. Drag a page up or down to change its order in the sidebar. Permission rules apply (see *Collaboration*).
 
 ---
 

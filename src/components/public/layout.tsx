@@ -79,7 +79,7 @@ interface PublicSiteLayoutProps {
   teacher: Teacher
   siteStructure: SiteStructure[]
   rootSkripts?: RootSkript[]
-  // Interleaved collections + root skripts in page-builder order. When omitted,
+  // Interleaved collections + root skripts in site-builder order. When omitted,
   // the layout falls back to collections-first then root skripts (preserves
   // the legacy two-section behavior for callers that haven't migrated).
   sidebarItems?: SidebarItem[]
@@ -196,7 +196,7 @@ export function PublicSiteLayout({
   const pageId = pageIdProp ?? currentPage?.id ?? reportedPageId ?? undefined
   const hideSidebar = hideSidebarProp ?? currentPage?.pageType === 'exam'
 
-  // Unified, page-builder-ordered sidebar list. When the server provides
+  // Unified, site-builder-ordered sidebar list. When the server provides
   // `sidebarItems` (interleaved), use it; otherwise reconstruct collections-
   // first then root skripts to keep callers that haven't migrated working.
   // Contextual mode filters to the single item containing the current skript.
@@ -660,7 +660,7 @@ export function PublicSiteLayout({
               /* Full navigation when expanded */
               <nav className="space-y-2">
               {/* displaySidebarItems interleaves collections and root skripts
-                  in page-builder order. No "Individual Skripts" grouping —
+                  in site-builder order. No "Individual Skripts" grouping —
                   root skripts render as standalone items between collections,
                   exactly where the teacher placed them. */}
               {(() => {

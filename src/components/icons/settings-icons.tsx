@@ -30,3 +30,10 @@ export const PageCog = createLucideIcon('page-cog', [
   ['path', { d: 'M14 2v5a1 1 0 0 0 1 1h5', key: 'fold' }],
   ...COG,
 ])
+
+/** Skript settings: lucide's Book + cog (pairs with PageCog in the editor header). */
+export const SkriptCog = createLucideIcon('skript-cog', [
+  ['path', { d: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v9', key: 'body' }],
+  ['path', { d: 'M12 22H6.5a2.5 2.5 0 0 1 0-5H12', key: 'base' }],
+  ...COG,
+])

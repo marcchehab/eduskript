@@ -49,7 +49,7 @@ Three places to toggle the state:
 
 1. **Top toolbar of the page editor** — the Publish dropdown
 2. **Page list in the manage drawer** — quick toggle next to each page
-3. **Page builder dashboard** — bulk view, drag-and-drop reorder, batch toggles
+3. **Site builder dashboard** — bulk view, drag-and-drop reorder, batch toggles
 
 For skripts, use the skript editor or the dashboard.
 

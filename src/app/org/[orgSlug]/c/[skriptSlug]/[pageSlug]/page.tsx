@@ -219,7 +219,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
 
   const currentPath = `/${skriptSlug}/${pageSlug}`
 
-  // Full mode: interleaved page-builder sidebar incl. the org's root skripts.
+  // Full mode: interleaved site-builder sidebar incl. the org's root skripts.
   const sidebarData = organization.sidebarBehavior === 'full'
     ? await getOrgSidebarData(organization.id, orgSlug)
     : undefined

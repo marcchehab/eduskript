@@ -100,7 +100,7 @@ export type HydratedLayoutItem = HydratedLayoutCollection | HydratedLayoutSkript
  * with their nested skripts, every node carrying its edit/view permissions.
  *
  * Two queries total (collections + root skripts) regardless of layout size.
- * The page builder previously assembled the same thing client-side with
+ * The site builder previously assembled the same thing client-side with
  * `1 + N + N×M + R` separate API round-trips. Orphan rows (content since
  * deleted) are dropped; a skript that is both a root item and a member of a
  * pinned collection is kept only inside the collection.

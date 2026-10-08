@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
       } else {
         // Moving to root level — just detach from any collection. Root
         // placement now lives in PageLayout.items (added separately by the
-        // page builder), not via a CollectionSkript row.
+        // site builder), not via a CollectionSkript row.
         await tx.collectionSkript.deleteMany({
           where: { skriptId: skriptId }
         })

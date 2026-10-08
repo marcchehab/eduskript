@@ -9,7 +9,7 @@ import {
 } from './cached-queries'
 
 // Builds the interleaved sidebar list (collections + root skripts in
-// page-builder order) that PublicSiteLayout renders in "full" mode. One
+// site-builder order) that PublicSiteLayout renders in "full" mode. One
 // shared implementation for the [domain] layout and the org routes so a
 // teacher's root skripts appear in the sidebar on eduskript.org/<slug>/...
 // exactly as they do on a custom domain. All inputs come from cached queries

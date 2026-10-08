@@ -183,7 +183,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
     title: null
   }
 
-  // Full mode: interleaved page-builder sidebar (collections + root skripts),
+  // Full mode: interleaved site-builder sidebar (collections + root skripts),
   // shared with the /c/ content routes via src/lib/sidebar-items.ts.
   const sidebarData = organization.sidebarBehavior === 'full'
     ? await getOrgSidebarData(organization.id, orgSlug)

@@ -16,7 +16,7 @@ const SIDEBAR_COLLAPSED_KEY = 'eduskript:dashboard-sidebar-collapsed'
 // Per-site authoring items (site-scoped URLs). A teacher normally has one
 // site; superadmin-granted extra sites each get their own stacked block.
 const siteNavItems = [
-  { name: 'Page Builder', suffix: '/page-builder', icon: BookOpen },
+  { name: 'Site Builder', suffix: '/site-builder', icon: BookOpen },
   { name: 'Settings', suffix: '/settings', icon: NotebookCog },
 ]
 
@@ -39,7 +39,7 @@ const studentNavigation = [
 
 // Organization navigation items (relative to org)
 const orgNavigationItems = [
-  { name: 'Page Builder', suffix: '/page-builder', icon: BookOpen },
+  { name: 'Site Builder', suffix: '/site-builder', icon: BookOpen },
   { name: 'Settings', suffix: '/settings', icon: Settings },
   { name: 'Members', suffix: '/members', icon: Users },
   { name: 'Domains', suffix: '/domains', icon: Globe },
@@ -302,9 +302,9 @@ export function DashboardSidebar() {
                       const Icon = item.icon
                       const href = `/dashboard/site/${site.id}${item.suffix}`
                       const isActive = pathname === href ||
-                        (item.suffix === '/page-builder' &&
+                        (item.suffix === '/site-builder' &&
                           site.order === 0 &&
-                          (pathname === '/dashboard' || pathname === '/dashboard/page-builder'))
+                          (pathname === '/dashboard' || pathname === '/dashboard/site-builder'))
 
                       return (
                         <Link
@@ -330,18 +330,18 @@ export function DashboardSidebar() {
                 <div className="mb-2">
                   <SectionHeader title={userName} isCollapsed={isCollapsed} />
                   <Link
-                    href="/dashboard/page-builder"
+                    href="/dashboard/site-builder"
                     className={cn(
                       'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
-                      pathname === '/dashboard/page-builder' || pathname === '/dashboard'
+                      pathname === '/dashboard/site-builder' || pathname === '/dashboard'
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                       isCollapsed ? 'justify-center px-2' : ''
                     )}
-                    title={isCollapsed ? 'Page Builder' : undefined}
+                    title={isCollapsed ? 'Site Builder' : undefined}
                   >
                     <BookOpen className="w-5 h-5" />
-                    {!isCollapsed && <span>Page Builder</span>}
+                    {!isCollapsed && <span>Site Builder</span>}
                   </Link>
                 </div>
               )}

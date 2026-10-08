@@ -51,7 +51,7 @@ async function main() {
   console.log('')
   console.log('🎯 Next Steps:')
   console.log('   1. Sign in with the admin credentials')
-  console.log('   2. Click "Insert Example Data" in the page builder to add sample content')
+  console.log('   2. Click "Insert Example Data" in the site builder to add sample content')
   console.log('   3. Explore the example algebra lessons with LaTeX math and Python code!')
   console.log('')
 }

@@ -2,9 +2,49 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { CircleCheckBig, CircleMinus, EyeOff } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 
-type VisibilityState = 'draft' | 'published' | 'unlisted'
+export type VisibilityState = 'draft' | 'published' | 'unlisted'
+
+export function getVisibilityState(isPublished: boolean, isUnlisted: boolean): VisibilityState {
+  if (!isPublished) return 'draft'
+  if (isUnlisted) return 'unlisted'
+  return 'published'
+}
+
+export const visibilityConfig: Record<VisibilityState, {
+  label: string
+  dot: string
+  text: string
+  description: (type: 'skript' | 'page') => string
+}> = {
+  draft: {
+    label: 'Draft',
+    dot: 'bg-red-500',
+    text: 'text-red-600 dark:text-red-400',
+    description: (type) => `Only authors can see this ${type}.`,
+  },
+  unlisted: {
+    label: 'Unlisted',
+    dot: 'bg-violet-500',
+    text: 'text-violet-600 dark:text-violet-400',
+    description: () => 'Anyone with the link can open it. Hidden from the sidebar and search.',
+  },
+  published: {
+    label: 'Published',
+    dot: 'bg-success',
+    text: 'text-success',
+    description: () => 'Visible on your site, in the sidebar and in search.',
+  },
+}
+
+const ORDER: VisibilityState[] = ['draft', 'unlisted', 'published']
+
+/** Coloured status dot, shared by the toggle and read-only markers (page lists). */
+export function VisibilityDot({ state, className = '' }: { state: VisibilityState; className?: string }) {
+  return <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${visibilityConfig[state].dot} ${className}`} />
+}
 
 interface PublishToggleProps {
   type: 'skript' | 'page'
@@ -13,48 +53,21 @@ interface PublishToggleProps {
   isUnlisted?: boolean
   onToggle: (newIsPublished: boolean, newIsUnlisted: boolean) => void
   size?: 'sm' | 'md' | 'lg'
+  /** false = dot only (dense lists); the popover is the same. */
   showText?: boolean
+  /** Public path of the item; shown with copy + open in the popover when not a draft. */
+  publicUrl?: string | null
+  /** Why the public link can't be opened even though this item is visible (e.g. skript is a draft). */
+  viewBlockedReason?: string | null
+  onOpenPublic?: () => void
 }
 
-function getState(isPublished: boolean, isUnlisted: boolean): VisibilityState {
-  if (!isPublished) return 'draft'
-  if (isUnlisted) return 'unlisted'
-  return 'published'
-}
-
-// Cycle: draft → published → unlisted → draft
-function nextState(state: VisibilityState): VisibilityState {
-  if (state === 'draft') return 'published'
-  if (state === 'published') return 'unlisted'
-  return 'draft'
-}
-
-const stateConfig: Record<VisibilityState, {
-  label: string
-  color: string
-  icon: typeof CircleCheckBig
-  tooltip: string
-}> = {
-  draft: {
-    label: 'Draft',
-    color: 'text-red-600 hover:text-red-600/80 dark:text-red-400 dark:hover:text-red-400/80',
-    icon: CircleMinus,
-    tooltip: 'Publish',
-  },
-  published: {
-    label: 'Published',
-    color: 'text-success hover:text-success/80',
-    icon: CircleCheckBig,
-    tooltip: 'Make unlisted',
-  },
-  unlisted: {
-    label: 'Unlisted',
-    color: 'text-violet-500 hover:text-violet-500/80',
-    icon: EyeOff,
-    tooltip: 'Unpublish',
-  },
-}
-
+/**
+ * Visibility control (YouTube/Notion pattern): a status button that opens a
+ * popover with an explicit Draft / Unlisted / Published choice plus the public
+ * link (copy, open). Replaces the former click-to-cycle icon and the separate
+ * eye "view page" button.
+ */
 export function PublishToggle({
   type,
   itemId,
@@ -62,16 +75,20 @@ export function PublishToggle({
   isUnlisted: initialIsUnlisted = false,
   onToggle,
   size = 'sm',
-  showText = true
+  showText = true,
+  publicUrl,
+  viewBlockedReason,
+  onOpenPublic,
 }: PublishToggleProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState<VisibilityState | null>(null)
   const [state, setState] = useState<VisibilityState>(
-    getState(initialIsPublished, initialIsUnlisted)
+    getVisibilityState(initialIsPublished, initialIsUnlisted)
   )
 
-  const handleToggle = async () => {
-    setIsLoading(true)
-    const next = nextState(state)
+  const choose = async (next: VisibilityState) => {
+    if (next === state || saving) return
+    setSaving(next)
     const newIsPublished = next !== 'draft'
     const newIsUnlisted = next === 'unlisted'
     try {
@@ -79,45 +96,142 @@ export function PublishToggle({
       const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          isPublished: newIsPublished,
-          isUnlisted: newIsUnlisted
-        })
+        body: JSON.stringify({ isPublished: newIsPublished, isUnlisted: newIsUnlisted }),
       })
-
       if (response.ok) {
         setState(next)
         onToggle(newIsPublished, newIsUnlisted)
       } else {
-        console.error(`Failed to toggle ${type} publish status`)
+        console.error(`Failed to change ${type} visibility`)
       }
     } catch (error) {
-      console.error(`Error toggling ${type} publish status:`, error)
+      console.error(`Error changing ${type} visibility:`, error)
     } finally {
-      setIsLoading(false)
+      setSaving(null)
     }
   }
 
-  const iconSize = size === 'lg' ? 'w-5 h-5' : size === 'md' ? 'w-4 h-4' : 'w-3 h-3'
+  const config = visibilityConfig[state]
   const buttonSize = size === 'lg' ? 'default' : 'sm'
-  const config = stateConfig[state]
-  const Icon = config.icon
 
   return (
-    <Button
-      variant="ghost"
-      size={buttonSize}
-      onClick={handleToggle}
-      disabled={isLoading}
-      className={`${config.color} px-2`}
-      title={`${config.tooltip} ${type}`}
-    >
-      <Icon className={iconSize} />
-      {showText && (
-        <span className="ml-1 text-xs">
-          {config.label}
-        </span>
-      )}
-    </Button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size={buttonSize}
+          className={`gap-1.5 px-2 ${config.text}`}
+          title={`${type === 'skript' ? 'Skript' : 'Page'} visibility: ${config.label}`}
+        >
+          <VisibilityDot state={state} />
+          {showText && <span className="text-xs font-medium">{config.label}</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
+          {type === 'skript' ? 'Skript' : 'Page'} visibility
+        </div>
+        <div role="radiogroup" className="p-1">
+          {ORDER.map((s) => {
+            const c = visibilityConfig[s]
+            const selected = s === state
+            return (
+              <button
+                key={s}
+                role="radio"
+                aria-checked={selected}
+                onClick={() => void choose(s)}
+                disabled={!!saving}
+                className={`flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left hover:bg-muted disabled:opacity-60 ${selected ? 'bg-muted' : ''}`}
+              >
+                <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-foreground' : 'border-muted-foreground/50'}`}>
+                  {saving === s
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : selected && <span className="h-2 w-2 rounded-full bg-foreground" />}
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 text-sm font-medium">
+                    <VisibilityDot state={s} />
+                    {c.label}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">{c.description(type)}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        {publicUrl && state !== 'draft' && (
+          <div className="space-y-2 border-t px-3 py-2.5">
+            <PublicLinkRow
+              publicUrl={publicUrl}
+              label={`Open ${type}`}
+              blockedReason={viewBlockedReason}
+              onOpen={onOpenPublic}
+            />
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/**
+ * Public URL with copy + open. Shared by the visibility popover and the page
+ * settings popover. Shows `blockedReason` instead when the URL isn't reachable.
+ */
+export function PublicLinkRow({
+  publicUrl,
+  label,
+  blockedReason,
+  onOpen,
+}: {
+  publicUrl: string
+  label: string
+  blockedReason?: string | null
+  onOpen?: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const absoluteUrl = typeof window !== 'undefined'
+    ? new URL(publicUrl, window.location.origin).toString()
+    : publicUrl
+
+  if (blockedReason) {
+    return <p className="text-xs text-amber-700 dark:text-amber-400">{blockedReason}</p>
+  }
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(absoluteUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard denied (insecure context) — the URL is still selectable in the field.
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-1">
+        <input
+          readOnly
+          value={absoluteUrl}
+          onFocus={(e) => e.currentTarget.select()}
+          className="h-8 min-w-0 flex-1 rounded-md border bg-muted px-2 font-mono text-xs text-muted-foreground outline-none"
+        />
+        <Button variant="ghost" size="sm" onClick={() => void copy()} title="Copy link">
+          {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+        </Button>
+      </div>
+      <a
+        href={publicUrl}
+        target="_blank"
+        rel="noopener"
+        onClick={() => onOpen?.()}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        {label}
+      </a>
+    </>
   )
 }

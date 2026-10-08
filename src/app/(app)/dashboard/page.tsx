@@ -10,6 +10,6 @@ export default async function DashboardPage() {
     redirect('/dashboard/my-classes')
   }
 
-  // Teachers and others go to page-builder
-  redirect('/dashboard/page-builder')
+  // Teachers and others go to site-builder
+  redirect('/dashboard/site-builder')
 }

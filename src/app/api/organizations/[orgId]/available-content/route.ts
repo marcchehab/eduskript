@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         site: { select: { userId: true, organizationId: true } },
         collectionSkripts: {
           include: {
-            // Mirror /api/collections: the page builder reads skript.authors
+            // Mirror /api/collections: the site builder reads skript.authors
             // off the dragged collection to compute per-skript permissions.
             // Without authors here the drag handler sees `undefined` and
             // renders every skript as "Access Revoked" until a refresh.

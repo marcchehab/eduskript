@@ -48,14 +48,14 @@ interface PageItem {
   };
 }
 
-interface PageBuilderContext {
+interface SiteBuilderContext {
   type: "user" | "organization";
   organizationId?: string;
   // For type 'user': the specific site new collections should attach to.
   siteId?: string;
 }
 
-interface PageBuilderProps {
+interface SiteBuilderProps {
   items: PageItem[];
   onItemsChange?: (
     items: PageItem[],
@@ -84,10 +84,10 @@ interface PageBuilderProps {
     parentId?: string;
     fromLibrary?: boolean;
   } | null;
-  context?: PageBuilderContext;
+  context?: SiteBuilderContext;
 }
 
-export function PageBuilder({
+export function SiteBuilder({
   items,
   onItemsChange,
   onPreview,
@@ -97,7 +97,7 @@ export function PageBuilder({
   onCollectionUpdate,
   draggedItem,
   context = { type: "user" },
-}: PageBuilderProps) {
+}: SiteBuilderProps) {
   // Determine the frontpage URL based on context
   const frontpageUrl =
     context.type === "organization" && context.organizationId
@@ -136,7 +136,7 @@ export function PageBuilder({
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Layout className="w-5 h-5" />
-            Your Page
+            Your Site
           </CardTitle>
           <div className="flex gap-2">
             <Link href={frontpageUrl}>
@@ -165,12 +165,12 @@ export function PageBuilder({
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Drag collections or skripts from the library to build your page.
+          Drag collections or skripts from the library to build your site.
         </p>
       </CardHeader>
       <CardContent>
         {/* Outer droppable only accepts drops in the empty state — the very
-            first item dropped onto a blank page builder. Once items exist
+            first item dropped onto a blank site builder. Once items exist
             we disable it so it stops shadowing nested droppables: root drops
             then happen via explicit RootGap strips between items, and
             collection-internal drops resolve to the per-collection droppables
@@ -178,7 +178,7 @@ export function PageBuilder({
             outer droppable when a drag overlaps a nested one, so we have to
             structurally remove the outer from the candidate set rather than
             rely on z-index/priority. */}
-        <Droppable droppableId="page-builder" isDropDisabled={items.length > 0}>
+        <Droppable droppableId="site-builder" isDropDisabled={items.length > 0}>
           {(provided) => (
             <div
               {...provided.droppableProps}
@@ -191,12 +191,12 @@ export function PageBuilder({
             >
               {items.length === 0 ? (
                 <div
-                  id="page-builder-empty-drop-zone"
+                  id="site-builder-empty-drop-zone"
                   className="text-center max-w-lg mx-auto"
                 >
                   <h3 className="text-lg font-medium text-muted-foreground">
                     Drag a skript or collection from the library to add it to
-                    your page
+                    your site
                   </h3>
                   {provided.placeholder}
                 </div>
@@ -207,7 +207,7 @@ export function PageBuilder({
                     .sort((a, b) => a.order - b.order)
                     .map((item, index) => (
                       <Fragment key={item.id}>
-                        <PageBuilderItem
+                        <SiteBuilderItem
                           item={item}
                           index={index}
                           onRemove={handleRemoveItem}
@@ -277,7 +277,7 @@ function RootGap({ index }: { index: number }) {
   );
 }
 
-interface PageBuilderItemProps {
+interface SiteBuilderItemProps {
   item: PageItem;
   index: number;
   onRemove: (id: string, parentId?: string) => void;
@@ -298,7 +298,7 @@ interface PageBuilderItemProps {
   } | null;
 }
 
-function PageBuilderItem({
+function SiteBuilderItem({
   item,
   index,
   onRemove,
@@ -306,7 +306,7 @@ function PageBuilderItem({
   onToggleCollection,
   onCollectionUpdate,
   draggedItem,
-}: PageBuilderItemProps) {
+}: SiteBuilderItemProps) {
   const Icon = item.type === "collection" ? BookOpen : FileText;
   // Root-level skripts use a distinct draggable prefix so the drag-end parser
   // can tell them apart from collections (both render through this component).
@@ -416,7 +416,7 @@ function PageBuilderItem({
                   </h4>
                   <p className="text-xs text-red-500 truncate">
                     Your access was revoked. This content can no longer be
-                    displayed on your page.
+                    displayed on your site.
                   </p>
                 </div>
               ) : (
@@ -483,7 +483,7 @@ function PageBuilderItem({
                 {/* The Droppable's innerRef element owns the visible drop-zone styles
                 (border, padding, min-height). If those sit on a wrapper instead,
                 the Droppable's bounding rect shrinks to its content and drops in
-                the visual gap fall through to the outer `page-builder` Droppable. */}
+                the visual gap fall through to the outer `site-builder` Droppable. */}
                 {item.skripts && item.skripts.length > 0 ? (
                   <Droppable
                     droppableId={`skript-${item.id}`}
@@ -612,7 +612,7 @@ function SimpleSkriptItem({
                   </h5>
                   <p className="text-xs text-red-500 truncate">
                     Your access was revoked. This content can no longer be
-                    displayed on your page.
+                    displayed on your site.
                   </p>
                 </div>
               ) : (

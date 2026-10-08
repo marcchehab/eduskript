@@ -31,5 +31,10 @@ export function usePublicUrl(ownerPageSlug: string | undefined) {
     return `/${ownerPageSlug}/${skriptSlug}/${pageSlug}`
   }
 
-  return { buildPageUrl, isCustomDomain }
+  /** Build a public skript URL (the skript's front page), same host rules as buildPageUrl. */
+  function buildSkriptUrl(skriptSlug: string) {
+    return isCustomDomain ? `/${skriptSlug}` : `/${ownerPageSlug}/${skriptSlug}`
+  }
+
+  return { buildPageUrl, buildSkriptUrl, isCustomDomain }
 }

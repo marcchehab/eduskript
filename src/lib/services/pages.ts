@@ -48,6 +48,13 @@ export class ValidationError extends Error {
   }
 }
 
+export class StaleContentError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StaleContentError'
+  }
+}
+
 export class ConflictError extends Error {
   constructor(message: string) {
     super(message)
@@ -67,6 +74,11 @@ export interface UpdatePagePatch {
   pageType?: string
   examSettings?: unknown
   presentationPublic?: boolean
+  // Optimistic concurrency for content: the PageVersion number the caller's
+  // content is based on. When set and the latest version differs (another tab,
+  // or an editor restored from the router cache after Back), a content change
+  // is rejected with StaleContentError instead of overwriting newer content.
+  baseVersion?: number
 }
 
 export interface CreatePageInput {
@@ -107,7 +119,17 @@ async function loadPageForActor(pageId: string, userId: string, isAdmin: boolean
   return prisma.page.findFirst({
     where: {
       id: pageId,
-      ...(isAdmin ? {} : { authors: { some: { userId } } }),
+      // Page-level authors override skript-level ones; a page without its own
+      // PageAuthor rows inherits the skript's authors (as checkPagePermissions
+      // does). Before, such pages 404'd on save. Inherited access requires
+      // skript permission 'author'; direct PageAuthor rows are not filtered by
+      // permission (unchanged legacy behaviour).
+      ...(isAdmin ? {} : {
+        OR: [
+          { authors: { some: { userId } } },
+          { authors: { none: {} }, skript: { authors: { some: { userId, permission: 'author' } } } },
+        ],
+      }),
     },
     include: {
       skript: {
@@ -413,6 +435,16 @@ export async function updatePageForUser(
   const contentChanged =
     content !== undefined && currentVersion?.content !== content
 
+  if (
+    contentChanged &&
+    rawPatch.baseVersion !== undefined &&
+    (currentVersion?.version ?? 0) !== rawPatch.baseVersion
+  ) {
+    throw new StaleContentError(
+      'This page was changed elsewhere since you opened it (another tab, or an older copy after navigating back). Your edit was not saved.',
+    )
+  }
+
   // Destructive-write guard: a partial-update tool that treats `content: ""`
   // as "set content to empty" silently wipes pages. We require an explicit
   // `allowEmptyContent` opt-in when an empty/whitespace-only content would
@@ -455,12 +487,14 @@ export async function updatePageForUser(
     data: updateData,
   })
 
+  let version = currentVersion?.version ?? 0
   if (contentChanged) {
+    version += 1
     await prisma.pageVersion.create({
       data: {
         pageId,
         content: content || '',
-        version: (currentVersion?.version || 0) + 1,
+        version,
         authorId: userId,
         editSource: ctx.editSource ?? null,
         editClient: ctx.editSource === 'mcp' ? ctx.editClient ?? null : null,
@@ -470,7 +504,21 @@ export async function updatePageForUser(
 
   await invalidatePublicPageCaches(existingPage, updatedPage, userId)
 
-  return updatedPage
+  return { ...updatedPage, version }
+}
+
+/** Current editable state of a page for its editor (freshness check after Back). */
+export async function getPageForEditor(userId: string, pageId: string, ctx: ActorContext = {}) {
+  const page = await loadPageForActor(pageId, userId, !!ctx.isAdmin)
+  if (!page) throw new NotFoundError('Page not found')
+  return {
+    id: page.id,
+    title: page.title,
+    slug: page.slug,
+    description: page.description,
+    content: page.content,
+    version: page.versions[0]?.version ?? 0,
+  }
 }
 
 /**

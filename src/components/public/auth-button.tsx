@@ -138,33 +138,63 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
   const isStudent = session.user?.accountType === 'student'
   const userName = session.user?.name || (isStudent ? 'Student' : 'User')
 
-  // If user can edit this page, show profile picture with edit overlay
+  // Teachers land on the site builder for the site they're actually viewing
+  // (falls back to /dashboard's own primary-site default when unknown) —
+  // without this, a teacher with multiple sites (or viewing via an org page)
+  // always got dropped on their primary site's builder regardless of which
+  // site they clicked from. Students never resolve editUrl/canCopy (skipped
+  // below by account type) and only ever see this link, so they must keep
+  // the generic /dashboard — a site-scoped link would 404 for them.
+  const dashboardHref =
+    !isStudent && organizationId
+      ? `/dashboard/org/${organizationId}/site-builder`
+      : !isStudent && siteId
+        ? `/dashboard/site/${siteId}/site-builder`
+        : '/dashboard'
+
+  const profileLink = (
+    <QuestSpotlight step="return_to_builder" label="Try this!">
+      <Link
+        href={dashboardHref}
+        title={`Go to dashboard (${userName})`}
+        className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors inline-flex items-center justify-center"
+      >
+        {session.user?.image ? (
+          // Show profile picture (OAuth image passed through session, not stored for students)
+          <div className="absolute inset-0 overflow-hidden rounded-md">
+            <Image
+              src={session.user.image}
+              alt={userName}
+              fill
+              className="object-cover opacity-90 hover:opacity-100 transition-opacity"
+            />
+          </div>
+        ) : (
+          // Show icon for users without images
+          <UserCheck className="h-4 w-4 text-primary" />
+        )}
+      </Link>
+    </QuestSpotlight>
+  )
+
+  // Authors get a separate Edit button next to the profile button (like
+  // WordPress' admin bar / Confluence): the profile button keeps meaning
+  // "dashboard" everywhere instead of turning into an edit link on own pages.
   if (editUrl && !isStudent) {
     return (
-      <QuestSpotlight step={['return_to_builder', 'return_via_edit_link']} label="Try this!">
-        <Link
-          href={editUrl}
-          title="Edit this page"
-          onClick={() => completeStep('return_via_edit_link')}
-          className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors overflow-hidden inline-flex items-center justify-center"
-        >
-          {session.user?.image ? (
-            <>
-              <Image
-                src={session.user.image}
-                alt={userName}
-                fill
-                className="object-cover"
-              />
-              <div className="absolute inset-0 flex items-center justify-center bg-primary/70">
-                <FilePen className="h-4 w-4 text-primary-foreground" />
-              </div>
-            </>
-          ) : (
-            <FilePen className="h-4 w-4 text-primary" />
-          )}
-        </Link>
-      </QuestSpotlight>
+      <div className="inline-flex items-center gap-1.5">
+        <QuestSpotlight step="return_via_edit_link" label="Try this!">
+          <Link
+            href={editUrl}
+            title="Edit this page"
+            onClick={() => completeStep('return_via_edit_link')}
+            className="h-8 w-8 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition-colors inline-flex items-center justify-center"
+          >
+            <FilePen className="h-4 w-4" />
+          </Link>
+        </QuestSpotlight>
+        {profileLink}
+      </div>
     )
   }
 
@@ -205,22 +235,16 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
 
     return (
       <>
-        <button
-          onClick={openCopyDialog}
-          title="Copy this page to your skripts"
-          className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors overflow-hidden inline-flex items-center justify-center"
-        >
-          {session.user?.image ? (
-            <>
-              <Image src={session.user.image} alt={userName} fill className="object-cover" />
-              <div className="absolute inset-0 flex items-center justify-center bg-primary/70">
-                <Copy className="h-4 w-4 text-primary-foreground" />
-              </div>
-            </>
-          ) : (
-            <Copy className="h-4 w-4 text-primary" />
-          )}
-        </button>
+        <div className="inline-flex items-center gap-1.5">
+          <button
+            onClick={openCopyDialog}
+            title="Copy this page to your skripts"
+            className="h-8 w-8 rounded-md border border-border bg-card text-primary hover:bg-muted transition-colors inline-flex items-center justify-center"
+          >
+            <Copy className="h-4 w-4" />
+          </button>
+          {profileLink}
+        </div>
 
         <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
           <DialogContent className="sm:max-w-md">
@@ -269,42 +293,5 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
     )
   }
 
-  // Teachers land on the page builder for the site they're actually viewing
-  // (falls back to /dashboard's own primary-site default when unknown) —
-  // without this, a teacher with multiple sites (or viewing via an org page)
-  // always got dropped on their primary site's builder regardless of which
-  // site they clicked from. Students never resolve editUrl/canCopy (skipped
-  // above by account type) and always reach this branch, so they must keep
-  // the generic /dashboard — a site-scoped link would 404 for them.
-  const dashboardHref =
-    !isStudent && organizationId
-      ? `/dashboard/org/${organizationId}/page-builder`
-      : !isStudent && siteId
-        ? `/dashboard/site/${siteId}/page-builder`
-        : '/dashboard'
-
-  return (
-    <QuestSpotlight step="return_to_builder" label="Try this!">
-      <Link
-        href={dashboardHref}
-        title={`Go to dashboard (${userName})`}
-        className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors inline-flex items-center justify-center"
-      >
-        {session.user?.image ? (
-          // Show profile picture (OAuth image passed through session, not stored for students)
-          <div className="absolute inset-0 overflow-hidden rounded-md">
-            <Image
-              src={session.user.image}
-              alt={userName}
-              fill
-              className="object-cover opacity-90 hover:opacity-100 transition-opacity"
-            />
-          </div>
-        ) : (
-          // Show icon for users without images
-          <UserCheck className="h-4 w-4 text-primary" />
-        )}
-      </Link>
-    </QuestSpotlight>
-  )
+  return profileLink
 }

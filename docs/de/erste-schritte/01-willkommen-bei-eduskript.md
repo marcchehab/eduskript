@@ -9,7 +9,7 @@ Um loszulegen, melde dich an und/oder **<span class="es-color-red">klicke auf de
 
 ![](frontpage.excalidraw.light.svg)
 
-## Der Page Builder
+## Der Site Builder
 
 **<span class="es-color-blue">Platziere Skripts auf deiner öffentlichen Seite (blau)</span>**, indem du sie **<span class="es-color-red">aus deiner Bibliothek (rot)</span>** hineinziehst.
 

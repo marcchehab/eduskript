@@ -10,11 +10,11 @@ interface Line {
   y2: number
 }
 
-// Shown only while the page builder is empty. Points from the drag handle of
+// Shown only while the site builder is empty. Points from the drag handle of
 // the first skript in the Content Library to the empty drop zone, hinting at
 // drag-and-drop as an alternative to "Start from scratch" / "Examples".
 // Anchors are looked up by id (rather than refs) since the two elements live
-// in sibling component trees (ContentLibrary vs PageBuilder) with no shared
+// in sibling component trees (ContentLibrary vs SiteBuilder) with no shared
 // parent that owns both.
 export function EmptyPageDragHint({ watch }: { watch?: number | string }) {
   const [line, setLine] = useState<Line | null>(null)
@@ -22,7 +22,7 @@ export function EmptyPageDragHint({ watch }: { watch?: number | string }) {
   useEffect(() => {
     const measure = () => {
       const from = document.getElementById('content-library-first-skript-hint')
-      const to = document.getElementById('page-builder-empty-drop-zone')
+      const to = document.getElementById('site-builder-empty-drop-zone')
       if (!from || !to) {
         setLine(null)
         return
@@ -34,7 +34,7 @@ export function EmptyPageDragHint({ watch }: { watch?: number | string }) {
       const targetX = toRect.right - 16
       const targetY = toRect.top + 24
       // Only draw a third of the way to the drop zone — a short nudge
-      // toward the page builder reads better than a line spanning the gap.
+      // toward the site builder reads better than a line spanning the gap.
       setLine({
         x1,
         y1,

@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, use } from 'react'
-import { PageBuilderInterface } from '@/components/dashboard/page-builder-interface'
+import { SiteBuilderInterface } from '@/components/dashboard/site-builder-interface'
 import { Building2 } from 'lucide-react'
 
 interface Organization {
@@ -13,7 +13,7 @@ interface Organization {
   customDomain: string | null
 }
 
-export default function OrgPageBuilderPage({
+export default function OrgSiteBuilderPage({
   params,
 }: {
   params: Promise<{ orgId: string }>
@@ -45,7 +45,7 @@ export default function OrgPageBuilderPage({
         // admin. Without this they landed here from the public profile
         // button and got an "Access Denied" dialog on an empty builder.
         if (data.role !== 'owner' && data.role !== 'admin') {
-          router.replace('/dashboard/page-builder')
+          router.replace('/dashboard/site-builder')
           return
         }
 
@@ -65,7 +65,7 @@ export default function OrgPageBuilderPage({
   if (status === 'loading' || loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
-        <p>Loading page builder...</p>
+        <p>Loading site builder...</p>
       </div>
     )
   }
@@ -90,10 +90,10 @@ export default function OrgPageBuilderPage({
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Building2 className="h-6 w-6 text-muted-foreground" />
-        <h1 className="text-3xl font-bold">{organization.name} Page Builder</h1>
+        <h1 className="text-3xl font-bold">{organization.name} Site Builder</h1>
       </div>
 
-      <PageBuilderInterface
+      <SiteBuilderInterface
         context={{
           type: 'organization',
           organizationId: orgId,

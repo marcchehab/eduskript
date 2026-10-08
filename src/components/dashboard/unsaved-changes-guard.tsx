@@ -121,5 +121,9 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UnsavedChangesGuardO
     </Dialog>
   )
 
-  return { dialog }
+  // True once the user chose Discard (or Save) in the dialog, so callers can
+  // skip their own save-on-leave.
+  const wasBypassed = () => bypassRef.current
+
+  return { dialog, wasBypassed }
 }

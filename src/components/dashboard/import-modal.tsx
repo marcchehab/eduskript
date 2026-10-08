@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * "Import" button + modal in the page builder's content library.
+ * "Import" button + modal in the site builder's content library.
  * One drop zone, routed by file type:
  *   - .zip → Eduskript export, imported in the browser (zip-import-panel.tsx)
  *   - .docx/.doc/.odt/.rtf/.pdf or pasted text → document importer

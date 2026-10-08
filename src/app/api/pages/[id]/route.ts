@@ -8,7 +8,9 @@ import {
   ConflictError,
   NotFoundError,
   PermissionDeniedError,
+  StaleContentError,
   ValidationError,
+  getPageForEditor,
   invalidatePublicPageCaches,
   updatePageForUser,
 } from '@/lib/services/pages'
@@ -26,8 +28,29 @@ function errorToResponse(error: unknown): NextResponse {
   if (error instanceof ConflictError) {
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
+  if (error instanceof StaleContentError) {
+    return NextResponse.json({ error: error.message, stale: true }, { status: 409 })
+  }
   console.error('Error updating page:', error)
   return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+}
+
+// Editor freshness check: the page editor compares this with the state it was
+// rendered with (the router cache can restore an old render on Back).
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const { id } = await params
+  try {
+    return NextResponse.json(await getPageForEditor(session.user.id, id, { isAdmin: session.user.isAdmin }))
+  } catch (error) {
+    return errorToResponse(error)
+  }
 }
 
 export async function PATCH(
@@ -114,7 +137,7 @@ export async function DELETE(
     // keeps listing the deleted page and its URL can stay a cached 404 while
     // the link to it is still shown.
     await invalidatePublicPageCaches(existingPage, existingPage, session.user.id)
-    revalidatePath('/dashboard/page-builder')
+    revalidatePath('/dashboard/site-builder')
 
     return NextResponse.json({ success: true })
   } catch (error) {

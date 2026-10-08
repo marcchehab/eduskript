@@ -50,7 +50,7 @@ export default async function OrgFrontPageEditPage({
       type="organization"
       frontPage={frontPage}
       organization={{ id: organization.id, name: organization.name, slug: organization.site.slug }}
-      backUrl={`/dashboard/org/${orgId}/page-builder`}
+      backUrl={`/dashboard/org/${orgId}/site-builder`}
       previewUrl={previewUrl}
     />
   )

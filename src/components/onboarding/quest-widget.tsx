@@ -80,24 +80,24 @@ const STEP_LABELS: Record<UiLocale, Record<QuestStep, string>> = {
   de: {
     place_skript: "Platziere dein erstes Skript",
     visit_public_page: "Besuche deine öffentliche Seite",
-    return_to_builder: "Zurück zum Page Builder",
+    return_to_builder: "Zurück zum Site Builder",
     open_page_editor: "Öffne ein Skript, um seine Seiten zu bearbeiten",
     rename_skript: "Benenne dein Skript um",
     view_pages: "Sieh dir die anderen Seiten an",
     edit_page_content: "Bearbeite eine Seite",
-    view_via_eye_icon: "Seite mit dem Augen-Symbol ansehen",
+    view_via_eye_icon: "Seite über ihren Status öffnen",
     return_via_edit_link: "Zurück zum Seiten-Editor",
     use_ai_edit: "Mit AI Edit eine Seite ändern",
   },
   en: {
     place_skript: "Place your first skript",
     visit_public_page: "Visit your public page",
-    return_to_builder: "Go back to your page builder",
+    return_to_builder: "Go back to your site builder",
     open_page_editor: "Open a skript to edit its pages",
     rename_skript: "Rename your skript",
     view_pages: "View other pages",
     edit_page_content: "Edit a page",
-    view_via_eye_icon: "Preview a page with the eye icon",
+    view_via_eye_icon: "Open a page via its status",
     return_via_edit_link: "Return to page editor",
     use_ai_edit: "Use AI Edit to change a page",
   },
@@ -122,7 +122,7 @@ const AI_EDIT_PAID_LABEL: Record<UiLocale, { suffix: string; description: string
 const STEP_DESCRIPTIONS: Record<UiLocale, Record<QuestStep, React.ReactNode>> = {
   de: {
     place_skript:
-      "Das ist dein Page Builder. Rechts in deiner Bibliothek liegt bereits ein erstes Skript. Zieh es auf deine Seite, damit es auf deiner öffentlichen Eduskript-Website erscheint.",
+      "Das ist dein Site Builder. Rechts in deiner Bibliothek liegt bereits ein erstes Skript. Zieh es auf deine Site, damit es auf deiner öffentlichen Eduskript-Website erscheint.",
     visit_public_page:
       "Super. Schau dir jetzt deine öffentliche Seite an und prüfe, ob das Skript erscheint.",
     return_to_builder:
@@ -136,7 +136,7 @@ const STEP_DESCRIPTIONS: Record<UiLocale, Record<QuestStep, React.ReactNode>> = 
     edit_page_content:
       'Bearbeite diese Seite nach Belieben und klick auf "Save", wenn du fertig bist.',
     view_via_eye_icon:
-      "Mit dem Augen-Symbol siehst du die Seite direkt so, wie sie auf deiner öffentlichen Website erscheint.",
+      "Klick auf den Status der Seite (z. B. «Published») und dann auf «Open page»: So siehst du sie, wie sie auf deiner öffentlichen Website erscheint.",
     return_via_edit_link:
       "Mit diesem Bearbeiten-Knopf kommst du direkt zurück in den Editor dieser Seite.",
     use_ai_edit:
@@ -144,11 +144,11 @@ const STEP_DESCRIPTIONS: Record<UiLocale, Record<QuestStep, React.ReactNode>> = 
   },
   en: {
     place_skript:
-      "This is your page builder. We added a first skript to your library on the right. Drag it onto your page so it appears on your public eduskript website.",
+      "This is your site builder. We added a first skript to your library on the right. Drag it onto your site so it appears on your public eduskript website.",
     visit_public_page:
       "Great, now let's look at your public page to see if the skript appeared.",
     return_to_builder:
-      "You're now on your public eduskript website. The skript you just placed is visible in the sidebar. Let's continue building your site by going back to the page builder. Click on your profile icon to go back to the dashboard.",
+      "You're now on your public eduskript website. The skript you just placed is visible in the sidebar. Let's continue building your site by going back to the site builder. Click on your profile icon to go back to the dashboard.",
     open_page_editor:
       "Click on the skript name (edit icon) to get to the editor.",
     rename_skript:
@@ -158,7 +158,7 @@ const STEP_DESCRIPTIONS: Record<UiLocale, Record<QuestStep, React.ReactNode>> = 
     edit_page_content:
       'Now edit this page however you like and press "Save" when you\'re done.',
     view_via_eye_icon:
-      "To directly view your page on your public page, you can use the eye icon.",
+      "Click the page status (e.g. «Published») and then «Open page» to see it as it appears on your public site.",
     return_via_edit_link:
       "You can directly edit this page, by clicking on this edit button.",
     use_ai_edit:
@@ -171,11 +171,11 @@ function detectRouteStep(
   pageSlug: string | null | undefined,
 ): QuestStep | null {
   // The profile-icon link on a teacher's own public page (auth-button.tsx)
-  // sends them to the site- or org-scoped page-builder route, not the bare
-  // /dashboard/page-builder — only the /dashboard fallback (no known site/org
+  // sends them to the site- or org-scoped site-builder route, not the bare
+  // /dashboard/site-builder — only the /dashboard fallback (no known site/org
   // id) redirects through the bare route.
   if (
-    /^\/dashboard\/(?:page-builder|site\/[^/]+\/page-builder|org\/[^/]+\/page-builder)(\/|$)/.test(
+    /^\/dashboard\/(?:site-builder|site\/[^/]+\/site-builder|org\/[^/]+\/site-builder)(\/|$)/.test(
       pathname,
     )
   ) {
@@ -268,7 +268,7 @@ export function OnboardingQuestWidget() {
     });
   }, []);
 
-  // "Come back to the page builder" et al. describe a RETURN — matching them
+  // "Come back to the site builder" et al. describe a RETURN — matching them
   // to any visit of that route (including the very first, before earlier
   // steps are done) marks them complete before the user has done anything.
   // Only auto-complete a route-detected step when it's actually next in the
@@ -285,7 +285,7 @@ export function OnboardingQuestWidget() {
 
   if (!state || state.dismissed) return null;
 
-  // Don't appear before the teacher reaches the page builder: right after
+  // Don't appear before the teacher reaches the site builder: right after
   // OAuth signup the user is still on /auth/complete-profile, and the widget
   // rendered on top of that (providers.tsx mounts it on every route). Until
   // the quest has actually started (first step completed sets startedAt),

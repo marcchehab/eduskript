@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const { title, description, slug, collectionId } = await request.json()
 
     // Validate input. collectionId is OPTIONAL — a skript can live at the root
-    // of a page (no collection); the teacher drags it onto the page builder
+    // of a page (no collection); the teacher drags it onto the site builder
     // afterwards. When a collection IS given we still verify edit permission.
     if (!title || !slug) {
       return NextResponse.json(

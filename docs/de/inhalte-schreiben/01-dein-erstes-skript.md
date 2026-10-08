@@ -41,7 +41,7 @@ Deine öffentliche Seite ist jetzt unter `eduskript.org/<your-slug>` erreichbar.
 
 Der schnellste Weg:
 
-1. **Dashboard → Page builder** — das ist deine Zentrale zum Organisieren von Inhalten
+1. **Dashboard → Site builder** — das ist deine Zentrale zum Organisieren von Inhalten
 2. Klicke auf **+ New collection** — gib einen Titel ein (z.B. «Einführung in die Statistik»)
 3. Klicke in der Sammlung auf **+ New skript** — (z.B. «Deskriptive Statistik»)
 4. Klicke im Skript auf **+ New page** — (z.B. «Mittelwert und Median»)
@@ -51,7 +51,7 @@ Der schnellste Weg:
 Das war's — deine Seite ist unter `eduskript.org/<slug>/intro-stats/descriptive/mean-median` erreichbar.
 
 > [!tip] Alles lässt sich ziehen
-> Sammlungen, Skripts und Seiten lassen sich im Page Builder per Drag-and-Drop neu anordnen. Ziehe ein Skript von einer Sammlung in eine andere. Ziehe eine Seite nach oben oder unten, um ihre Reihenfolge in der Seitenleiste zu ändern. Die Berechtigungsregeln gelten (siehe *Zusammenarbeit*).
+> Sammlungen, Skripts und Seiten lassen sich im Site Builder per Drag-and-Drop neu anordnen. Ziehe ein Skript von einer Sammlung in eine andere. Ziehe eine Seite nach oben oder unten, um ihre Reihenfolge in der Seitenleiste zu ändern. Die Berechtigungsregeln gelten (siehe *Zusammenarbeit*).
 
 ---
 

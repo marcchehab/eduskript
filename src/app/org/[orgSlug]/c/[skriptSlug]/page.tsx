@@ -231,7 +231,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       title: null
     }
 
-    // Full mode: interleaved page-builder sidebar incl. the org's root
+    // Full mode: interleaved site-builder sidebar incl. the org's root
     // skripts (previously missing here — rootSkripts was hardcoded empty).
     const sidebarData = organization.sidebarBehavior === 'full'
       ? await getOrgSidebarData(organization.id, orgSlug)

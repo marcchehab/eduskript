@@ -30,7 +30,7 @@ import { ImportModal } from "./import-modal";
 import { AlertDialogModal } from "@/components/ui/alert-dialog-modal";
 import { useAlertDialog } from "@/hooks/use-alert-dialog";
 import { useRouter } from "next/navigation";
-import type { PageBuilderContext } from "./page-builder-interface";
+import type { SiteBuilderContext } from "./site-builder-interface";
 
 interface LibraryCollection extends Collection {
   collectionSkripts: Array<{
@@ -51,8 +51,8 @@ interface SkriptWithAuthors extends Skript {
 interface ContentLibraryProps {
   onDataLoad?: (data: { collections: any[]; skripts: any[] }) => void;
   refreshTrigger?: number;
-  context?: PageBuilderContext;
-  // A collection edited in the page builder (rename / accent colour). When the
+  context?: SiteBuilderContext;
+  // A collection edited in the site builder (rename / accent colour). When the
   // reference changes we merge it into the library list so the card updates
   // without a full refetch.
   collectionUpdate?: {
@@ -65,7 +65,7 @@ interface ContentLibraryProps {
   // may also be pinned in the layout). Falls back to a library-only refetch.
   onRefresh?: () => void;
   // Renamed a collection from the library's own inline editor. The parent
-  // mirrors it into the page builder (in case the collection is also placed
+  // mirrors it into the site builder (in case the collection is also placed
   // there) and back into `collectionUpdate` for this component's own merge.
   onCollectionRenamed?: (collection: {
     id: string;
@@ -171,7 +171,7 @@ export function ContentLibrary({
         alertDialog.showError(data.error || "Failed to delete collection");
         return;
       }
-      // onRefresh reloads the page builder too (the collection may be pinned
+      // onRefresh reloads the site builder too (the collection may be pinned
       // there); without it, fall back to a library-only refetch.
       if (onRefresh) onRefresh();
       else fetchContent();
@@ -199,7 +199,7 @@ export function ContentLibrary({
       if (res.ok) {
         setCreateCollectionOpen(false);
         setNewCollectionTitle("");
-        // onRefresh also reloads the page builder, in case it needs the
+        // onRefresh also reloads the site builder, in case it needs the
         // collection right away; without it, fall back to a library-only refetch.
         if (onRefresh) onRefresh();
         else fetchContent();

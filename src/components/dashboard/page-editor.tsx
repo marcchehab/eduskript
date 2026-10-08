@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useUnsavedChangesGuard } from '@/components/dashboard/unsaved-changes-guard'
-import { PublishToggle } from '@/components/dashboard/publish-toggle'
+import { PublishToggle, PublicLinkRow, VisibilityDot, getVisibilityState, visibilityConfig } from '@/components/dashboard/publish-toggle'
 import { VersionHistory } from '@/components/dashboard/version-history'
 import { EditModal } from '@/components/dashboard/edit-modal'
 import { ExportSkriptModal } from '@/components/dashboard/export-skript-modal'
@@ -108,13 +108,19 @@ interface PageEditorProps {
   currentUserId: string
   /** Skript is on some site's page (directly or via a collection); see edit/page.tsx. */
   placed: boolean
+  /** Site the skript is shown on (placement, else its collection's site); null if neither. */
+  site: { id: string; slug: string; organizationId: string | null } | null
+  /** Latest PageVersion number the initial content corresponds to (stale-save guard). */
+  baseVersion: number
 }
 
 // The whole-skript AI Edit chat (skript header) is hidden for now — the
 // in-editor AI Edit tab covers the page. Kept, not deleted (2026-10-04).
 const SHOW_SKRIPT_AI_EDIT = false
 
-export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId, placed }: PageEditorProps) {
+const STALE_MESSAGE = 'This page was changed elsewhere since this editor loaded. Copy any unsaved text, then reload to get the latest version.'
+
+export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId, placed, site, baseVersion }: PageEditorProps) {
   const [title, setTitle] = useState(page.title || '')
   const [slug, setSlug] = useState(page.slug || '')
   const [description, setDescription] = useState(page.description || '')
@@ -124,6 +130,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   const [skriptAiOpen, setSkriptAiOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const openHistoryAfterSettingsRef = useRef(false)
   const isFreePlan = useIsFreeTeacher()
 
   const [isSaving, setIsSaving] = useState(false)
@@ -136,13 +143,31 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [versions, setVersions] = useState<PageVersion[]>([])
   const contentRef = useRef(content)
+  // PageVersion the editor content is based on; sent with every save so the
+  // server rejects (409) a save from an outdated editor instead of
+  // overwriting newer content.
+  const baseVersionRef = useRef(baseVersion)
+  const staleRef = useRef(false)
+  const [isStale, setIsStale] = useState(false)
   const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
   const sessionPageSlug = (session?.user as { pageSlug?: string })?.pageSlug
-  // The editor only loads for users who have an author relation to this
-  // skript (verified server-side), so the session pageSlug always resolves
-  // to a valid public URL for the skript via checkSkriptPermissions.
-  const { buildPageUrl } = usePublicUrl(sessionPageSlug)
+  // Public URLs use the slug of the site the skript is shown on, not the
+  // user's primary site (which rendered it under the wrong site and served a
+  // stale cache there). Org sites: the default org's content lives under /c/
+  // on eduskript.org; other orgs' custom domains aren't handled here.
+  const publicSiteSlug = site && !site.organizationId ? site.slug : sessionPageSlug
+  const publicUrl = usePublicUrl(publicSiteSlug)
+  const buildPageUrl = (skriptSlug: string, pageSlug: string) =>
+    site?.organizationId ? `/c/${skriptSlug}/${pageSlug}` : publicUrl.buildPageUrl(skriptSlug, pageSlug)
+  const buildSkriptUrl = (skriptSlug: string) =>
+    site?.organizationId ? `/c/${skriptSlug}` : publicUrl.buildSkriptUrl(skriptSlug)
+  // Back link / "place it" link: the builder of that same site.
+  const siteBuilderHref = !site
+    ? '/dashboard/site-builder'
+    : site.organizationId
+      ? `/dashboard/org/${site.organizationId}/site-builder`
+      : `/dashboard/site/${site.id}/site-builder`
   const alert = useAlertDialog()
   const { completeStep } = useQuestStep()
 
@@ -178,36 +203,11 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     contentRef.current = content
   }, [content])
 
-  const handlePageUpdated = async () => {
-    try {
-      // Fetch the updated page data to check if slug changed
-      const response = await fetch(`/api/pages/${page.id}`)
-      if (response.ok) {
-        const updatedPage = await response.json()
-        if (updatedPage.slug !== page.slug) {
-          // Slug changed, redirect to new URL
-          const newUrl = `/dashboard/skripts/${skript.slug}/pages/${updatedPage.slug}/edit`
-          router.push(newUrl)
-        } else {
-          // Just reload the page data
-          window.location.reload()
-        }
-      } else {
-        // If API call fails, just reload
-        window.location.reload()
-      }
-    } catch (error) {
-      console.error('Error fetching updated page:', error)
-      // If fetch fails, just reload
-      window.location.reload()
-    }
-  }
-
   // Skript-level handlers
   const handleSkriptUpdated = (newSlug?: string) => {
     completeStep('rename_skript')
     if (newSlug) {
-      router.push(`/dashboard/skripts/${newSlug}/pages/${page.slug}/edit`)
+      router.replace(`/dashboard/skripts/${newSlug}/pages/${page.slug}/edit`)
     } else {
       router.refresh()
     }
@@ -223,7 +223,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             method: 'DELETE'
           })
           if (response.ok) {
-            router.push('/dashboard/page-builder')
+            router.push(siteBuilderHref)
           } else {
             alert.showError('Failed to delete skript')
           }
@@ -315,7 +315,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         setMovePageId(null)
         // If we moved the currently-viewed page, navigate to it in the target skript
         if (movePageId === page.id) {
-          router.push(`/dashboard/skripts/${data.targetSkriptSlug}/pages/${data.pageSlug}/edit`)
+          router.replace(`/dashboard/skripts/${data.targetSkriptSlug}/pages/${data.pageSlug}/edit`)
         } else {
           router.refresh()
         }
@@ -406,17 +406,22 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // (/exam/{site}/{skript}/{page}), not the regular page path — students log in
   // there, then SEB opens via the download button.
   const handleCopySebLink = async () => {
-    const userPageSlug = (session?.user as { pageSlug?: string })?.pageSlug
-    if (!userPageSlug) return
+    const examSiteSlug = site?.slug ?? sessionPageSlug
+    if (!examSiteSlug) return
 
-    const examUrl = `https://${window.location.host}/exam/${userPageSlug}/${skript.slug}/${page.slug}`
+    const examUrl = `https://${window.location.host}/exam/${examSiteSlug}/${skript.slug}/${page.slug}`
     await navigator.clipboard.writeText(examUrl)
     setSebLinkCopied(true)
     setTimeout(() => setSebLinkCopied(false), 2000)
   }
 
   // Resolves true when the page was saved (used by the unsaved-changes guard).
-  const handleSave = useCallback(async (): Promise<boolean> => {
+  // stayOnPage: save without following a slug change (used when leaving via Back).
+  const handleSave = useCallback(async (opts?: { stayOnPage?: boolean }): Promise<boolean> => {
+    if (staleRef.current) {
+      alert.showError(STALE_MESSAGE)
+      return false
+    }
     if (!title.trim() || !slug.trim()) {
       alert.showError('Title and slug are required')
       return false
@@ -437,11 +442,14 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           content: contentRef.current,
           pageType,
           examSettings: pageType === 'exam' ? examSettings : null,
-          presentationPublic
+          presentationPublic,
+          baseVersion: baseVersionRef.current,
         })
       })
 
       if (response.ok) {
+        const saved = await response.json().catch(() => null)
+        if (typeof saved?.version === 'number') baseVersionRef.current = saved.version
         setLastSaved(new Date())
         setHasUnsavedChanges(false)
         setJustSaved(true)
@@ -453,15 +461,22 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         // Reload versions to show the new version
         loadVersions()
         // Update URL if slug changed
-        if (slug !== originalSlug) {
+        // replace, not push: the old-slug URL must not stay in history (Back
+        // would land on a dead URL and a save there would revert the slug).
+        if (slug !== originalSlug && !opts?.stayOnPage) {
           const newUrl = `/dashboard/skripts/${skript.slug}/pages/${slug}/edit`
-          router.push(newUrl)
+          router.replace(newUrl)
           return true // Don't continue with other updates since we're navigating
         }
         setIsSaving(false)
         return true
       } else {
         const data = await response.json()
+        if (response.status === 409 && data.stale) {
+          // Stop autosave from retrying; the user has to reload.
+          staleRef.current = true
+          setIsStale(true)
+        }
         alert.showError(data.error || 'Failed to save page')
       }
     } catch (error) {
@@ -487,6 +502,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         setLastSaved(new Date())
         // Reload versions to show the new restoration entry
         loadVersions()
+        // The restore created a new version; base further saves on it.
+        const fresh = await fetch(`/api/pages/${page.id}`).then(r => (r.ok ? r.json() : null)).catch(() => null)
+        if (typeof fresh?.version === 'number') baseVersionRef.current = fresh.version
       } else {
         const data = await response.json()
         alert.showError(data.error || 'Failed to restore version')
@@ -500,15 +518,67 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // Ask Save / Discard / Cancel on in-app link clicks, browser warning on unload.
   const unsavedGuard = useUnsavedChangesGuard({ isDirty: hasUnsavedChanges, onSave: handleSave })
 
+  // Leaving without the guard (browser Back/Forward, programmatic router.push):
+  // save on unmount instead of losing the typing. The request outlives the
+  // unmount since App Router navigations don't unload the page. A popstate
+  // listener didn't work: Next's own listener (registered first) unmounts the
+  // editor synchronously before ours runs. Skipped after Discard in the guard
+  // dialog and for a stale editor.
+  const hasUnsavedRef = useRef(hasUnsavedChanges)
+  const handleSaveRef = useRef(handleSave)
+  const guardRef = useRef(unsavedGuard)
+  useEffect(() => {
+    hasUnsavedRef.current = hasUnsavedChanges
+    handleSaveRef.current = handleSave
+    guardRef.current = unsavedGuard
+  }, [hasUnsavedChanges, handleSave, unsavedGuard])
+  useEffect(() => {
+    return () => {
+      if (hasUnsavedRef.current && !staleRef.current && !guardRef.current.wasBypassed()) {
+        void handleSaveRef.current({ stayOnPage: true })
+      }
+    }
+  }, [])
+
+  // Freshness check on mount: Back/Forward re-mounts the editor from the
+  // router cache, i.e. with the content of the FIRST visit. Compare with the
+  // server and load the newer state (or mark the editor stale if the user
+  // already typed). Without this, saving there overwrote newer content.
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/pages/${page.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((fresh: { title: string; slug: string; description: string | null; content: string; version: number } | null) => {
+        if (cancelled || !fresh || fresh.version === baseVersionRef.current) return
+        if (hasUnsavedRef.current) {
+          staleRef.current = true
+          setIsStale(true)
+          return
+        }
+        setTitle(fresh.title)
+        setSlug(fresh.slug)
+        setDescription(fresh.description || '')
+        setContent(fresh.content)
+        contentRef.current = fresh.content
+        baseVersionRef.current = fresh.version
+        setHasUnsavedChanges(false)
+        if (fresh.slug !== page.slug) {
+          router.replace(`/dashboard/skripts/${skript.slug}/pages/${fresh.slug}/edit`)
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [page.id, page.slug, skript.slug, router])
+
   // Auto-save every 30 seconds if there are unsaved changes
   useEffect(() => {
-    if (hasUnsavedChanges) {
+    if (hasUnsavedChanges && !isStale) {
       const timer = setTimeout(() => {
         handleSave()
       }, 30000)
       return () => clearTimeout(timer)
     }
-  }, [hasUnsavedChanges, handleSave])
+  }, [hasUnsavedChanges, isStale, handleSave])
 
   // Save with Ctrl+S and Escape to exit fullscreen
   useEffect(() => {
@@ -597,17 +667,13 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 {p.title}
                 {p.pageType === 'exam' && <span className="text-muted-foreground font-normal"> (exam)</span>}
               </span>
-              {/* Visibility marker — mirrors PublishToggle's icon/color
-                  language so the read-only indicator and the interactive
-                  toggle speak the same visual vocabulary. */}
+              {/* Visibility marker — same dot as PublishToggle. */}
               {(() => {
-                const state = !p.isPublished ? 'draft' : p.isUnlisted ? 'unlisted' : 'published'
-                const Icon = state === 'draft' ? CircleMinus : state === 'unlisted' ? EyeOff : CircleCheckBig
-                const color = state === 'draft' ? 'text-red-600 dark:text-red-400' : state === 'unlisted' ? 'text-violet-500' : 'text-success'
-                const label = state === 'draft' ? 'Draft' : state === 'unlisted' ? 'Unlisted' : 'Published'
+                const state = getVisibilityState(p.isPublished, !!p.isUnlisted)
+                const label = visibilityConfig[state].label
                 return (
-                  <span className={`shrink-0 ${color}`} title={label} aria-label={label}>
-                    <Icon className="w-3.5 h-3.5" />
+                  <span className="shrink-0 px-0.5" title={label} aria-label={label}>
+                    <VisibilityDot state={state} />
                   </span>
                 )
               })()}
@@ -665,7 +731,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   const skriptHeaderContent = (
     <div>
       <div className="flex items-center gap-2 px-3 py-1.5">
-        <Link href="/dashboard/page-builder" className="shrink-0">
+        <Link href={siteBuilderHref} className="shrink-0">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4" />
           </Button>
@@ -683,9 +749,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               itemId={skript.id}
               isPublished={skript.isPublished}
               isUnlisted={skript.isUnlisted}
-              onToggle={() => {}}
-              showText={false}
+              onToggle={() => router.refresh()}
               size="sm"
+              publicUrl={sessionPageSlug ? buildSkriptUrl(skript.slug) : null}
             />
             <QuestSpotlight step="rename_skript" label="Try this!">
               <EditModal
@@ -758,8 +824,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           <span>
             The skript <strong>{skript.title}</strong> is not on your site yet — students only reach it with a direct link.
           </span>
-          <Link href="/dashboard/page-builder" className="underline underline-offset-2">
-            Place it in the page builder
+          <Link href={siteBuilderHref} className="underline underline-offset-2">
+            Place it in the site builder
           </Link>
         </div>
       )}
@@ -837,6 +903,13 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         metadataSlot={
           <div className="space-y-3">
             {/* Page title row — always visible (Save/Fullscreen toggle live here). */}
+            {isStale && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span className="min-w-0 flex-1">{STALE_MESSAGE}</span>
+                <Button size="sm" variant="outline" onClick={() => window.location.reload()}>Reload</Button>
+              </div>
+            )}
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <Input
@@ -849,9 +922,30 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   placeholder="Page title"
                   className="flex-1 min-w-[140px] h-9 text-lg md:text-xl font-semibold border-transparent hover:border-border focus:border-border"
                 />
+                {/* Page URL next to the title: the skript part is fixed (grey),
+                    only the page slug is editable. Saved with the page. */}
+                <label
+                  htmlFor="page-slug"
+                  title="Page URL — only the last part is editable"
+                  className="flex h-8 max-w-full shrink-0 items-center overflow-hidden rounded-md border bg-background font-mono text-xs focus-within:ring-2 focus-within:ring-ring"
+                >
+                  <span className="max-w-[12rem] truncate bg-muted px-2 py-1.5 text-muted-foreground select-none">/{skript.slug}/</span>
+                  <input
+                    id="page-slug"
+                    type="text"
+                    value={slug}
+                    size={Math.max(slug.length + 1, 18)}
+                    onChange={(e) => {
+                      setSlug(e.target.value)
+                      setHasUnsavedChanges(true)
+                    }}
+                    placeholder="page-slug"
+                    className="min-w-0 bg-transparent px-2 outline-none"
+                  />
+                </label>
                 <div className="flex gap-1 md:gap-2 items-center shrink-0">
                   {(
-                    // Description + slug: edited rarely, so they live behind a
+                    // Description: edited rarely, so it lives behind a
                     // settings button instead of taking a full row above the
                     // editor (≈84px measured in the layout test, 2026-10-04).
                     <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -865,7 +959,17 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                           <PageCog className="w-4 h-4" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent align="end" style={{ width: 'min(420px, 92vw)' }} className="border-blue-400/70 p-0 shadow-lg dark:border-blue-500/60">
+                      <PopoverContent
+                        align="end"
+                        // Opening history from here: wait until this popover
+                        // has closed, else its focus return dismisses history.
+                        onCloseAutoFocus={(e) => {
+                          if (!openHistoryAfterSettingsRef.current) return
+                          openHistoryAfterSettingsRef.current = false
+                          e.preventDefault()
+                          setHistoryOpen(true)
+                        }}
+                        style={{ width: 'min(420px, 92vw)' }} className="border-blue-400/70 p-0 shadow-lg dark:border-blue-500/60">
                         <div className="flex items-center gap-3 border-b px-4 py-3">
                           <span className="min-w-0 flex-1">
                             <span className="block text-sm font-medium">Page type</span>
@@ -913,24 +1017,27 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                             />
                             <p className="text-xs text-muted-foreground">Optional. Shown in search results and link previews.</p>
                           </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="page-slug" className="text-xs font-medium">URL</Label>
-                            <div className="flex h-8 items-center overflow-hidden rounded-md border bg-background text-sm focus-within:ring-2 focus-within:ring-ring">
-                              <span className="max-w-[45%] shrink-0 truncate border-r bg-muted px-2 py-1.5 text-xs text-muted-foreground" title={`…/${skript.slug}/`}>…/{skript.slug}/</span>
-                              <input
-                                id="page-slug"
-                                type="text"
-                                value={slug}
-                                onChange={(e) => {
-                                  setSlug(e.target.value)
-                                  setHasUnsavedChanges(true)
-                                }}
-                                placeholder="page-slug"
-                                className="min-w-0 flex-1 bg-transparent px-2 font-mono text-sm outline-none"
+                          {sessionPageSlug && (
+                            <div className="space-y-1.5">
+                              <span className="block text-xs font-medium">Link</span>
+                              <PublicLinkRow
+                                publicUrl={buildPageUrl(skript.slug, page.slug)}
+                                label="Go to page"
+                                blockedReason={!page.isPublished || !skript.isPublished
+                                  ? `Not reachable yet: the ${!skript.isPublished ? 'skript' : 'page'} is a draft.`
+                                  : null}
                               />
                             </div>
-                          </div>
-                          <p className="text-xs text-muted-foreground">Description and URL are saved with the page (Save / Ctrl+S).</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">Description is saved with the page (Save / Ctrl+S).</p>
+                          <button
+                            type="button"
+                            onClick={() => { openHistoryAfterSettingsRef.current = true; setSettingsOpen(false) }}
+                            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                          >
+                            <History className="h-3.5 w-3.5" />
+                            Version history{versions.length ? ` (${versions.length})` : ''}
+                          </button>
                         </div>
                         {pageType !== 'exam' && (
                           <label htmlFor="page-presentation" className="flex cursor-pointer items-center gap-3 border-t px-4 py-3">
@@ -969,72 +1076,24 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       </PopoverContent>
                     </Popover>
                   )}
-                  <PublishToggle
-                    type="page"
-                    itemId={page.id}
-                    isPublished={page.isPublished}
-                    isUnlisted={page.isUnlisted}
-                    onToggle={() => router.refresh()}
-                    showText={false}
-                    size="sm"
-                  />
-                  {sessionPageSlug && (
-                    page.isPublished && skript.isPublished ? (
-                      <QuestSpotlight step="view_via_eye_icon" label="Try this!">
-                        <Link
-                          href={buildPageUrl(skript.slug, page.slug)}
-                          prefetch={false}
-                          onClick={() => completeStep('view_via_eye_icon')}
-                        >
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title={page.isUnlisted || skript.isUnlisted
-                              ? 'View public page (unlisted — URL works but hidden from sidebar/search)'
-                              : 'View public page'}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </Link>
-                      </QuestSpotlight>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled
-                        title={!skript.isPublished ? 'Publish the skript to view publicly' : 'Publish the page to view publicly'}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    )
-                  )}
-                  {(
-                    <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title={`Version history${versions.length ? ` (${versions.length})` : ''}${lastSaved ? ` · Last saved ${lastSaved.toLocaleTimeString()}` : ''}`}
-                          className={historyOpen ? 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300' : ''}
-                        >
-                          <History className="w-4 h-4" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" onOpenAutoFocus={(e) => e.preventDefault()} className="w-[min(640px,90vw)] max-h-[70vh] overflow-y-auto border-blue-400/70 p-2 shadow-lg dark:border-blue-500/60">
-                        <VersionHistory
-                          pageId={page.id}
-                          versions={versions}
-                          currentContent={content}
-                          onRestoreVersion={handleRestoreVersion}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  )}
+                  <QuestSpotlight step="view_via_eye_icon" label="Try this!">
+                    <PublishToggle
+                      type="page"
+                      itemId={page.id}
+                      isPublished={page.isPublished}
+                      isUnlisted={page.isUnlisted}
+                      onToggle={() => router.refresh()}
+                      size="sm"
+                      publicUrl={sessionPageSlug ? buildPageUrl(skript.slug, page.slug) : null}
+                      viewBlockedReason={skript.isPublished ? null : 'The skript is a draft, so this page is not reachable yet. Publish the skript first.'}
+                      onOpenPublic={() => completeStep('view_via_eye_icon')}
+                    />
+                  </QuestSpotlight>
                   <QuestSpotlight step="edit_page_content" label="Try this!">
                     {/* Primary + dot when there's something to save; quiet
                         outline "Saved" otherwise, so the state is readable. */}
                     <Button
-                      onClick={handleSave}
+                      onClick={() => void handleSave()}
                       disabled={isSaving}
                       size="sm"
                       variant={hasUnsavedChanges || isSaving ? 'default' : 'outline'}
@@ -1048,6 +1107,38 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       )}
                     </Button>
                   </QuestSpotlight>
+                  {(versions.length > 0 || lastSaved) && (
+                    <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+                      <PopoverTrigger asChild>
+                        {/* Quiet status text, Google-Docs style: last change time
+                            + version count; click opens the history. */}
+                        <button
+                          type="button"
+                          title="Version history"
+                          className={`hidden sm:inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground ${historyOpen ? 'bg-muted text-foreground' : ''}`}
+                        >
+                          {(() => {
+                            const last = lastSaved ?? (versions[0] ? new Date(versions[0].createdAt) : null)
+                            const time = last
+                              ? (last.toDateString() === new Date().toDateString()
+                                ? last.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                : last.toLocaleDateString())
+                              : null
+                            const count = versions.length ? `${versions.length} version${versions.length === 1 ? '' : 's'}` : null
+                            return [time, count].filter(Boolean).join(' · ')
+                          })()}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" onOpenAutoFocus={(e) => e.preventDefault()} className="w-[min(640px,90vw)] max-h-[70vh] overflow-y-auto border-blue-400/70 p-2 shadow-lg dark:border-blue-500/60">
+                        <VersionHistory
+                          pageId={page.id}
+                          versions={versions}
+                          currentContent={content}
+                          onRestoreVersion={handleRestoreVersion}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"

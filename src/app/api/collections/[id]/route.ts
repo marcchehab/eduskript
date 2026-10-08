@@ -173,7 +173,7 @@ export async function DELETE(
 
     // PageLayoutItem.contentId is a plain string, not an FK, so deleting the
     // collection won't cascade to layout rows. Clean them up explicitly —
-    // otherwise the page builder renders a ghost "collection {id}" entry for
+    // otherwise the site builder renders a ghost "collection {id}" entry for
     // a collection that no longer exists.
     await prisma.pageLayoutItem.deleteMany({
       where: { type: 'collection', contentId: id },

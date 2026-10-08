@@ -6,7 +6,7 @@
  * Runs entirely in the browser (src/lib/skript-import-client.ts): parse →
  * preview (new vs. existing) → create structure via server action, then
  * upload attachments/videos directly. Existing slugs are skipped, not
- * overwritten. Formerly the "Import" card below the page builder.
+ * overwritten. Formerly the "Import" card below the site builder.
  */
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'

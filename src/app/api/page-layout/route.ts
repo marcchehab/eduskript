@@ -47,7 +47,7 @@ export async function GET() {
     }
 
     // Return items fully hydrated (collections + their skripts + permissions)
-    // so the page builder renders from one request instead of one API call
+    // so the site builder renders from one request instead of one API call
     // per collection/skript. Collections in a user's own layout live on the
     // user's own site, so canEditSite resolves without org roles.
     const items = await hydratePageLayoutItems(pageLayout.items, {

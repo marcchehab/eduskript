@@ -8,7 +8,7 @@ interface Props {
   canSeed: boolean
 }
 
-export function AdminPageBuilderPlaceholder({ canSeed }: Props) {
+export function AdminSiteBuilderPlaceholder({ canSeed }: Props) {
   const [seeding, setSeeding] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<{ orgId: string; orgSlug: string } | null>(null)
@@ -57,10 +57,10 @@ export function AdminPageBuilderPlaceholder({ canSeed }: Props) {
           <p>Email: <code className="bg-green-500/10 px-1 rounded">teacher@eduskript.org</code></p>
           <p>Password: <code className="bg-green-500/10 px-1 rounded">teacher</code></p>
           <Link
-            href={`/dashboard/org/${result.orgId}/page-builder`}
+            href={`/dashboard/org/${result.orgId}/site-builder`}
             className="inline-block underline font-medium"
           >
-            Go to &ldquo;{result.orgSlug}&rdquo; org page builder →
+            Go to &ldquo;{result.orgSlug}&rdquo; org site builder →
           </Link>
         </div>
       ) : (

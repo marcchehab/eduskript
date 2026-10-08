@@ -126,7 +126,7 @@ Accepting opens up a discussion thread where you can negotiate what to share. Th
 When you share content with a colleague:
 
 - It appears in their **shared with me** section
-- Their main page builder shows their own content + the shared collection/skript/page
+- Their main site builder shows their own content + the shared collection/skript/page
 - The shared content is visually marked (different background, or "shared by Marie" label)
 - They can pin it to their main view if they want it more prominent
 

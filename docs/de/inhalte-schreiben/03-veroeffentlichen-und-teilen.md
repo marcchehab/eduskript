@@ -49,7 +49,7 @@ Drei Orte, um den Zustand umzuschalten:
 
 1. **Obere Symbolleiste des Page Editors** — das Publish-Dropdown
 2. **Seitenliste im Manage-Panel** — Schnellschalter neben jeder Seite
-3. **Page-Builder-Dashboard** — Gesamtansicht, Neuordnung per Drag-and-Drop, Sammelschalter
+3. **Site-Builder-Dashboard** — Gesamtansicht, Neuordnung per Drag-and-Drop, Sammelschalter
 
 Für Skripts verwendest du den Skript-Editor oder das Dashboard.
 

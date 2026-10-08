@@ -402,7 +402,7 @@ console.log("Even numbers:", evens);
     })
 
     // Also place the collection on the org's page layout. The org admin who
-    // runs this seed lands on the org page builder; without this they'd have
+    // runs this seed lands on the org site builder; without this they'd have
     // to drag the tutorial in by hand. available-content already surfaces it
     // (collection lives on a teacher site whose owner is an org owner).
     if (org.site) {

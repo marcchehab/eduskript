@@ -135,7 +135,7 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
       }]
 
   const teacherSite = teacher.sites[0]
-  // Full mode gets the interleaved page-builder sidebar (collections + root
+  // Full mode gets the interleaved site-builder sidebar (collections + root
   // skripts) — same data the [domain] layout renders, so eduskript.org/<slug>
   // matches the custom-domain sidebar. Contextual mode keeps the
   // single-skript siteStructure built above.
