@@ -155,6 +155,41 @@ export async function placedOnSiteWhere(siteId: string): Promise<Prisma.SkriptWh
   return { OR: or }
 }
 
+/**
+ * Rule 3: a teacher may place (show) ANY skript they can ACCESS on a site
+ * they manage — read access suffices (SkriptAuthor 'author' or 'viewer', or a
+ * PageAuthor row on one of its pages). Editing content still requires
+ * 'author' (permissions.ts); placing grants nothing on the content.
+ */
+export async function canPlaceSkript(userId: string, skriptId: string): Promise<boolean> {
+  const n = await prisma.skript.count({
+    where: {
+      id: skriptId,
+      OR: [
+        { authors: { some: { userId } } },
+        { pages: { some: { authors: { some: { userId } } } } },
+      ],
+    },
+  })
+  return n > 0
+}
+
+/** Batch form of canPlaceSkript: the subset of `skriptIds` the user may place. */
+export async function placeableSkriptIds(userId: string, skriptIds: string[]): Promise<Set<string>> {
+  if (skriptIds.length === 0) return new Set()
+  const rows = await prisma.skript.findMany({
+    where: {
+      id: { in: skriptIds },
+      OR: [
+        { authors: { some: { userId } } },
+        { pages: { some: { authors: { some: { userId } } } } },
+      ],
+    },
+    select: { id: true },
+  })
+  return new Set(rows.map(r => r.id))
+}
+
 /** True when the skript is placed on the site. */
 export async function isSkriptPlacedOnSite(skriptId: string, siteId: string): Promise<boolean> {
   const inOwnedCollection = await prisma.collectionSkript.count({

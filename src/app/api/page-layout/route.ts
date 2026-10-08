@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { hydratePageLayoutItems } from '@/lib/page-layout'
+import { canPlaceSkript } from '@/lib/site-access'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /** Look up the user's primary Site id. A user can own multiple sites; page
@@ -98,8 +99,8 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Validate that the user can place each item on their site.
-    // Collections must belong to the user's site; skripts must be authored
-    // by the user.
+    // Collections must belong to the user's site; skripts must be accessible
+    // to the user (read access suffices — src/lib/site-access.ts canPlaceSkript).
     const validatedItems: Array<{ id: string; type: string }> = []
 
     for (const item of items) {
@@ -120,15 +121,9 @@ export async function POST(request: NextRequest) {
           console.warn(`[Page Layout] User ${session.user.email} attempted to add collection ${item.id} without permission`)
         }
       } else if (item.type === 'skript') {
-        const skript = await prisma.skript.findFirst({
-          where: {
-            id: item.id,
-            authors: {
-              some: { userId: session.user.id }
-            }
-          }
-        })
-        if (skript) {
+        // Rule 3 (site scoping): read access (author OR viewer, or a page
+        // share) suffices to PLACE a skript; editing still needs 'author'.
+        if (await canPlaceSkript(session.user.id, item.id)) {
           validatedItems.push(item)
         } else {
           console.warn(`[Page Layout] User ${session.user.email} attempted to add skript ${item.id} without permission`)

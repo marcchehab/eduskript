@@ -4,8 +4,8 @@ import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkCollectionPermissions } from '@/lib/permissions'
+import { placeableSkriptIds } from '@/lib/site-access'
 import { CACHE_TAGS } from '@/lib/cached-queries'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function PUT(
   request: NextRequest,
@@ -26,7 +26,7 @@ export async function PUT(
 
     const collection = await prisma.collection.findUnique({
       where: { id: collectionId },
-      include: { site: { select: { userId: true, organizationId: true } } }
+      include: { site: { select: { userId: true, organizationId: true, slug: true } } }
     })
 
     if (!collection) {
@@ -51,6 +51,21 @@ export async function PUT(
       )
     }
 
+    // Rule 3 (site scoping): skripts already in the collection may stay; newly
+    // added ones need read access (author OR viewer, or a page share). Others
+    // are dropped from the payload rather than failing the whole save.
+    const existingIds = new Set(
+      (await prisma.collectionSkript.findMany({ where: { collectionId }, select: { skriptId: true } }))
+        .map((r) => r.skriptId)
+    )
+    const requested: Array<{ id: string; order: number }> = Array.isArray(skripts) ? skripts : []
+    const newIds = requested.map((s) => s.id).filter((id) => !existingIds.has(id))
+    const allowedNew = await placeableSkriptIds(session.user.id, newIds)
+    const allowedSkripts = requested.filter((s) => existingIds.has(s.id) || allowedNew.has(s.id))
+    if (allowedSkripts.length !== requested.length) {
+      console.warn(`[collections/batch] dropped ${requested.length - allowedSkripts.length} skript(s) without access`)
+    }
+
     // Start a transaction to update all skripts atomically
     await prisma.$transaction(async (tx) => {
       // First, remove all existing CollectionSkript entries for this collection
@@ -64,9 +79,9 @@ export async function PUT(
       // guards against a client payload that lists the same skript twice —
       // without it createMany throws P2002 on the (collectionId, skriptId)
       // unique constraint and the whole save 500s.
-      if (skripts && skripts.length > 0) {
+      if (allowedSkripts.length > 0) {
         await tx.collectionSkript.createMany({
-          data: skripts.map((skript: { id: string; order: number }) => ({
+          data: allowedSkripts.map((skript) => ({
             collectionId: collectionId,
             skriptId: skript.id,
             order: skript.order
@@ -76,18 +91,17 @@ export async function PUT(
       }
     })
 
-    const userSite = await prisma.site.findFirst({
-      where: { userId: session.user.id },
-      orderBy: PRIMARY_SITE_ORDER,
-      select: { slug: true }
-    })
-    if (userSite?.slug) {
-      revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
+    // Placement decides where pages render (site scoping), so invalidate the
+    // collection's OWN site (not the editor's primary site).
+    const siteSlug = collection.site?.slug
+    if (siteSlug) {
+      revalidateTag(CACHE_TAGS.teacherContent(siteSlug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(siteSlug), { expire: 0 })
     }
 
     return NextResponse.json({
       success: true,
-      message: `Updated ${skripts?.length || 0} skripts in collection`
+      message: `Updated ${allowedSkripts.length} skripts in collection`
     })
   } catch (error) {
     console.error('Error updating collection skripts:', error)

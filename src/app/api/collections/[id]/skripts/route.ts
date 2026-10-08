@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkCollectionPermissions } from '@/lib/permissions'
+import { canPlaceSkript } from '@/lib/site-access'
+import { revalidateTag } from 'next/cache'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 
 export async function POST(
   request: NextRequest,
@@ -32,7 +35,7 @@ export async function POST(
     // ownership). Org-admin checks happen further down once we know the site.
     const collection = await prisma.collection.findUnique({
       where: { id: collectionId },
-      include: { site: { select: { userId: true, organizationId: true } } }
+      include: { site: { select: { userId: true, organizationId: true, slug: true } } }
     })
 
     if (!collection) {
@@ -66,6 +69,15 @@ export async function POST(
       return NextResponse.json(
         { error: 'Skript not found' },
         { status: 404 }
+      )
+    }
+
+    // Rule 3 (site scoping): placing needs read access to the skript
+    // (author OR viewer, or a page share). Previously unchecked.
+    if (!(await canPlaceSkript(session.user.id, skriptId))) {
+      return NextResponse.json(
+        { error: 'You need access to this skript to add it to a collection' },
+        { status: 403 }
       )
     }
 
@@ -110,6 +122,13 @@ export async function POST(
 
       return collectionSkript
     })
+
+    // Placement decides where pages render (site scoping): refresh the
+    // collection's site so the newly placed skript is reachable there.
+    if (collection.site?.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(collection.site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(collection.site.slug), { expire: 0 })
+    }
 
     return NextResponse.json({
       success: true,

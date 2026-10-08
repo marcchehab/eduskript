@@ -19,6 +19,7 @@ import { checkCollectionPermissions, checkSkriptPermissions } from '@/lib/permis
 import { generateExcerpt, generateSlug, isReservedSlug } from '@/lib/markdown'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { ensurePageLayoutItem, revalidateSiteContent } from '@/lib/page-layout'
+import { canPlaceSkript } from '@/lib/site-access'
 import {
   ConflictError,
   NotFoundError,
@@ -355,7 +356,9 @@ export interface PlaceSkriptInput {
  * Place an EXISTING skript into a collection (or as a root sidebar item) and
  * ensure the container is in the site's PageLayout. Idempotent: re-placing a
  * skript already in the target collection is a no-op on membership. Requires
- * author on the skript, plus edit on the collection (or site ownership for root).
+ * READ access to the skript (author or viewer, or a page share — rule 3 of
+ * site scoping, src/lib/site-access.ts canPlaceSkript), plus edit on the
+ * collection (or site ownership for root).
  *
  * Note: this does not REMOVE the skript from other collections or the root
  * layout; hydratePageLayoutItems already hides a skript that is both a root
@@ -370,11 +373,11 @@ export async function placeSkriptForUser(
 
   const skript = await prisma.skript.findUnique({
     where: { id: skriptId },
-    include: { authors: { include: { user: { select: { id: true } } } } },
+    select: { id: true },
   })
   if (!skript) throw new NotFoundError('Skript not found')
-  if (!checkSkriptPermissions(userId, skript.authors, ctx.isAdmin).canEdit) {
-    throw new PermissionDeniedError('Cannot edit this skript')
+  if (!ctx.isAdmin && !(await canPlaceSkript(userId, skriptId))) {
+    throw new PermissionDeniedError('You need access to this skript to place it')
   }
 
   if (collectionId) {

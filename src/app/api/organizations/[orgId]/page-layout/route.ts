@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { requireOrgAdmin } from '@/lib/org-auth'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { hydratePageLayoutItems } from '@/lib/page-layout'
+import { canPlaceSkript } from '@/lib/site-access'
 
 interface RouteParams {
   params: Promise<{ orgId: string }>
@@ -90,7 +91,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const adminUserIds = orgAdmins.map((m) => m.userId)
 
     // SECURITY: Collection must belong to this org's site OR an admin's
-    // personal site. Skript must be authored by some org admin.
+    // personal site. Skript must be accessible (read access suffices, rule 3)
+    // to the acting admin, or authored by some org admin (legacy rule).
     const validatedItems: Array<{ id: string; type: string }> = []
 
     for (const item of items) {
@@ -120,7 +122,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             authors: { some: { userId: { in: adminUserIds } } },
           },
         })
-        if (skript) {
+        if (skript || (session?.user?.id && await canPlaceSkript(session.user.id, item.id))) {
           validatedItems.push(item)
         } else {
           console.warn(

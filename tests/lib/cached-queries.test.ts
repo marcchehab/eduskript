@@ -153,7 +153,7 @@ describe('cached-queries', () => {
     it('should return null when skript not found', async () => {
       vi.mocked(prisma.skript.findFirst).mockResolvedValue(null)
 
-      const result = await getPublishedPage('teacher-1', 'algebra', 'intro', 'john')
+      const result = await getPublishedPage('site-1', 'algebra', 'intro', 'john')
 
       expect(result).toBeNull()
     })
@@ -162,7 +162,7 @@ describe('cached-queries', () => {
       // findFirst with isPublished: true in where clause returns null for unpublished skripts
       vi.mocked(prisma.skript.findFirst).mockResolvedValue(null)
 
-      const result = await getPublishedPage('teacher-1', 'algebra', 'intro', 'john')
+      const result = await getPublishedPage('site-1', 'algebra', 'intro', 'john')
 
       expect(result).toBeNull()
     })
@@ -199,12 +199,35 @@ describe('cached-queries', () => {
         pages: [mockPage],
       })
 
-      const result = await getPublishedPage('teacher-1', 'algebra', 'intro', 'john')
+      const result = await getPublishedPage('site-1', 'algebra', 'intro', 'john')
 
       expect(result).not.toBeNull()
       expect(result?.page).toEqual(mockPage)
       expect(result?.collection?.title).toBe('Math')
       expect(result?.skript.slug).toBe('algebra')
+    })
+
+    it('only matches skripts PLACED on the site (site scoping), not by authorship', async () => {
+      vi.mocked(prisma.pageLayout.findUnique).mockResolvedValue({
+        items: [
+          { type: 'skript', contentId: 'root-skript' },
+          { type: 'collection', contentId: 'layout-col' },
+        ],
+      } as never)
+      vi.mocked(prisma.skript.findFirst).mockResolvedValue(null)
+
+      await getPublishedPage('site-1', 'algebra', 'intro', 'john')
+
+      const where = vi.mocked(prisma.skript.findFirst).mock.calls[0][0]!.where as Record<string, unknown>
+      expect(where.slug).toBe('algebra')
+      expect(where.isPublished).toBe(true)
+      // No authorship clause — a teacher's other slugs must not render it.
+      expect(JSON.stringify(where)).not.toContain('authors')
+      expect(where.OR).toEqual([
+        { collectionSkripts: { some: { collection: { siteId: 'site-1' } } } },
+        { id: { in: ['root-skript'] } },
+        { collectionSkripts: { some: { collectionId: { in: ['layout-col'] } } } },
+      ])
     })
 
     it('should return null when page slug not found', async () => {
@@ -227,7 +250,7 @@ describe('cached-queries', () => {
         }],
       })
 
-      const result = await getPublishedPage('teacher-1', 'algebra', 'intro', 'john')
+      const result = await getPublishedPage('site-1', 'algebra', 'intro', 'john')
 
       expect(result).toBeNull()
     })
@@ -390,6 +413,7 @@ describe('getOrgPublishedPage - Access Control', () => {
   })
 
   it('should return page when skript collection is in org page layout', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-org-1' } as never)
     const mockPage = {
       id: 'page-1',
       title: 'Introduction',
@@ -446,7 +470,27 @@ describe('getOrgPublishedPage - Access Control', () => {
     expect(result?.collection?.id).toBe('collection-A')
   })
 
-  it('should prevent access when skript collection is NOT in org page layout (security test)', async () => {
+  it('only queries skripts placed on the org site (site scoping)', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-org-1' } as never)
+    vi.mocked(prisma.pageLayout.findUnique).mockResolvedValue({
+      items: [{ type: 'collection', contentId: 'tutorial-collection' }],
+    } as never)
+    vi.mocked(prisma.skript.findMany).mockResolvedValue([])
+
+    const result = await getOrgPublishedPage('org-1', 'my-org', 'secret-skript', 'page')
+
+    expect(result).toBeNull()
+    const where = vi.mocked(prisma.skript.findMany).mock.calls[0][0]!.where as Record<string, unknown>
+    expect(where.OR).toEqual([
+      { collectionSkripts: { some: { collection: { siteId: 'site-org-1' } } } },
+      { collectionSkripts: { some: { collectionId: { in: ['tutorial-collection'] } } } },
+    ])
+  })
+
+  // The DB query only returns PLACED skripts (asserted above). A placed
+  // candidate whose collection is org-owned but not pinned in the layout is
+  // still served — placement, not nav reachability, decides (site-access.ts).
+  it('serves a placed candidate even when its collection is not pinned in the layout', async () => {
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([
       { userId: 'admin-1' }
     ])
@@ -495,7 +539,6 @@ describe('getOrgPublishedPage - Access Control', () => {
 
     const result = await getOrgPublishedPage('org-1', 'my-org', 'secret-skript', 'page')
 
-    // Should be blocked - secret-collection is NOT in the org's page layout
-    expect(result).toBeNull()
+    expect(result?.page.slug).toBe('page')
   })
 })
