@@ -30,7 +30,10 @@ export async function GET(
 
     // Build the sebs:// URL with the download token
     const host = request.headers.get('host') || 'eduskript.org'
-    const sebsUrl = `sebs://${host}/api/exams/${pageId}/seb-config?download_token=${token}`
+    // Site scoping: forward the client's site so the config's start URL
+    // targets that site's /exam route.
+    const siteId = request.nextUrl.searchParams.get('siteId') ?? ''
+    const sebsUrl = `sebs://${host}/api/exams/${pageId}/seb-config?download_token=${token}&siteId=${encodeURIComponent(siteId)}`
 
     return NextResponse.json({ url: sebsUrl })
   } catch (error) {

@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { QuizData } from '@/lib/userdata/types'
+import { withSite } from '@/lib/site-scope-client'
 
 interface Snapshot {
   id: string
@@ -36,9 +37,9 @@ export function TextAnswerHistory({
 
   useEffect(() => {
     let active = true
-    const url = `/api/exams/${pageId}/component-snapshots?studentId=${encodeURIComponent(
+    const url = withSite(`/api/exams/${pageId}/component-snapshots?studentId=${encodeURIComponent(
       studentId,
-    )}&componentId=${encodeURIComponent(componentId)}`
+    )}&componentId=${encodeURIComponent(componentId)}`)
     fetch(url, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {

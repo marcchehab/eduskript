@@ -15,6 +15,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { runChecksForStudents } from '@/lib/scoring/run-checks.client'
+import { withSite } from '@/lib/site-scope-client'
 
 export interface ComponentReview {
   componentId: string
@@ -180,7 +181,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     const seq = ++reqSeq.current
     const sid = studentId
     setLoading(true)
-    fetch(`/api/exams/${pageId}/review?studentId=${encodeURIComponent(sid)}`, { cache: 'no-store' })
+    fetch(withSite(`/api/exams/${pageId}/review?studentId=${encodeURIComponent(sid)}`), { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {
         if (seq !== reqSeq.current) return // superseded by a newer load — discard
@@ -253,7 +254,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     async (componentId: string, awardedPoints: number | null) => {
       if (!studentId) return
       await enqueueWrite(componentId, () =>
-        fetch(`/api/exams/${pageId}/grading/question`, {
+        fetch(withSite(`/api/exams/${pageId}/grading/question`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ studentId, componentId, awardedPoints }),
@@ -267,7 +268,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     async (componentId: string, feedback: string | null) => {
       if (!studentId) return
       await enqueueWrite(componentId, () =>
-        fetch(`/api/exams/${pageId}/grading/question`, {
+        fetch(withSite(`/api/exams/${pageId}/grading/question`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           // Send only `feedback` so the points override is left untouched.
@@ -289,7 +290,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
       if (value.points !== undefined) criterion.points = value.points
       if (value.comment !== undefined) criterion.comment = value.comment
       await enqueueWrite(componentId, () =>
-        fetch(`/api/exams/${pageId}/grading/question`, {
+        fetch(withSite(`/api/exams/${pageId}/grading/question`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ studentId, componentId, criterion }),
@@ -303,7 +304,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     async (componentId: string, criterionId: string) => {
       if (!studentId) return
       await enqueueWrite(componentId, () =>
-        fetch(`/api/exams/${pageId}/grading/question`, {
+        fetch(withSite(`/api/exams/${pageId}/grading/question`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ studentId, componentId, resetCriterion: criterionId }),
@@ -318,7 +319,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
       if (!studentId) return
       // One request that nulls both fields → the route deletes the row.
       await enqueueWrite(componentId, () =>
-        fetch(`/api/exams/${pageId}/grading/question`, {
+        fetch(withSite(`/api/exams/${pageId}/grading/question`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ studentId, componentId, awardedPoints: null, feedback: null }),
@@ -333,7 +334,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
       if (!studentId) return
       await enqueueWrite(componentId, () =>
         fetch(
-          `/api/exams/${pageId}/scoring/ai?studentId=${encodeURIComponent(studentId)}&componentId=${encodeURIComponent(componentId)}`,
+          withSite(`/api/exams/${pageId}/scoring/ai?studentId=${encodeURIComponent(studentId)}&componentId=${encodeURIComponent(componentId)}`),
           { method: 'DELETE' },
         ).catch(() => {}),
       )

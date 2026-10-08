@@ -9,6 +9,10 @@
  * POST: Reopen exam for a specific student
  * - Deletes their submission record
  * - Allows them to re-enter the exam
+ *
+ * Site scoping: both take `siteId` (query / body) — the personal site the
+ * class toolbar runs on. Sessions, submissions, overrides and audit events
+ * are read/written for that site only.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,6 +22,16 @@ import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
 import { applyHandinSnapshots } from '@/lib/exam-recovery'
 import { normalize, type ExamLifecycleState } from '@/lib/exam-state'
+import { getSiteAccess, isItemPlacedOnSite } from '@/lib/site-access'
+
+/** The page if `userId` owns personal site `siteId` and the page is placed on it. */
+async function getOwnedSitePage(userId: string, pageId: string, siteId: string | null) {
+  if (!siteId) return null
+  const access = await getSiteAccess(userId, siteId)
+  if (!access?.isOwner) return null
+  if (!(await isItemPlacedOnSite(pageId, siteId))) return null
+  return prisma.page.findUnique({ where: { id: pageId }, select: { id: true, skriptId: true } })
+}
 
 interface StudentStatus {
   id: string
@@ -36,9 +50,9 @@ interface StudentStatus {
 }
 
 /**
- * GET /api/exams/[pageId]/students?classId=xxx
- * Get status of all students in a class for this exam
- * Only accessible by page authors who are also the class teacher
+ * GET /api/exams/[pageId]/students?classId=xxx&siteId=yyy
+ * Get status of all students in a class for this exam on one site.
+ * Only accessible by the site owner who is also the class teacher.
  */
 export async function GET(
   request: NextRequest,
@@ -53,6 +67,7 @@ export async function GET(
     const { pageId } = await params
     const { searchParams } = new URL(request.url)
     const classId = searchParams.get('classId')
+    const siteId = searchParams.get('siteId')
 
     if (!classId) {
       return NextResponse.json(
@@ -61,20 +76,10 @@ export async function GET(
       )
     }
 
-    // Verify user is a page author
-    const page = await prisma.page.findFirst({
-      where: {
-        id: pageId,
-        authors: {
-          some: { userId: session.user.id }
-        }
-      },
-      select: {
-        id: true,
-        skriptId: true
-      }
-    })
-
+    // Site scoping: the caller must OWN the personal site the roster is for
+    // (classes only exist on personal sites) and the exam must be placed on it.
+    // Authorship is not required and grants nothing.
+    const page = await getOwnedSitePage(session.user.id, pageId, siteId)
     if (!page) {
       return NextResponse.json(
         { error: 'Page not found or access denied' },
@@ -120,6 +125,8 @@ export async function GET(
       where: {
         userId: { in: studentIds },
         skriptId: page.skriptId,
+        // Legacy sessions ('') have no site; count them on any site.
+        siteId: { in: [siteId!, ''] },
         expiresAt: { gt: new Date() }
       },
       select: {
@@ -136,6 +143,7 @@ export async function GET(
     const submissions = await prisma.examSubmission.findMany({
       where: {
         pageId,
+        siteId: siteId!,
         studentId: { in: studentIds }
       },
       select: {
@@ -152,7 +160,7 @@ export async function GET(
     // Per-student exam-state overrides (rows with studentId set). Used by the
     // toolbar to show an "individual override" marker + a "follow class" reset.
     const overrideRows = await prisma.examState.findMany({
-      where: { pageId, classId, studentId: { in: studentIds } },
+      where: { pageId, classId, siteId: siteId!, studentId: { in: studentIds } },
       select: { studentId: true, state: true },
     })
     const overrideByUserId = new Map(
@@ -212,7 +220,7 @@ export async function GET(
 /**
  * POST /api/exams/[pageId]/students
  * Reopen exam for a specific student (delete their submission)
- * Body: { studentId: string, classId: string, action: 'reopen' }
+ * Body: { studentId: string, classId: string, action: 'reopen' | 'force-submit', siteId: string }
  */
 export async function POST(
   request: NextRequest,
@@ -227,6 +235,7 @@ export async function POST(
     const { pageId } = await params
     const body = await request.json()
     const { studentId, classId, action } = body
+    const siteId: string | null = typeof body.siteId === 'string' ? body.siteId : null
 
     if (!studentId || !classId || (action !== 'reopen' && action !== 'force-submit')) {
       return NextResponse.json(
@@ -235,20 +244,10 @@ export async function POST(
       )
     }
 
-    // Verify user is a page author
-    const page = await prisma.page.findFirst({
-      where: {
-        id: pageId,
-        authors: {
-          some: { userId: session.user.id }
-        }
-      },
-      select: {
-        id: true,
-        skriptId: true
-      }
-    })
-
+    // Site scoping: the caller must OWN the personal site the roster is for
+    // (classes only exist on personal sites) and the exam must be placed on it.
+    // Authorship is not required and grants nothing.
+    const page = await getOwnedSitePage(session.user.id, pageId, siteId)
     if (!page) {
       return NextResponse.json(
         { error: 'Page not found or access denied' },
@@ -292,13 +291,13 @@ export async function POST(
     // live UserData when there's no hand-in snapshot). Idempotent.
     if (action === 'force-submit') {
       const result = await prisma.$transaction((tx) =>
-        applyHandinSnapshots(tx, { pageId, studentId, snapshots: [], label: 'ended by teacher', source: 'teacher' }),
+        applyHandinSnapshots(tx, { pageId, studentId, siteId: siteId!, snapshots: [], label: 'ended by teacher', source: 'teacher' }),
       )
       // applyHandinSnapshots only sets source on CREATE; ensure an already-existing
       // submission (e.g. a re-run, or one created before this field) is tagged too.
       if (result.alreadyExisted) {
         await prisma.examSubmission.update({
-          where: { pageId_studentId: { pageId, studentId } },
+          where: { pageId_studentId_siteId: { pageId, studentId, siteId: siteId! } },
           data: { source: 'teacher' },
         })
       }
@@ -321,7 +320,8 @@ export async function POST(
     await prisma.examSubmission.deleteMany({
       where: {
         pageId,
-        studentId
+        studentId,
+        siteId: siteId!
       }
     })
 
@@ -339,7 +339,7 @@ export async function POST(
     // the previous "submitted" to draw the attempt boundary, and with the
     // next "started" to begin the new attempt's duration.
     await prisma.examAuditLog.create({
-      data: { pageId, studentId, event: 'reopened' }
+      data: { pageId, studentId, siteId: siteId!, event: 'reopened' }
     })
 
     // Notify the student via SSE so their page can refresh

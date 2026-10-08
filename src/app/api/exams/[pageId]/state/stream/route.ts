@@ -5,6 +5,10 @@
  * Works with exam session cookies (for students in SEB) or NextAuth sessions.
  *
  * Subscribes to exam:${pageId}:${classId} channel for state changes.
+ *
+ * Site scoping: with ?siteId= the initial state only counts the row assigned
+ * on that site. Live events carry no site; the waiting room reloads on a
+ * change and the exam route re-checks the state for its own site.
  */
 
 import { NextRequest } from 'next/server'
@@ -25,6 +29,7 @@ export async function GET(
   const { pageId } = await params
   const { searchParams } = new URL(request.url)
   const classId = searchParams.get('classId')
+  const siteId = searchParams.get('siteId')
 
   if (!classId) {
     return new Response('classId query parameter required', { status: 400 })
@@ -106,7 +111,7 @@ export async function GET(
 
   // Send initial state (class-level row; null studentId). No row == hidden.
   const currentState = await prisma.examState.findFirst({
-    where: { pageId, classId, studentId: null },
+    where: { pageId, classId, studentId: null, ...(siteId ? { siteId } : {}) },
     select: { state: true }
   })
 

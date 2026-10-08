@@ -13,6 +13,11 @@
  *
  * Setting "hidden" deletes the row (un-assign). A row with studentId set is a
  * per-student override that wins over the class row — see lib/exam-state.
+ *
+ * Site scoping: an assignment lives ON one site (ExamState.siteId). Writes
+ * come from the class toolbar of the teacher's OWN personal site (classes
+ * don't exist on org sites); re-assigning from another of their sites moves
+ * the row there. Reads with ?siteId= only see that site's row.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,6 +26,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
 import { EXAM_STATES, type ExamLifecycleState } from '@/lib/exam-state'
+import { getSiteAccess, isItemPlacedOnSite } from '@/lib/site-access'
 
 /**
  * GET /api/exams/[pageId]/state?classId=xxx[&studentId=yyy]
@@ -36,6 +42,7 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const classId = searchParams.get('classId')
     const studentId = searchParams.get('studentId')
+    const siteId = searchParams.get('siteId')
 
     if (!classId) {
       return NextResponse.json(
@@ -45,7 +52,7 @@ export async function GET(
     }
 
     const examState = await prisma.examState.findFirst({
-      where: { pageId, classId, studentId: studentId ?? null },
+      where: { pageId, classId, studentId: studentId ?? null, ...(siteId ? { siteId } : {}) },
       include: { class: { select: { id: true, name: true } } },
     })
 
@@ -72,8 +79,9 @@ export async function GET(
 
 /**
  * POST /api/exams/[pageId]/state
- * Body: { classId: string, studentId?: string, state: "hidden"|"closed"|"lobby"|"open" }
- * Only accessible by page authors who are also the class teacher.
+ * Body: { classId: string, studentId?: string, state: "hidden"|"closed"|"lobby"|"open", siteId }
+ * Only accessible by the OWNER of the personal site `siteId` (which must place
+ * the page) who is also the class teacher. Authorship is not required.
  * "hidden" deletes the row (un-assign). studentId set = per-student override.
  */
 export async function POST(
@@ -91,9 +99,10 @@ export async function POST(
     const classId = body.classId as string | undefined
     const studentId = (body.studentId as string | undefined) ?? null
     const newState = body.state as ExamLifecycleState | undefined
+    const siteId = typeof body.siteId === 'string' ? body.siteId : ''
 
-    if (!classId || !newState) {
-      return NextResponse.json({ error: 'classId and state are required' }, { status: 400 })
+    if (!classId || !newState || !siteId) {
+      return NextResponse.json({ error: 'classId, state and siteId are required' }, { status: 400 })
     }
     if (!EXAM_STATES.includes(newState)) {
       return NextResponse.json(
@@ -102,12 +111,9 @@ export async function POST(
       )
     }
 
-    // Verify user is a page author.
-    const page = await prisma.page.findFirst({
-      where: { id: pageId, authors: { some: { userId: session.user.id } } },
-      select: { id: true },
-    })
-    if (!page) {
+    // Site scoping: own personal site, and the exam must be placed on it.
+    const access = await getSiteAccess(session.user.id, siteId)
+    if (!access?.isOwner || !(await isItemPlacedOnSite(pageId, siteId))) {
       return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
     }
 
@@ -159,11 +165,11 @@ export async function POST(
     const saved = existing
       ? await prisma.examState.update({
           where: { id: existing.id },
-          data: { state: newState, openedAt, closedAt },
+          data: { state: newState, openedAt, closedAt, siteId },
           include: { class: { select: { id: true, name: true } } },
         })
       : await prisma.examState.create({
-          data: { pageId, classId, studentId, state: newState, openedAt, closedAt },
+          data: { pageId, classId, studentId, siteId, state: newState, openedAt, closedAt },
           include: { class: { select: { id: true, name: true } } },
         })
 

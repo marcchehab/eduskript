@@ -11,17 +11,21 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.mockPrisma }))
 vi.mock('@/lib/scoring/return-state', () => ({
   getCurrentReturnsForStudent: mocks.getCurrentReturnsForStudent,
+  pageSiteKey: (p: string, s: string) => `${p}\u0000${s}`,
 }))
 vi.mock('@/lib/scoring/aggregate', () => ({ computeExamGrades: mocks.computeExamGrades }))
+vi.mock('@/lib/scoring/auth', () => ({ getExamUrl: vi.fn(async () => '/exam/site-a/sk/p') }))
 
 import { getServerSession } from 'next-auth'
 import { GET } from '@/app/api/student/my-exams/route'
 
-const sub = (pageId: string) => ({
+const sub = (pageId: string, siteId = 'site-a') => ({
   pageId,
+  siteId,
   submittedAt: new Date('2026-10-01T08:00:00Z'),
-  page: { title: `Exam ${pageId}`, slug: pageId, skript: null },
+  page: { title: `Exam ${pageId}` },
 })
+const key = (p: string, s = 'site-a') => `${p}\u0000${s}`
 
 describe('GET /api/student/my-exams', () => {
   beforeEach(() => {
@@ -33,7 +37,7 @@ describe('GET /api/student/my-exams', () => {
     mocks.mockPrisma.examSubmission.findMany.mockResolvedValue([sub('p1'), sub('p2')])
     mocks.getCurrentReturnsForStudent.mockResolvedValue(
       new Map([
-        ['p1', { returned: true, score: 10, at: new Date('2026-10-02T08:00:00Z'), by: 't1', grade: 4.3, totalEarned: 10, totalMax: 15 }],
+        [key('p1'), { returned: true, score: 10, at: new Date('2026-10-02T08:00:00Z'), by: 't1', grade: 4.3, totalEarned: 10, totalMax: 15 }],
       ]),
     )
     const body = await (await GET()).json()
@@ -47,7 +51,7 @@ describe('GET /api/student/my-exams', () => {
     mocks.mockPrisma.examSubmission.findMany.mockResolvedValue([sub('p1')])
     mocks.getCurrentReturnsForStudent.mockResolvedValue(
       new Map([
-        ['p1', { returned: true, score: null, at: new Date(), by: null, grade: null, totalEarned: null, totalMax: null }],
+        [key('p1'), { returned: true, score: null, at: new Date(), by: null, grade: null, totalEarned: null, totalMax: null }],
       ]),
     )
     mocks.computeExamGrades.mockResolvedValue({
@@ -56,6 +60,17 @@ describe('GET /api/student/my-exams', () => {
     })
     const body = await (await GET()).json()
     expect(body.exams[0]).toMatchObject({ grade: 5, totalEarned: 12, totalMax: 15 })
-    expect(mocks.computeExamGrades).toHaveBeenCalledWith('p1', ['stu1'])
+    expect(mocks.computeExamGrades).toHaveBeenCalledWith('p1', ['stu1'], new Map([['stu1', 'site-a']]))
+  })
+
+  it('lists the same exam once per site, each with its own return state', async () => {
+    mocks.mockPrisma.examSubmission.findMany.mockResolvedValue([sub('p1', 'site-a'), sub('p1', 'site-b')])
+    mocks.getCurrentReturnsForStudent.mockResolvedValue(
+      new Map([[key('p1', 'site-b'), { returned: true, score: 1, at: new Date(), by: 't', grade: 6, totalEarned: 1, totalMax: 1 }]]),
+    )
+    const body = await (await GET()).json()
+    expect(body.exams).toHaveLength(2)
+    expect(body.exams.find((e: { siteId: string }) => e.siteId === 'site-a').status).toBe('submitted')
+    expect(body.exams.find((e: { siteId: string }) => e.siteId === 'site-b').status).toBe('returned')
   })
 })

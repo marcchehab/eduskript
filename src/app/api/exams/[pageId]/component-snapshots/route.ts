@@ -3,14 +3,15 @@
  * newest first — so a teacher viewing a student can step through their history
  * (hand-in, checks, runs, manual saves) instead of only the latest. Teacher-only.
  *
- * GET /api/exams/[pageId]/component-snapshots?studentId=X&componentId=code-editor-Y
+ * GET /api/exams/[pageId]/component-snapshots?studentId=X&componentId=code-editor-Y[&siteId=S]
+ *   Site scoping: caller must manage the site of the student's attempt.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { authorizeStudentSite } from '@/lib/scoring/site-scope'
 
 export async function GET(
   request: NextRequest,
@@ -28,12 +29,13 @@ export async function GET(
     if (!studentId || !componentId) {
       return NextResponse.json({ error: 'studentId and componentId required' }, { status: 400 })
     }
-    if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
+    const siteId = await authorizeStudentSite(session.user.id, pageId, studentId, url.searchParams.get('siteId'))
+    if (!siteId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const rows = await prisma.userDataCheckpoint.findMany({
-      where: { userId: studentId, pageId, componentId },
+      where: { userId: studentId, pageId, siteId, componentId },
       orderBy: { createdAt: 'desc' },
       take: 50,
       select: { id: true, kind: true, label: true, createdAt: true, payload: true },

@@ -5,11 +5,11 @@ import { encodeSEBFile } from '@/lib/seb-file'
 import { generateExamToken } from '@/lib/exam-tokens'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { isItemPlacedOnSite } from '@/lib/site-access'
 
 /**
- * GET /api/exams/[pageId]/seb-config
- * Download SEB configuration file for an exam page
+ * GET /api/exams/[pageId]/seb-config?siteId=…
+ * Download SEB configuration file for an exam page on one (personal) site
  *
  * Authentication options:
  * 1. Session cookie (when downloading from regular browser)
@@ -51,47 +51,25 @@ export async function GET(
       )
     }
 
-    // Get page with skript info
-    const page = await prisma.page.findFirst({
-      where: {
-        id: pageId,
-        pageType: 'exam' // Only serve config for exam pages
-      },
-      include: {
-        skript: {
-          include: {
-            collectionSkripts: {
-              include: {
-                collection: true
-              },
-              take: 1
-            },
-            authors: {
-              take: 1,
-              include: { user: true }
-            }
-          }
-        }
-      }
-    })
+    // Site scoping: the start URL points at the site the student is on (the
+    // client passes its current site), not the first author's primary site.
+    const siteId = searchParams.get('siteId')
+    if (!siteId) {
+      return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
+    }
+    const [page, site] = await Promise.all([
+      prisma.page.findFirst({
+        where: { id: pageId, pageType: 'exam' }, // Only serve config for exam pages
+        include: { skript: { select: { slug: true, title: true } } },
+      }),
+      prisma.site.findUnique({ where: { id: siteId }, select: { slug: true, organizationId: true } }),
+    ])
 
     if (!page) {
       return NextResponse.json({ error: 'Exam page not found' }, { status: 404 })
     }
-
-    // Get the teacher (first author) to build the exam URL. The teacher's URL
-    // slug lives on Site now — look it up alongside the user.
-    const teacher = page.skript.authors[0]?.user
-    const collectionSkript = page.skript.collectionSkripts[0]
-
-    const teacherSite = teacher
-      ? await prisma.site.findFirst({
-          where: { userId: teacher.id },
-          orderBy: PRIMARY_SITE_ORDER,
-          select: { slug: true },
-        })
-      : null
-    if (!teacherSite?.slug || !collectionSkript?.collection) {
+    // Only personal sites have the /exam route; the exam must be placed there.
+    if (!site || site.organizationId || !(await isItemPlacedOnSite(pageId, siteId))) {
       return NextResponse.json({ error: 'Invalid exam configuration' }, { status: 400 })
     }
 
@@ -101,7 +79,7 @@ export async function GET(
     // dropped seb_token (student landed logged out on "Exam locked").
     const host = request.headers.get('host') || 'eduskript.org'
     const protocol = host.startsWith('localhost') ? 'http' : 'https'
-    const baseExamUrl = `${protocol}://${host}/exam/${teacherSite.slug}/${page.skript.slug}/${page.slug}`
+    const baseExamUrl = `${protocol}://${host}/exam/${site.slug}/${page.skript.slug}/${page.slug}`
 
     // Generate one-time token for SEB authentication
     // This allows the user to be authenticated inside SEB without logging in again

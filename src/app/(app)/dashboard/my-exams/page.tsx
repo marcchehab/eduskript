@@ -15,6 +15,8 @@ import { useRealtimeEvents } from '@/hooks/use-realtime-events'
 
 interface ExamRow {
   pageId: string
+  /** Site the exam was taken on (site scoping). */
+  siteId: string | null
   title: string
   submittedAt: string
   returnedAt: string | null
@@ -100,9 +102,9 @@ export default function MyExamsPage() {
             // Returned → open the actual exam read-only (review mode), where
             // the student sees their answers + per-question scores. Fall back to
             // the dashboard score summary if the exam URL can't be resolved.
-            const href = e.examUrl ?? `/dashboard/my-exams/${e.pageId}`
+            const href = e.examUrl ?? `/dashboard/my-exams/${e.pageId}?siteId=${encodeURIComponent(e.siteId ?? '')}`
             return (
-              <li key={e.pageId}>
+              <li key={`${e.pageId}:${e.siteId ?? ""}`}>
                 {e.status === 'returned' ? (
                   <Link href={href} className="block hover:opacity-90">
                     {inner}

@@ -112,7 +112,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   if (!authenticatedUserId && isSEBRequest(headersList)) {
     const examSessionCookie = cookieStore.get('exam_session')?.value
     if (examSessionCookie) {
-      authenticatedUserId = await validateExamSession(examSessionCookie, skript.id)
+      authenticatedUserId = await validateExamSession(examSessionCookie, skript.id, siteId)
       if (authenticatedUserId) {
         authenticatedViaExamSession = true
       }
@@ -180,7 +180,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   // Classes only exist on personal sites (owner = class teacher); org sites
   // have none.
   if (siteAccess?.isOwner) {
-    unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId, siteId)
+    unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId, [siteId])
   }
 
   // Gate: already submitted (not yet returned) → submitted page, before the

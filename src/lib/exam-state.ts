@@ -52,14 +52,18 @@ export interface ExamStateResolution {
  * the winning class's id is returned, so a live update on one of the *other*
  * classes' rows isn't streamed. The waiting room's poll + manual refresh cover
  * that case.
+ *
+ * Site scoping: only rows assigned ON `siteId` count — an exam assigned to the
+ * student's class on site A is hidden on site B (src/lib/site-access.ts).
  */
 export async function resolveExamStateDetail(
   pageId: string,
   studentId: string,
+  siteId: string,
 ): Promise<ExamStateResolution> {
   // 1) Per-student override (any class) wins outright.
   const studentRow = await prisma.examState.findFirst({
-    where: { pageId, studentId },
+    where: { pageId, studentId, siteId },
     select: { state: true, classId: true },
   })
   if (studentRow) {
@@ -71,6 +75,7 @@ export async function resolveExamStateDetail(
     where: {
       pageId,
       studentId: null,
+      siteId,
       class: { memberships: { some: { studentId } } },
     },
     select: { state: true, classId: true },
@@ -84,8 +89,8 @@ export async function resolveExamStateDetail(
 }
 
 /** State only — see resolveExamStateDetail. */
-export async function resolveExamState(pageId: string, studentId: string): Promise<ExamLifecycleState> {
-  return (await resolveExamStateDetail(pageId, studentId)).state
+export async function resolveExamState(pageId: string, studentId: string, siteId: string): Promise<ExamLifecycleState> {
+  return (await resolveExamStateDetail(pageId, studentId, siteId)).state
 }
 
 /**
@@ -95,12 +100,14 @@ export async function resolveExamState(pageId: string, studentId: string): Promi
  * still being assigned, so grading/scoring/snapshots survive setting it back to
  * hidden. Spread alongside other class filters, e.g.
  * `class: { teacherId, ...examClassActivityWhere(pageId) }`.
+ * With `siteIds`, only activity on those sites counts (site scoping).
  */
-export function examClassActivityWhere(pageId: string): Prisma.ClassWhereInput {
+export function examClassActivityWhere(pageId: string, siteIds?: string[]): Prisma.ClassWhereInput {
+  const site = siteIds ? { siteId: { in: siteIds } } : {}
   return {
     OR: [
-      { examStates: { some: { pageId } } },
-      { memberships: { some: { student: { examSubmissions: { some: { pageId } } } } } },
+      { examStates: { some: { pageId, ...site } } },
+      { memberships: { some: { student: { examSubmissions: { some: { pageId, ...site } } } } } },
     ],
   }
 }

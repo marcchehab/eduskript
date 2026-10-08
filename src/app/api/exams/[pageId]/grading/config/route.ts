@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getAuthoredExamPage } from '@/lib/scoring/auth'
+import { getExamScope } from '@/lib/scoring/site-scope'
 
 function numOr(value: unknown, fallback: number): number {
   const n = Number(value)
@@ -27,7 +27,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const { pageId } = await params
-    if (!(await getAuthoredExamPage(session.user.id, pageId))) {
+    // Site scoping: graders = managers of a site holding the exam.
+    if (!(await getExamScope(session.user.id, pageId))) {
       return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
     }
 

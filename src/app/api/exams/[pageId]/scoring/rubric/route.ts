@@ -16,9 +16,8 @@ import { aiConfigured } from '@/lib/ai/provider'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { examClassActivityWhere } from '@/lib/exam-state'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
-import { getAuthoredExamPage } from '@/lib/scoring/auth'
+import { getExamScope, getGradingStudentIds, resolveStudentSites } from '@/lib/scoring/site-scope'
 import { examHasReturnedStudent, returnedLockResponse } from '@/lib/scoring/return-state'
 import { parseGradableComponents } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
@@ -30,14 +29,10 @@ export const runtime = 'nodejs'
 
 const SAMPLE_SIZE = 5
 
-/** Student ids the teacher teaches for this page (one query). */
-async function teacherStudentIds(userId: string, pageId: string): Promise<string[]> {
-  const rows = await prisma.classMembership.findMany({
-    where: { class: { teacherId: userId, ...examClassActivityWhere(pageId) } },
-    select: { studentId: true },
-  })
-  return [...new Set(rows.map((r) => r.studentId))]
-}
+// Access (site scoping): the grader = a manager of a site holding the exam
+// (src/lib/scoring/site-scope.ts). The rubric itself is shared per page (exam
+// content); the SAMPLE answers fed to the AI come only from the caller's
+// managed sites.
 
 function sumPoints(criteria: RubricCriterion[]): number {
   return Math.round(criteria.reduce((s, c) => s + c.points, 0) * 10) / 10
@@ -47,7 +42,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { pageId } = await params
-  if (!(await getAuthoredExamPage(session.user.id, pageId))) {
+  if (!(await getExamScope(session.user.id, pageId))) {
     return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
   }
   const componentId = new URL(request.url).searchParams.get('componentId')
@@ -65,8 +60,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
   }
   const { pageId } = await params
-  const page = await getAuthoredExamPage(session.user.id, pageId)
-  if (!page) return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
+  const scope = await getExamScope(session.user.id, pageId)
+  if (!scope) return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
+  const page = scope.page
   // Rubric changes re-base every student's AI score — locked once anyone is returned.
   if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')
 
@@ -89,7 +85,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'No matching gradable component' }, { status: 400 })
   }
 
-  const studentIds = await teacherStudentIds(session.user.id, pageId)
+  const studentIds = (await getGradingStudentIds(scope, session.user.id, pageId, 'all')) ?? []
+  const studentSites = await resolveStudentSites(pageId, studentIds, scope.siteIds)
   const guidance = await loadAiGuidance(session.user.id)
   const model = scoringModel()
   const saved: unknown[] = []
@@ -98,7 +95,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const errors: { componentId: string; error: string; debug?: AiDebug }[] = []
 
   for (const c of targets) {
-    const subs = await readComponentSubmissions(pageId, c, studentIds)
+    const subs = await readComponentSubmissions(pageId, c, studentIds, studentSites)
     const samples = [...subs.values()].filter((s) => !s.empty).slice(0, SAMPLE_SIZE).map((s) => s.text)
     const maxPoints = c.maxPoints ?? 1
     const res = await generateRubric({
@@ -143,7 +140,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { pageId } = await params
-  if (!(await getAuthoredExamPage(session.user.id, pageId))) {
+  if (!(await getExamScope(session.user.id, pageId))) {
     return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
   }
   if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')
@@ -183,7 +180,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { pageId } = await params
-  if (!(await getAuthoredExamPage(session.user.id, pageId))) {
+  if (!(await getExamScope(session.user.id, pageId))) {
     return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
   }
   if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')

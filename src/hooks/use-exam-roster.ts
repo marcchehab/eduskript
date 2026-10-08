@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
 import type { ExamLifecycleState } from '@/lib/exam-state'
+import { withSite } from '@/lib/site-scope-client'
 
 export interface ExamRosterStudent {
   id: string
@@ -83,8 +84,8 @@ export function useExamRoster({ pageId, classId, enabled = true }: UseExamRoster
       setIsLoading(true)
       try {
         const [stateRes, studentsRes] = await Promise.all([
-          fetch(`/api/exams/${pageId}/state?classId=${classId}`, { cache: 'no-store' }),
-          fetch(`/api/exams/${pageId}/students?classId=${classId}`, { cache: 'no-store' }),
+          fetch(withSite(`/api/exams/${pageId}/state?classId=${classId}`), { cache: 'no-store' }),
+          fetch(withSite(`/api/exams/${pageId}/students?classId=${classId}`), { cache: 'no-store' }),
         ])
         if (cancelled) return
         if (stateRes.ok) {

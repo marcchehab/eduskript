@@ -21,6 +21,8 @@ export interface BackupMeta {
   pageId: string
   studentId: string
   skriptId: string
+  /** Site the exam was taken on (site scoping). Absent in pre-2026-10 files. */
+  siteId?: string
   createdAt: string
 }
 
@@ -167,7 +169,8 @@ export async function decryptBackupWithPrivateKey(
   // where someone re-labels the outer routing fields on a stolen ciphertext.
   if (
     parsed.meta.pageId !== file.meta.pageId ||
-    parsed.meta.studentId !== file.meta.studentId
+    parsed.meta.studentId !== file.meta.studentId ||
+    (parsed.meta.siteId ?? '') !== (file.meta.siteId ?? '')
   ) {
     throw new Error('Backup file meta mismatch (outer vs inner)')
   }

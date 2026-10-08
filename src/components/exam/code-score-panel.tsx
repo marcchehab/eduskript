@@ -24,6 +24,7 @@ import { extractCriterionRegex, runCriterionCheck } from '@/lib/scoring/regex-ch
 import { isPointsInRange } from '@/lib/scoring/score-component'
 import { useComponentReview, type ComponentScoreSource } from '@/contexts/exam-review-context'
 import { createLogger } from '@/lib/logger'
+import { withSite } from '@/lib/site-scope-client'
 
 // AI scoring/rubric runs server-side; the routes attach an `AiDebug` payload (raw
 // model output + finishReason) to each failed entry. See WHY a failure happened in
@@ -341,7 +342,7 @@ export function CodeScorePanel({
     setScoreBusy(true)
     setAiErr(null)
     try {
-      const res = await fetch(`/api/exams/${pageId}/scoring/ai`, {
+      const res = await fetch(withSite(`/api/exams/${pageId}/scoring/ai`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ componentIds: [componentId], studentIds: [studentId] }),

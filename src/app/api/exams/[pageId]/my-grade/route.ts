@@ -5,8 +5,9 @@
  * returns without a snapshot fall back to a live recompute). Powers the student
  * feedback view.
  *
- * GET /api/exams/[pageId]/my-grade
+ * GET /api/exams/[pageId]/my-grade?siteId=…
  *   404 if no submission; 403 if not currently returned.
+ * Site scoping: one submission per (page, site); siteId is required.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,7 +18,7 @@ import { computeExamGrades } from '@/lib/scoring/aggregate'
 import { getCurrentReturn } from '@/lib/scoring/return-state'
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ pageId: string }> },
 ) {
   try {
@@ -27,14 +28,18 @@ export async function GET(
     }
     const { pageId } = await params
     const studentId = session.user.id
+    const siteId = request.nextUrl.searchParams.get('siteId')
+    if (!siteId) {
+      return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
+    }
 
     // Return state is derived from the exam log (single source of truth).
     const [submission, ret] = await Promise.all([
       prisma.examSubmission.findUnique({
-        where: { pageId_studentId: { pageId, studentId } },
+        where: { pageId_studentId_siteId: { pageId, studentId, siteId } },
         select: { submittedAt: true },
       }),
-      getCurrentReturn(pageId, studentId),
+      getCurrentReturn(pageId, studentId, siteId),
     ])
     if (!submission) {
       return NextResponse.json({ error: 'No submission found' }, { status: 404 })
@@ -62,7 +67,7 @@ export async function GET(
         answered: c.answered,
       }))
     } else {
-      const grading = await computeExamGrades(pageId, [studentId])
+      const grading = await computeExamGrades(pageId, [studentId], new Map([[studentId, siteId]]))
       const g = grading.byStudent.get(studentId)!
       const labels = new Map(grading.components.map((c) => [c.componentId, c.label]))
       grade = g.grade

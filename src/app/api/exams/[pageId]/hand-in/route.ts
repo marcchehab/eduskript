@@ -10,6 +10,10 @@
  * 3. POST to this endpoint to record submission
  * 4. Frontend navigates to /api/exams/end-session to clear cookie
  * 5. SEB navigates to quitURL, ending the session
+ *
+ * Site scoping: the submission belongs to the site the exam was taken on —
+ * the SEB session's site, else the `siteId` the client posts (its current
+ * site). The page must be placed on that site (src/lib/site-access.ts).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -22,16 +26,17 @@ import { eventBus } from '@/lib/events'
 import { applyHandinSnapshots, type HandinSnapshot } from '@/lib/exam-recovery'
 import type { ExamSettings } from '@/lib/seb'
 import { resolveExamState } from '@/lib/exam-state'
+import { isItemPlacedOnSite } from '@/lib/site-access'
 
 /**
  * Non-SEB access gate: a logged-in student may hand in if the exam is unlocked
  * for everyone, or it's assigned to them (their effective state isn't 'hidden' —
  * a per-student override or a class-level row). See lib/exam-state.
  */
-async function studentHasExamAccess(studentId: string, pageId: string): Promise<boolean> {
+async function studentHasExamAccess(studentId: string, pageId: string, siteId: string): Promise<boolean> {
   const page = await prisma.page.findUnique({ where: { id: pageId }, select: { examSettings: true } })
   if ((page?.examSettings as ExamSettings | null)?.unlockForAll) return true
-  return (await resolveExamState(pageId, studentId)) !== 'hidden'
+  return (await resolveExamState(pageId, studentId, siteId)) !== 'hidden'
 }
 
 /**
@@ -55,8 +60,12 @@ export async function POST(
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get('exam_session')
 
+    const body = await request.json().catch(() => ({}))
+    const bodySiteId = typeof body?.siteId === 'string' ? body.siteId : ''
+
     let examPageId: string
     let studentId: string
+    let siteId: string
 
     if (sessionCookie?.value) {
       const sessionData = await validateExamSession(sessionCookie.value) as ExamSessionData | null
@@ -65,6 +74,8 @@ export async function POST(
       }
       examPageId = sessionData.pageId
       studentId = sessionData.userId
+      // The session's site wins; legacy sessions ('') fall back to the client's.
+      siteId = sessionData.siteId || bodySiteId
     } else {
       const session = await getServerSession(authOptions)
       if (!session?.user?.id) {
@@ -72,9 +83,17 @@ export async function POST(
       }
       studentId = session.user.id
       examPageId = pageId
-      if (!(await studentHasExamAccess(studentId, examPageId))) {
+      siteId = bodySiteId
+      if (siteId && !(await studentHasExamAccess(studentId, examPageId, siteId))) {
         return NextResponse.json({ error: 'You do not have access to this exam' }, { status: 403 })
       }
+    }
+
+    if (!siteId) {
+      return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
+    }
+    if (!(await isItemPlacedOnSite(examPageId, siteId))) {
+      return NextResponse.json({ error: 'This exam is not on this site' }, { status: 403 })
     }
 
     // Optional snapshots: client gathers each on-page code editor's IndexedDB
@@ -83,7 +102,6 @@ export async function POST(
     // captures exactly what was handed in.
     let snapshots: HandinSnapshot[] = []
     try {
-      const body = await request.json().catch(() => ({}))
       if (Array.isArray(body?.snapshots)) {
         snapshots = body.snapshots.filter((s: unknown): s is HandinSnapshot =>
           !!s && typeof s === 'object' &&
@@ -103,6 +121,7 @@ export async function POST(
       return applyHandinSnapshots(tx, {
         pageId: examPageId,
         studentId,
+        siteId,
         snapshots,
       })
     })
@@ -121,7 +140,7 @@ export async function POST(
         studentId,
         class: {
           examStates: {
-            some: { pageId: examPageId }
+            some: { pageId: examPageId, siteId }
           }
         }
       },
@@ -183,15 +202,21 @@ export async function GET(
       )
     }
 
+    // Site: the session's own, else the client's (legacy sessions).
+    const siteId = sessionData.siteId || request.nextUrl.searchParams.get('siteId') || ''
+
     // Check for existing submission (for the page this session was started from)
-    const submission = await prisma.examSubmission.findUnique({
-      where: {
-        pageId_studentId: {
-          pageId: sessionData.pageId, // Use original session's pageId
-          studentId: sessionData.userId
-        }
-      }
-    })
+    const submission = siteId
+      ? await prisma.examSubmission.findUnique({
+          where: {
+            pageId_studentId_siteId: {
+              pageId: sessionData.pageId, // Use original session's pageId
+              studentId: sessionData.userId,
+              siteId,
+            }
+          }
+        })
+      : null
 
     return NextResponse.json({
       hasSubmitted: !!submission,

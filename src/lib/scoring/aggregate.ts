@@ -119,10 +119,15 @@ export interface ExamGrading {
 /**
  * Batched: compute grades for many students of one exam page. One content parse,
  * one config read, one ComponentScore query for the whole class.
+ *
+ * Site scoping: `studentSites` maps each student to the site whose scores
+ * count (src/lib/scoring/site-scope.ts). Rows of other sites are ignored; a
+ * student missing from the map gets no scores.
  */
 export async function computeExamGrades(
   pageId: string,
   studentIds: string[],
+  studentSites: Map<string, string>,
 ): Promise<ExamGrading> {
   const [page, configRow] = await Promise.all([
     prisma.page.findUnique({ where: { id: pageId }, select: { content: true } }),
@@ -141,9 +146,11 @@ export async function computeExamGrades(
     return { components, params, maxPointsOverride, autoMaxPoints, byStudent }
   }
 
-  const scoreRows = await prisma.componentScore.findMany({
-    where: { pageId, studentId: { in: studentIds }, componentId: { in: componentIds } },
+  const siteIds = [...new Set(studentSites.values())]
+  const scoreRows = (await prisma.componentScore.findMany({
+    where: { pageId, studentId: { in: studentIds }, componentId: { in: componentIds }, siteId: { in: siteIds } },
     select: {
+      siteId: true,
       studentId: true,
       componentId: true,
       source: true,
@@ -153,7 +160,7 @@ export async function computeExamGrades(
       feedback: true,
       updatedAt: true,
     },
-  })
+  })).filter((r) => studentSites.get(r.studentId) === r.siteId)
 
   // student -> componentId -> ScoreSource[]
   const byStudentComponent = new Map<string, Map<string, ScoreSource[]>>()
@@ -188,7 +195,7 @@ export async function computeExamGrades(
 }
 
 /** Single-student convenience (used by the student my-grade endpoint). */
-export async function computeExamGrade(pageId: string, studentId: string): Promise<StudentGrade> {
-  const { byStudent } = await computeExamGrades(pageId, [studentId])
+export async function computeExamGrade(pageId: string, studentId: string, siteId: string): Promise<StudentGrade> {
+  const { byStudent } = await computeExamGrades(pageId, [studentId], new Map([[studentId, siteId]]))
   return byStudent.get(studentId)!
 }

@@ -14,12 +14,17 @@ const mocks = vi.hoisted(() => ({
 vi.mock('next-auth', () => ({ getServerSession: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.mockPrisma }))
-vi.mock('@/lib/scoring/auth', () => ({
-  getAuthoredExamPage: vi.fn(async () => ({
-    id: 'page-1',
-    content: '## Aufgabe 1\n<question id="q1" type="text" points="3">\nWas?\n</question>\n',
+vi.mock('@/lib/scoring/site-scope', () => ({
+  getExamScope: vi.fn(async () => ({
+    page: {
+      id: 'page-1',
+      skriptId: 'sk',
+      title: 'Exam',
+      content: '## Aufgabe 1\n<question id="q1" type="text" points="3">\nWas?\n</question>\n',
+    },
+    siteIds: ['site-a'],
   })),
-  isTeacherOfStudentForPage: vi.fn(async () => true),
+  resolveStudentSite: vi.fn(async () => 'site-a'),
 }))
 vi.mock('@/lib/scoring/return-state', () => ({
   isStudentReturned: vi.fn(async () => false),

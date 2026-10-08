@@ -5,10 +5,12 @@
  *
  * GET /api/classes/[id]/exams
  *
- * Which exams: pages the teacher authors that are assigned to the class (a
- * class-level ExamState row) OR that a current member has submitted — the same
- * rule as getExamClassesForTeacher (lib/scoring/auth), seen from the class side.
- * Authorship is required because the grading page requires it.
+ * Which exams (site scoping, src/lib/site-access.ts): pages assigned to the
+ * class (a class-level ExamState row) on a site the teacher MANAGES, OR that a
+ * current member has submitted on such a site — the same rule as
+ * getExamClassesForTeacher, seen from the class side. Authorship is NOT
+ * required (it grants nothing on student data); all counts only include the
+ * teacher's managed sites.
  *
  * "graded" = handed in AND (a teacher override / AI score exists for any task, OR
  * currently returned). Auto-check scores alone don't count — they exist without
@@ -23,6 +25,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getExamUrl } from '@/lib/scoring/auth'
 import { getCurrentReturnsForPage } from '@/lib/scoring/return-state'
+import { getManagedSiteIds } from '@/lib/site-access'
+import { resolveStudentSites } from '@/lib/scoring/site-scope'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -53,18 +57,25 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       select: { studentId: true },
     })
     const memberIds = memberships.map((m) => m.studentId)
+    const siteIds = await getManagedSiteIds(userId)
+    if (siteIds.length === 0) {
+      return NextResponse.json({ exams: [] })
+    }
 
     const pages = await prisma.page.findMany({
       where: {
-        authors: { some: { userId } },
         OR: [
-          { examStates: { some: { classId, studentId: null } } },
+          { examStates: { some: { classId, studentId: null, siteId: { in: siteIds } } } },
           ...(memberIds.length > 0
-            ? [{ examSubmissions: { some: { studentId: { in: memberIds } } } }]
+            ? [{ examSubmissions: { some: { studentId: { in: memberIds }, siteId: { in: siteIds } } } }]
             : []),
         ],
       },
-      select: { id: true, title: true },
+      select: {
+        id: true,
+        title: true,
+        examStates: { where: { classId, studentId: null, siteId: { in: siteIds } }, select: { siteId: true }, take: 1 },
+      },
       orderBy: { title: 'asc' },
     })
     if (pages.length === 0) {
@@ -74,11 +85,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const [submissions, teacherScores] = await Promise.all([
       prisma.examSubmission.findMany({
-        where: { pageId: { in: pageIds }, studentId: { in: memberIds } },
-        select: { pageId: true, studentId: true, submittedAt: true },
+        where: { pageId: { in: pageIds }, studentId: { in: memberIds }, siteId: { in: siteIds } },
+        select: { pageId: true, studentId: true, siteId: true, submittedAt: true },
       }),
       prisma.componentScore.findMany({
-        where: { pageId: { in: pageIds }, studentId: { in: memberIds }, source: { in: ['override', 'ai'] } },
+        where: { pageId: { in: pageIds }, studentId: { in: memberIds }, siteId: { in: siteIds }, source: { in: ['override', 'ai'] } },
         select: { pageId: true, studentId: true },
         distinct: ['pageId', 'studentId'],
       }),
@@ -88,9 +99,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const exams = await Promise.all(
       pages.map(async (page) => {
         const subs = submissions.filter((s) => s.pageId === page.id)
+        const studentSites = await resolveStudentSites(page.id, memberIds, siteIds)
         const [returns, examUrl] = await Promise.all([
-          getCurrentReturnsForPage(page.id, memberIds),
-          getExamUrl(page.id),
+          getCurrentReturnsForPage(page.id, studentSites),
+          getExamUrl(page.id, page.examStates[0]?.siteId ?? subs[0]?.siteId),
         ])
         const isReturned = (studentId: string) => returns.get(studentId)?.returned === true
         const last = subs.reduce<Date | null>(

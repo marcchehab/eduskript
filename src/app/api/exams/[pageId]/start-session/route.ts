@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createExamSession } from '@/lib/exam-tokens'
 import { getPublicOrigin } from '@/lib/public-origin'
+import { isItemPlacedOnSite } from '@/lib/site-access'
 
 export async function GET(
   request: NextRequest,
@@ -25,6 +26,8 @@ export async function GET(
   const userId = searchParams.get('userId')
   const skriptId = searchParams.get('skriptId')
   const returnUrl = searchParams.get('returnUrl')
+  // Site scoping: the session is pinned to the site the exam route rendered.
+  const siteId = searchParams.get('siteId') ?? ''
 
   if (!userId || !skriptId || !returnUrl) {
     return NextResponse.json(
@@ -32,9 +35,12 @@ export async function GET(
       { status: 400 }
     )
   }
+  if (siteId && !(await isItemPlacedOnSite(pageId, siteId))) {
+    return NextResponse.json({ error: 'Exam is not on this site' }, { status: 403 })
+  }
 
   // Create the exam session
-  const sessionId = await createExamSession(userId, pageId, skriptId)
+  const sessionId = await createExamSession(userId, pageId, skriptId, siteId)
 
   // Set the cookie
   const cookieStore = await cookies()

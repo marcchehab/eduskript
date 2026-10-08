@@ -5,9 +5,11 @@
  * each component's stored answer payload (so the teacher sees what the student
  * wrote without N fetches).
  *
- * GET /api/exams/[pageId]/review?studentId=X
- *   teacher: any student in a class they teach with the page unlocked.
- *   student: only themselves, and only once the exam is returned.
+ * GET /api/exams/[pageId]/review?studentId=X[&siteId=S]
+ *   teacher: any student whose data lives on a site the teacher MANAGES (site
+ *            scoping — src/lib/scoring/site-scope.ts; authorship grants
+ *            nothing). siteId optional: picks which managed site's attempt.
+ *   student: only themselves, only once returned; siteId required.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,7 +17,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { buildReviewScores, type ReviewScores } from '@/lib/scoring/review-payload'
-import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getExamScope, resolveStudentSite } from '@/lib/scoring/site-scope'
 import { getCurrentReturn, examHasReturnedStudent } from '@/lib/scoring/return-state'
 
 export async function GET(
@@ -28,19 +30,30 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const { pageId } = await params
-    const requested = new URL(request.url).searchParams.get('studentId')
+    const searchParams = new URL(request.url).searchParams
+    const requested = searchParams.get('studentId')
+    const requestedSite = searchParams.get('siteId')
     const studentId = requested || session.user.id
     const isSelf = studentId === session.user.id
 
+    // Resolve the site: the student's own view names it; a teacher's must be
+    // one of their managed sites (explicit, or the student's resolved site).
+    let siteId: string | null
+    if (isSelf) {
+      siteId = requestedSite
+    } else {
+      const scope = await getExamScope(session.user.id, pageId)
+      siteId = scope ? await resolveStudentSite(scope, pageId, studentId, requestedSite) : null
+    }
+    if (!siteId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     // Authorize + (for self) require the exam to be CURRENTLY returned. Return state
     // is derived from the exam log (single source of truth). See return-state.ts.
-    const ret = await getCurrentReturn(pageId, studentId)
-    if (isSelf) {
-      if (!ret?.returned) {
-        return NextResponse.json({ error: 'Not returned yet' }, { status: 403 })
-      }
-    } else if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const ret = await getCurrentReturn(pageId, studentId, siteId)
+    if (isSelf && !ret?.returned) {
+      return NextResponse.json({ error: 'Not returned yet' }, { status: 403 })
     }
 
     // A returned exam viewed by the STUDENT serves the FROZEN snapshot from the last
@@ -50,12 +63,12 @@ export async function GET(
     const scores: ReviewScores =
       isSelf && ret?.returned && ret.snapshot
         ? ret.snapshot
-        : await buildReviewScores(pageId, studentId)
+        : await buildReviewScores(pageId, studentId, siteId)
     const componentIds = scores.components.map((c) => c.componentId)
 
     const rows = componentIds.length
       ? await prisma.userData.findMany({
-          where: { userId: studentId, itemId: pageId, adapter: { in: componentIds }, targetType: null },
+          where: { userId: studentId, siteId, itemId: pageId, adapter: { in: componentIds }, targetType: null },
           select: { adapter: true, data: true },
         })
       : []
@@ -63,6 +76,7 @@ export async function GET(
 
     return NextResponse.json({
       studentId,
+      siteId,
       grade: scores.grade,
       totalEarned: scores.totalEarned,
       totalMax: scores.totalMax,

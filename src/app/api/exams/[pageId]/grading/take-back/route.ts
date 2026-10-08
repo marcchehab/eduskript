@@ -19,7 +19,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
-import { getAuthoredExamPage, getExamClassesForTeacher, isClassTeacher, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getExamScope, getGradingStudentIds, resolveStudentSite, resolveStudentSites } from '@/lib/scoring/site-scope'
 import { getCurrentReturnsForPage } from '@/lib/scoring/return-state'
 
 export async function POST(
@@ -32,44 +32,36 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const { pageId } = await params
-    if (!(await getAuthoredExamPage(session.user.id, pageId))) {
+    const scope = await getExamScope(session.user.id, pageId)
+    if (!scope) {
       return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
     }
 
     const body = await request.json().catch(() => ({}))
 
-    // Resolve the target student set (mirrors ./return).
-    let studentIds: string[]
+    // Site scoping: each student is acted on for ONE managed site (their
+    // resolved attempt site, or the explicit body.siteId for a single student).
+    let studentSites: Map<string, string>
     if (body.all === true) {
-      const classId = body.classId as string | undefined
-      let classIds: string[]
-      if (classId && classId !== 'all') {
-        if (!(await isClassTeacher(session.user.id, classId))) {
-          return NextResponse.json({ error: 'Not the teacher of this class' }, { status: 403 })
-        }
-        classIds = [classId]
-      } else {
-        const classes = await getExamClassesForTeacher(pageId, session.user.id)
-        classIds = classes.map((c) => c.id)
+      const ids = await getGradingStudentIds(scope, session.user.id, pageId, body.classId as string | undefined)
+      if (!ids) {
+        return NextResponse.json({ error: 'Not the teacher of this class' }, { status: 403 })
       }
-      const members = await prisma.classMembership.findMany({
-        where: { classId: { in: classIds } },
-        select: { studentId: true },
-      })
-      studentIds = [...new Set(members.map((m) => m.studentId))]
+      studentSites = await resolveStudentSites(pageId, ids, scope.siteIds)
     } else {
       const studentId = body.studentId as string | undefined
       if (!studentId) {
         return NextResponse.json({ error: 'studentId or all+classId is required' }, { status: 400 })
       }
-      if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
-        return NextResponse.json({ error: 'Not the teacher of this student' }, { status: 403 })
+      const siteId = await resolveStudentSite(scope, pageId, studentId, typeof body.siteId === 'string' ? body.siteId : null)
+      if (!siteId) {
+        return NextResponse.json({ error: 'You do not manage this site' }, { status: 403 })
       }
-      studentIds = [studentId]
+      studentSites = new Map([[studentId, siteId]])
     }
+    const studentIds = [...studentSites.keys()]
 
-    // Only currently-returned students can be taken back (idempotent: others skipped).
-    const returns = await getCurrentReturnsForPage(pageId, studentIds)
+    const returns = await getCurrentReturnsForPage(pageId, studentSites)
     const returnedIds = studentIds.filter((id) => returns.get(id)?.returned)
     if (returnedIds.length === 0) {
       return NextResponse.json({ takenBack: 0, students: [] })
@@ -79,7 +71,7 @@ export async function POST(
     await prisma.$transaction(
       returnedIds.map((studentId) =>
         prisma.examAuditLog.create({
-          data: { pageId, studentId, event: 'take_back', createdBy: session.user.id, occurredAt: now },
+          data: { pageId, studentId, siteId: studentSites.get(studentId)!, event: 'take_back', createdBy: session.user.id, occurredAt: now },
         }),
       ),
     )

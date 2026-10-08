@@ -17,6 +17,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
 import { useStudentScopedFetch } from '@/hooks/use-student-scoped-fetch'
+import { withSite } from '@/lib/site-scope-client'
 
 export interface StudentSnapshot {
   componentId: string
@@ -84,7 +85,7 @@ export function StudentSnapshotProvider({ pageId, enabled = true, children }: Pr
     studentId,
     [pageId, refetchToken],
     (sid, signal) =>
-      fetch(`/api/exams/${pageId}/student-snapshot?studentId=${encodeURIComponent(sid)}`, { signal, cache: 'no-store' })
+      fetch(withSite(`/api/exams/${pageId}/student-snapshot?studentId=${encodeURIComponent(sid)}`), { signal, cache: 'no-store' })
         .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
         .then((j: { snapshots?: Record<string, StudentSnapshot> }) => j.snapshots ?? {}),
   )

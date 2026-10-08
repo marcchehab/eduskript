@@ -14,6 +14,9 @@
  * opens their result). The per-page/per-student batch helpers deliberately DON'T
  * fetch `payload` (the ~100KB snapshot) — only getCurrentReturn() does, for the
  * single-student review/grade paths that actually render it. Related: [[review-payload]].
+ *
+ * Site scoping: every event carries the site the attempt belongs to
+ * (ExamAuditLog.siteId); return state is per (page, student, site).
  */
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
@@ -57,6 +60,7 @@ export interface StudentReturnStatus extends ReturnStatus {
 
 interface LatestRow {
   page_id?: string
+  site_id?: string
   student_id?: string
   event: string
   score: number | null
@@ -66,9 +70,9 @@ interface LatestRow {
 
 /** Full current-return state (incl. frozen snapshot) for ONE student. null = the
  *  student has no return-relevant event yet (never returned). */
-export async function getCurrentReturn(pageId: string, studentId: string): Promise<CurrentReturn | null> {
+export async function getCurrentReturn(pageId: string, studentId: string, siteId: string): Promise<CurrentReturn | null> {
   const row = await prisma.examAuditLog.findFirst({
-    where: { pageId, studentId, event: { in: RETURN_EVENTS } },
+    where: { pageId, studentId, siteId, event: { in: RETURN_EVENTS } },
     orderBy: { occurredAt: 'desc' },
     select: { event: true, payload: true, score: true, occurredAt: true, createdBy: true },
   })
@@ -84,9 +88,9 @@ export async function getCurrentReturn(pageId: string, studentId: string): Promi
 }
 
 /** Is THIS student currently returned? (Cheap — selects only the latest event.) */
-export async function isStudentReturned(pageId: string, studentId: string): Promise<boolean> {
+export async function isStudentReturned(pageId: string, studentId: string, siteId: string): Promise<boolean> {
   const row = await prisma.examAuditLog.findFirst({
-    where: { pageId, studentId, event: { in: RETURN_EVENTS } },
+    where: { pageId, studentId, siteId, event: { in: RETURN_EVENTS } },
     orderBy: { occurredAt: 'desc' },
     select: { event: true },
   })
@@ -94,47 +98,58 @@ export async function isStudentReturned(pageId: string, studentId: string): Prom
 }
 
 /** Current-return status per student for ONE page (no snapshot). Powers the
- *  teacher grading table. Pass studentIds to scope; omit for all students. */
+ *  teacher grading table. `studentSites` maps each student to the site whose
+ *  log counts (src/lib/scoring/site-scope.ts). */
 export async function getCurrentReturnsForPage(
   pageId: string,
-  studentIds?: string[],
+  studentSites: Map<string, string>,
 ): Promise<Map<string, ReturnStatus>> {
-  if (studentIds && studentIds.length === 0) return new Map()
+  if (studentSites.size === 0) return new Map()
+  const studentIds = [...studentSites.keys()]
+  const siteIds = [...new Set(studentSites.values())]
   const rows = await prisma.$queryRaw<LatestRow[]>(Prisma.sql`
-    SELECT DISTINCT ON (student_id) student_id, event, score, occurred_at, created_by
+    SELECT DISTINCT ON (student_id, site_id) student_id, site_id, event, score, occurred_at, created_by
     FROM exam_audit_logs
     WHERE page_id = ${pageId}
       AND event IN ('return', 'take_back', 'reopened')
-      ${studentIds ? Prisma.sql`AND student_id IN (${Prisma.join(studentIds)})` : Prisma.empty}
-    ORDER BY student_id, occurred_at DESC
+      AND student_id IN (${Prisma.join(studentIds)})
+      AND site_id IN (${Prisma.join(siteIds)})
+    ORDER BY student_id, site_id, occurred_at DESC
   `)
   const map = new Map<string, ReturnStatus>()
   for (const r of rows) {
+    if (studentSites.get(r.student_id!) !== r.site_id) continue
     map.set(r.student_id!, { returned: isReturnedFromLatest(r.event), score: r.score, at: r.occurred_at, by: r.created_by })
   }
   return map
 }
 
-/** Current-return status per page for ONE student. Powers the student "My Exams"
- *  list. Doesn't fetch the whole snapshot — only grade/totalEarned/totalMax are
- *  extracted from it in SQL (JSONB ->>). */
+/** Map key for getCurrentReturnsForStudent: one entry per (page, site). */
+export function pageSiteKey(pageId: string, siteId: string): string {
+  return `${pageId}\u0000${siteId}`
+}
+
+/** Current-return status per (page, site) for ONE student — keyed by
+ *  pageSiteKey(). Powers the student "My Exams" list. Doesn't fetch the whole
+ *  snapshot — only grade/totalEarned/totalMax are extracted from it in SQL
+ *  (JSONB ->>). */
 export async function getCurrentReturnsForStudent(studentId: string): Promise<Map<string, StudentReturnStatus>> {
   const rows = await prisma.$queryRaw<
     (LatestRow & { grade: number | null; total_earned: number | null; total_max: number | null })[]
   >(Prisma.sql`
-    SELECT DISTINCT ON (page_id) page_id, event, score, occurred_at, created_by,
+    SELECT DISTINCT ON (page_id, site_id) page_id, site_id, event, score, occurred_at, created_by,
       (payload->>'grade')::float8 AS grade,
       (payload->>'totalEarned')::float8 AS total_earned,
       (payload->>'totalMax')::float8 AS total_max
     FROM exam_audit_logs
     WHERE student_id = ${studentId}
       AND event IN ('return', 'take_back', 'reopened')
-    ORDER BY page_id, occurred_at DESC
+    ORDER BY page_id, site_id, occurred_at DESC
   `)
   const map = new Map<string, StudentReturnStatus>()
   for (const r of rows) {
     const returned = isReturnedFromLatest(r.event)
-    map.set(r.page_id!, {
+    map.set(pageSiteKey(r.page_id!, r.site_id ?? ''), {
       returned,
       score: r.score,
       at: r.occurred_at,

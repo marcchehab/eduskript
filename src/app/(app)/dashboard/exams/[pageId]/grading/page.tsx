@@ -44,6 +44,8 @@ interface ComponentCell {
 }
 interface StudentRow {
   studentId: string
+  /** Site of the attempt shown (site scoping); sent with per-student actions. */
+  siteId: string | null
   name: string | null
   email: string | null
   pseudonym: string | null
@@ -176,10 +178,14 @@ export default function ExamGradingPage() {
       .catch(() => setClasses([]))
   }, [pageId, status])
 
-  // Auto-select the only unlocked class when none chosen.
+  // Auto-select the only unlocked class when none chosen. With NO classes (org
+  // owners/admins — org sites have no classes) go straight to 'all', which
+  // lists every submission on the sites the viewer manages.
   useEffect(() => {
     if (!classId && classes && classes.length === 1) {
       router.replace(`/dashboard/exams/${pageId}/grading?classId=${classes[0].id}`)
+    } else if (!classId && classes && classes.length === 0) {
+      router.replace(`/dashboard/exams/${pageId}/grading?classId=all`)
     }
   }, [classId, classes, pageId, router])
 
@@ -306,11 +312,11 @@ export default function ExamGradingPage() {
         : d,
     )
 
-  const returnStudent = (studentId: string) => {
+  const returnStudent = (studentId: string, siteId: string | null) => {
     fetch(`/api/exams/${pageId}/grading/return`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId }),
+      body: JSON.stringify({ studentId, siteId: siteId ?? undefined }),
     })
       .then((r) => {
         if (!r.ok) throw new Error()
@@ -433,13 +439,13 @@ export default function ExamGradingPage() {
         </Link>
         <h1 className="text-2xl font-bold">Grade exam</h1>
         {classes && classes.length === 0 ? (
-          <p className="text-muted-foreground">This exam isn’t unlocked for any of your classes yet.</p>
+          <p className="text-muted-foreground">Loading all submissions…</p>
         ) : (
           <div className="space-y-2">
             <p className="text-muted-foreground">Choose a class to grade:</p>
-            {classes && classes.length > 1 && (
+            {classes && classes.length > 0 && (
               <Button variant="outline" asChild className="w-full justify-start font-medium">
-                <Link href={`/dashboard/exams/${pageId}/grading?classId=all`}>All classes ({classes.length})</Link>
+                <Link href={`/dashboard/exams/${pageId}/grading?classId=all`}>All submissions on your sites</Link>
               </Button>
             )}
             {classes?.map((c) => (
@@ -482,7 +488,7 @@ export default function ExamGradingPage() {
               value={data.selectedClassId}
               onChange={(e) => router.push(`/dashboard/exams/${pageId}/grading?classId=${e.target.value}`)}
             >
-              {data.classes.length > 1 && <option value="all">All classes ({data.classes.length})</option>}
+              <option value="all">All submissions on your sites</option>
               {data.classes.map((cl) => (
                 <option key={cl.id} value={cl.id}>{cl.name}</option>
               ))}
@@ -678,7 +684,7 @@ export default function ExamGradingPage() {
                 </td>
                 <td className="px-3 py-2 text-right">
                   {s.status !== 'not_started' && (
-                    <Button size="sm" variant="outline" onClick={() => returnStudent(s.studentId)}>
+                    <Button size="sm" variant="outline" onClick={() => returnStudent(s.studentId, s.siteId)}>
                       {s.status === 'returned' ? 'Re-return' : 'Return'}
                     </Button>
                   )}

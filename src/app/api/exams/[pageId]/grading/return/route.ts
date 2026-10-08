@@ -7,6 +7,9 @@
  * body: { studentId }              → return one student
  *       { all: true, classId }     → return every submitted student in the class
  *
+ * Site scoping: caller must manage the site of each student's attempt
+ * (src/lib/scoring/site-scope.ts); body.siteId optionally picks it.
+ *
  * Only students who have actually submitted are returned (no submission row =
  * skipped). Re-returning APPENDS a new `return` event — prior returns and their
  * snapshots are preserved. Return state is derived from the log, never from a flag
@@ -20,7 +23,7 @@ import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
 import { Prisma } from '@prisma/client'
 import { buildReviewScores } from '@/lib/scoring/review-payload'
-import { getAuthoredExamPage, getExamClassesForTeacher, isClassTeacher, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getExamScope, getGradingStudentIds, resolveStudentSite, resolveStudentSites } from '@/lib/scoring/site-scope'
 
 export async function POST(
   request: NextRequest,
@@ -32,50 +35,42 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const { pageId } = await params
-    if (!(await getAuthoredExamPage(session.user.id, pageId))) {
+    const scope = await getExamScope(session.user.id, pageId)
+    if (!scope) {
       return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
     }
 
     const body = await request.json().catch(() => ({}))
 
-    // Resolve the target student set.
-    let studentIds: string[]
+    // Site scoping: each student is acted on for ONE managed site (their
+    // resolved attempt site, or the explicit body.siteId for a single student).
+    let studentSites: Map<string, string>
     if (body.all === true) {
-      const classId = body.classId as string | undefined
-      let classIds: string[]
-      if (classId && classId !== 'all') {
-        if (!(await isClassTeacher(session.user.id, classId))) {
-          return NextResponse.json({ error: 'Not the teacher of this class' }, { status: 403 })
-        }
-        classIds = [classId]
-      } else {
-        // Every class this teacher owns that's assigned this exam OR has a
-        // submitted answer (matches the grading table). See getExamClassesForTeacher.
-        const classes = await getExamClassesForTeacher(pageId, session.user.id)
-        classIds = classes.map((c) => c.id)
+      const ids = await getGradingStudentIds(scope, session.user.id, pageId, body.classId as string | undefined)
+      if (!ids) {
+        return NextResponse.json({ error: 'Not the teacher of this class' }, { status: 403 })
       }
-      const members = await prisma.classMembership.findMany({
-        where: { classId: { in: classIds } },
-        select: { studentId: true },
-      })
-      studentIds = [...new Set(members.map((m) => m.studentId))]
+      studentSites = await resolveStudentSites(pageId, ids, scope.siteIds)
     } else {
       const studentId = body.studentId as string | undefined
       if (!studentId) {
         return NextResponse.json({ error: 'studentId or all+classId is required' }, { status: 400 })
       }
-      if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
-        return NextResponse.json({ error: 'Not the teacher of this student' }, { status: 403 })
+      const siteId = await resolveStudentSite(scope, pageId, studentId, typeof body.siteId === 'string' ? body.siteId : null)
+      if (!siteId) {
+        return NextResponse.json({ error: 'You do not manage this site' }, { status: 403 })
       }
-      studentIds = [studentId]
+      studentSites = new Map([[studentId, siteId]])
     }
+    const studentIds = [...studentSites.keys()]
 
-    // Only students with a submission can be returned.
     const submissions = await prisma.examSubmission.findMany({
-      where: { pageId, studentId: { in: studentIds } },
-      select: { studentId: true },
+      where: { pageId, studentId: { in: studentIds }, siteId: { in: [...new Set(studentSites.values())] } },
+      select: { studentId: true, siteId: true },
     })
-    const submittedIds = submissions.map((s) => s.studentId)
+    const submittedIds = submissions
+      .filter((s) => studentSites.get(s.studentId) === s.siteId)
+      .map((s) => s.studentId)
     if (submittedIds.length === 0) {
       return NextResponse.json({ returned: 0, students: [] })
     }
@@ -85,7 +80,7 @@ export async function POST(
     // event (prior returns + their snapshots are preserved); later re-scores/rubric
     // edits only reach the student on a re-return. See review-payload.ts + return-state.ts.
     const snapshots = new Map(
-      await Promise.all(submittedIds.map(async (sid) => [sid, await buildReviewScores(pageId, sid)] as const)),
+      await Promise.all(submittedIds.map(async (sid) => [sid, await buildReviewScores(pageId, sid, studentSites.get(sid)!)] as const)),
     )
     const now = new Date()
 
@@ -96,6 +91,7 @@ export async function POST(
           data: {
             pageId,
             studentId,
+            siteId: studentSites.get(studentId)!,
             event: 'return',
             payload: snap as unknown as Prisma.InputJsonValue,
             score: snap.totalEarned,

@@ -17,6 +17,7 @@ import type {
   ExamAuditResponse,
   ExamAuditRow,
 } from '@/app/api/exams/[pageId]/audit/route'
+import { withSite } from '@/lib/site-scope-client'
 
 export type { ExamAuditEvent, ExamAuditRow }
 
@@ -55,7 +56,7 @@ export function useExamAudit({
     const load = async () => {
       try {
         const res = await fetch(
-          `/api/exams/${pageId}/audit?classId=${encodeURIComponent(classId)}`,
+          withSite(`/api/exams/${pageId}/audit?classId=${encodeURIComponent(classId)}`),
           { cache: 'no-store' },
         )
         if (!res.ok) return

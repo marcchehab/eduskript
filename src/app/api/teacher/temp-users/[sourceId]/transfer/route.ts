@@ -17,8 +17,9 @@
  * you grade the real student fresh.
  *
  * COPY (not move): the source account is left intact as a backup until the
- * teacher deletes it. For every page where the source has an ExamSubmission we
- * copy. Wrapped in one transaction.
+ * teacher deletes it. For every (page, site) where the source has an
+ * ExamSubmission ON A SITE THE TEACHER MANAGES we copy, keeping the site
+ * (site scoping, src/lib/site-access.ts). Wrapped in one transaction.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,6 +27,7 @@ import { getServerSession } from 'next-auth'
 import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getManagedSiteIds } from '@/lib/site-access'
 
 interface RouteParams {
   params: Promise<{ sourceId: string }>
@@ -69,13 +71,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Target is not a student in any of your classes' }, { status: 403 })
     }
 
-    // Pages the source actually engaged with (has a submission for).
+    // (page, site) pairs the source actually engaged with, on the teacher's sites.
+    const managedSiteIds = await getManagedSiteIds(teacherId)
     const subs = await prisma.examSubmission.findMany({
-      where: { studentId: sourceId },
-      select: { pageId: true },
+      where: { studentId: sourceId, siteId: { in: managedSiteIds } },
+      select: { pageId: true, siteId: true },
     })
     const pageIds = [...new Set(subs.map((s) => s.pageId))]
-    if (pageIds.length === 0) {
+    if (subs.length === 0) {
       return NextResponse.json({ error: 'The temporary user has no submitted exams to transfer.' }, { status: 400 })
     }
 
@@ -83,34 +86,35 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const result = await prisma.$transaction(async (tx) => {
       const counts = { pages: pageIds.length, userData: 0, checkpoints: 0, submissions: 0, audit: 0 }
 
-      for (const pageId of pageIds) {
+      for (const { pageId, siteId } of subs) {
         // --- exam_submissions (unique [pageId, studentId]) ---
         // Create a CLEAN submission for the target: marked submitted so it's
         // gradeable, but with NO score / scoredAt / returnedAt / gradeSnapshot —
         // we transfer answers, not grading. The teacher grades the real student fresh.
         const srcSub = await tx.examSubmission.findUnique({
-          where: { pageId_studentId: { pageId, studentId: sourceId } },
+          where: { pageId_studentId_siteId: { pageId, studentId: sourceId, siteId } },
           select: { submittedAt: true },
         })
         if (srcSub) {
-          await tx.examSubmission.deleteMany({ where: { pageId, studentId: targetUserId } })
+          await tx.examSubmission.deleteMany({ where: { pageId, studentId: targetUserId, siteId } })
           await tx.examSubmission.create({
-            data: { pageId, studentId: targetUserId, submittedAt: srcSub.submittedAt, source: 'transfer' },
+            data: { pageId, studentId: targetUserId, siteId, submittedAt: srcSub.submittedAt, source: 'transfer' },
           })
           counts.submissions++
         }
 
         // --- user_data: live answers for this page (unique [userId, adapter, itemId, targetType, targetId]) ---
         const srcData = await tx.userData.findMany({
-          where: { userId: sourceId, itemId: pageId, targetType: null },
+          where: { userId: sourceId, siteId, itemId: pageId, targetType: null },
         })
         for (const d of srcData) {
           await tx.userData.deleteMany({
-            where: { userId: targetUserId, adapter: d.adapter, itemId: pageId, targetType: null, targetId: null },
+            where: { userId: targetUserId, siteId, adapter: d.adapter, itemId: pageId, targetType: null, targetId: null },
           })
           await tx.userData.create({
             data: {
               userId: targetUserId,
+              siteId,
               adapter: d.adapter,
               itemId: d.itemId,
               data: d.data as Prisma.InputJsonValue,
@@ -126,8 +130,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // full-replace and IDEMPOTENT: re-transferring (e.g. to fix something) won't
         // pile up duplicate hand-ins. Safe here because the transfer already replaces
         // the target's submission + live answers for this page.
-        await tx.userDataCheckpoint.deleteMany({ where: { userId: targetUserId, pageId } })
-        const srcCps = await tx.userDataCheckpoint.findMany({ where: { userId: sourceId, pageId } })
+        await tx.userDataCheckpoint.deleteMany({ where: { userId: targetUserId, pageId, siteId } })
+        const srcCps = await tx.userDataCheckpoint.findMany({ where: { userId: sourceId, pageId, siteId } })
         if (srcCps.length) {
           await tx.userDataCheckpoint.createMany({
             // Preserve each checkpoint's ORIGINAL createdAt: the grading version
@@ -136,6 +140,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             data: srcCps.map((c) => ({
               userId: targetUserId,
               pageId,
+              siteId,
               componentId: c.componentId,
               kind: c.kind,
               payload: c.payload as Prisma.InputJsonValue,
@@ -147,7 +152,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
 
         // --- exam_audit_logs (no unique key — append a marker so the timeline shows the transfer) ---
-        await tx.examAuditLog.create({ data: { pageId, studentId: targetUserId, event: 'submitted', occurredAt: now } })
+        await tx.examAuditLog.create({ data: { pageId, studentId: targetUserId, siteId, event: 'submitted', occurredAt: now } })
         counts.audit++
       }
 

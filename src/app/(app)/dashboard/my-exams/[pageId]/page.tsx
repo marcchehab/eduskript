@@ -40,7 +40,10 @@ export default function MyExamFeedbackPage() {
 
   useEffect(() => {
     if (status !== 'authenticated') return
-    fetch(`/api/exams/${pageId}/my-grade`)
+    // Site scoping: the attempt's site comes from the My Exams list link.
+    // Read from location (not useSearchParams) to avoid a Suspense boundary.
+    const siteId = new URLSearchParams(window.location.search).get('siteId') ?? ''
+    fetch(`/api/exams/${pageId}/my-grade?siteId=${encodeURIComponent(siteId)}`)
       .then(async (r) => {
         if (r.status === 403) throw new Error('This exam hasn’t been returned yet.')
         if (!r.ok) throw new Error('Could not load your feedback.')

@@ -153,12 +153,15 @@ const EXAM_SESSION_DURATION_HOURS = 4
  * @param userId - The authenticated user
  * @param pageId - The exam page that initiated the session
  * @param skriptId - The skript containing the exam (all pages accessible)
+ * @param siteId - Site the exam is taken on (site scoping). Writes made under
+ *   this session (sync, checkpoints, hand-in) are pinned to it. '' = unknown.
  * @returns The session ID to store in a cookie
  */
 export async function createExamSession(
   userId: string,
   pageId: string,
-  skriptId: string
+  skriptId: string,
+  siteId: string = ''
 ): Promise<string> {
   const sessionId = randomBytes(32).toString('hex')
   const expiresAt = new Date(Date.now() + EXAM_SESSION_DURATION_HOURS * 60 * 60 * 1000)
@@ -169,6 +172,7 @@ export async function createExamSession(
       userId,
       pageId,
       skriptId,
+      siteId,
       expiresAt,
     },
   })
@@ -177,7 +181,7 @@ export async function createExamSession(
   // total time-on-exam for the teacher roster. Fire-and-forget — never
   // block exam entry on a log failure.
   prisma.examAuditLog
-    .create({ data: { pageId, studentId: userId, event: 'started' } })
+    .create({ data: { pageId, studentId: userId, event: 'started', siteId } })
     .catch((err) => console.error('[exam-audit] failed to log started:', err))
 
   // Probabilistic cleanup - 1% chance on each session creation
@@ -196,6 +200,8 @@ export interface ExamSessionData {
   userId: string
   pageId: string
   skriptId: string
+  /** Site the session is bound to ('' = legacy session, any site). */
+  siteId: string
   expiresAt: Date
 }
 
@@ -210,17 +216,21 @@ export interface ExamSessionData {
  * - Session exists
  * - Session is not expired
  * - (if skriptId provided) Requested page is in the same skript as the session
+ * - (if siteId provided) the session is bound to that site (site scoping;
+ *   legacy sessions with siteId '' are accepted on any site)
  */
 export async function validateExamSession(
   sessionId: string
 ): Promise<ExamSessionData | null>
 export async function validateExamSession(
   sessionId: string,
-  skriptId: string
+  skriptId: string,
+  siteId?: string
 ): Promise<string | null>
 export async function validateExamSession(
   sessionId: string,
-  skriptId?: string
+  skriptId?: string,
+  siteId?: string
 ): Promise<ExamSessionData | string | null> {
   const session = await prisma.examSession.findUnique({
     where: { sessionId },
@@ -228,6 +238,7 @@ export async function validateExamSession(
       userId: true,
       pageId: true,
       skriptId: true,
+      siteId: true,
       expiresAt: true,
     },
   })
@@ -247,6 +258,9 @@ export async function validateExamSession(
     if (session.skriptId !== skriptId) {
       return null // Session is for a different skript
     }
+    if (siteId !== undefined && session.siteId && session.siteId !== siteId) {
+      return null // Session is bound to another site
+    }
     return session.userId
   }
 
@@ -255,6 +269,7 @@ export async function validateExamSession(
     userId: session.userId,
     pageId: session.pageId,
     skriptId: session.skriptId,
+    siteId: session.siteId,
     expiresAt: session.expiresAt,
   }
 }

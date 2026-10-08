@@ -4,7 +4,7 @@
  * scoring engine reads for the component (the highest-priority source with
  * points still wins overall — an override or AI score can outrank it).
  *
- * PUT /api/exams/[pageId]/check-run   (teacher-of-student only)
+ * PUT /api/exams/[pageId]/check-run   (manager of the attempt's site; optional body.siteId)
  * body: { studentId, componentId, earned, max, passed, total }
  */
 
@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getExamScope, resolveStudentSite } from '@/lib/scoring/site-scope'
 import { isStudentReturned, returnedLockResponse } from '@/lib/scoring/return-state'
 import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 
@@ -31,11 +31,14 @@ export async function PUT(
     if (!studentId || !componentId) {
       return NextResponse.json({ error: 'studentId and componentId required' }, { status: 400 })
     }
-    if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
+    // Site scoping: caller must manage the site of the student's attempt.
+    const scope = await getExamScope(session.user.id, pageId)
+    const siteId = scope ? await resolveStudentSite(scope, pageId, studentId, typeof body.siteId === 'string' ? body.siteId : request.nextUrl.searchParams.get('siteId')) : null
+    if (!siteId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
     // Don't let a check re-run mutate a returned exam's frozen scores.
-    if (await isStudentReturned(pageId, studentId)) return returnedLockResponse('student')
+    if (await isStudentReturned(pageId, studentId, siteId)) return returnedLockResponse('student')
 
     const earned = Number(body.earned)
     const max = Number(body.max)
@@ -54,9 +57,9 @@ export async function PUT(
     }
     const run = await prisma.componentScore.upsert({
       where: {
-        pageId_studentId_componentId_source: { pageId, studentId, componentId, source: 'check' },
+        pageId_studentId_componentId_source_siteId: { pageId, studentId, componentId, source: 'check', siteId },
       },
-      create: { pageId, studentId, componentId, source: 'check', ...data },
+      create: { pageId, studentId, siteId, componentId, source: 'check', ...data },
       update: data,
     })
     return NextResponse.json({ run })

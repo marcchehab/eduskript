@@ -15,6 +15,10 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/scoring/return-state', () => ({ getCurrentReturnsForPage: vi.fn() }))
 vi.mock('@/lib/scoring/auth', () => ({ getExamUrl: vi.fn() }))
+vi.mock('@/lib/site-access', () => ({ getManagedSiteIds: vi.fn(async () => ['site-a']) }))
+vi.mock('@/lib/scoring/site-scope', () => ({
+  resolveStudentSites: vi.fn(async (_p: string, ids: string[]) => new Map(ids.map((i) => [i, 'site-a']))),
+}))
 
 import { GET } from '@/app/api/classes/[id]/exams/route'
 import { prisma } from '@/lib/prisma'
@@ -43,10 +47,10 @@ describe('GET /api/classes/[id]/exams', () => {
       { studentId: 's2' },
       { studentId: 's3' },
     ] as never)
-    vi.mocked(prisma.page.findMany).mockResolvedValue([{ id: 'p1', title: 'Klassenarbeit 2' }] as never)
+    vi.mocked(prisma.page.findMany).mockResolvedValue([{ id: 'p1', title: 'Klassenarbeit 2', examStates: [{ siteId: 'site-a' }] }] as never)
     vi.mocked(prisma.examSubmission.findMany).mockResolvedValue([
-      { pageId: 'p1', studentId: 's1', submittedAt: new Date('2026-10-01T10:00:00Z') },
-      { pageId: 'p1', studentId: 's2', submittedAt: new Date('2026-10-01T11:00:00Z') },
+      { pageId: 'p1', studentId: 's1', siteId: 'site-a', submittedAt: new Date('2026-10-01T10:00:00Z') },
+      { pageId: 'p1', studentId: 's2', siteId: 'site-a', submittedAt: new Date('2026-10-01T11:00:00Z') },
     ] as never)
     // s1 has a teacher override -> graded; s2 nothing yet
     vi.mocked(prisma.componentScore.findMany).mockResolvedValue([
@@ -73,8 +77,11 @@ describe('GET /api/classes/[id]/exams', () => {
         examUrl: '/exam/site/skript/klassenarbeit2',
       },
     ])
-    // Only exams the teacher authors (grading page requires authorship).
+    // Site scoping: no authorship filter; activity only on managed sites.
     const where = vi.mocked(prisma.page.findMany).mock.calls[0][0]!.where as Record<string, unknown>
-    expect(where.authors).toEqual({ some: { userId: 't1' } })
+    expect(where.authors).toBeUndefined()
+    expect(JSON.stringify(where)).toContain('site-a')
+    const subWhere = vi.mocked(prisma.examSubmission.findMany).mock.calls[0][0]!.where as Record<string, unknown>
+    expect(subWhere.siteId).toEqual({ in: ['site-a'] })
   })
 })

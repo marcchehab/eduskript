@@ -1,6 +1,8 @@
 /**
  * Upsert (or clear) a teacher's per-question override for one student.
- * Teacher-only (teaches a class containing the student with the page unlocked).
+ * Site scoping: the caller must MANAGE the site the student's attempt lives on
+ * (src/lib/scoring/site-scope.ts). Optional body `siteId` picks the site;
+ * otherwise the student's site is resolved within the caller's scope.
  *
  * PUT /api/exams/[pageId]/grading/question
  * body: { studentId, componentId, awardedPoints?, maxPoints?, feedback?,
@@ -28,7 +30,7 @@ import { getServerSession } from 'next-auth'
 import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getExamScope, resolveStudentSite } from '@/lib/scoring/site-scope'
 import { isStudentReturned, returnedLockResponse } from '@/lib/scoring/return-state'
 import { SCORE_PRIORITY, scoreComponent, isPointsInRange } from '@/lib/scoring/score-component'
 import { parseGradableComponents } from '@/lib/scoring/components'
@@ -50,19 +52,21 @@ export async function PUT(
       return NextResponse.json({ error: 'studentId and componentId are required' }, { status: 400 })
     }
 
-    const page = await getAuthoredExamPage(session.user.id, pageId)
-    if (!page) {
+    const scope = await getExamScope(session.user.id, pageId)
+    if (!scope) {
       return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
     }
-    if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
-      return NextResponse.json({ error: 'Not the teacher of this student' }, { status: 403 })
+    const page = scope.page
+    const siteId = await resolveStudentSite(scope, pageId, studentId, typeof body.siteId === 'string' ? body.siteId : request.nextUrl.searchParams.get('siteId'))
+    if (!siteId) {
+      return NextResponse.json({ error: 'You do not manage this site' }, { status: 403 })
     }
     // A returned exam's scores are an immutable record — take it back to edit.
-    if (await isStudentReturned(pageId, studentId)) return returnedLockResponse('student')
+    if (await isStudentReturned(pageId, studentId, siteId)) return returnedLockResponse('student')
 
     const existing = await prisma.componentScore.findUnique({
       where: {
-        pageId_studentId_componentId_source: { pageId, studentId, componentId, source: 'override' },
+        pageId_studentId_componentId_source_siteId: { pageId, studentId, componentId, source: 'override', siteId },
       },
       select: { earned: true, max: true, feedback: true, meta: true },
     })
@@ -125,7 +129,7 @@ export async function PUT(
           select: { criteria: true },
         }),
         prisma.componentScore.findUnique({
-          where: { pageId_studentId_componentId_source: { pageId, studentId, componentId, source: 'ai' } },
+          where: { pageId_studentId_componentId_source_siteId: { pageId, studentId, componentId, source: 'ai', siteId } },
           select: { meta: true },
         }),
       ])
@@ -159,7 +163,7 @@ export async function PUT(
         }
         const [declared] = parseGradableComponents(page.content ?? '').filter((c) => c.componentId === componentId)
         const others = await prisma.componentScore.findMany({
-          where: { pageId, studentId, componentId, source: { not: 'override' } },
+          where: { pageId, studentId, siteId, componentId, source: { not: 'override' } },
           select: { source: true, priority: true, earned: true, max: true, updatedAt: true },
         })
         const { max } = scoreComponent({
@@ -175,7 +179,7 @@ export async function PUT(
 
     // Nothing left to store → drop the override row (reverts to the next source).
     if (earned === null && feedback === null && criteria.length === 0) {
-      await prisma.componentScore.deleteMany({ where: { pageId, studentId, componentId, source: 'override' } })
+      await prisma.componentScore.deleteMany({ where: { pageId, studentId, siteId, componentId, source: 'override' } })
       return NextResponse.json({ cleared: true })
     }
 
@@ -189,9 +193,9 @@ export async function PUT(
     }
     const grade = await prisma.componentScore.upsert({
       where: {
-        pageId_studentId_componentId_source: { pageId, studentId, componentId, source: 'override' },
+        pageId_studentId_componentId_source_siteId: { pageId, studentId, componentId, source: 'override', siteId },
       },
-      create: { pageId, studentId, componentId, source: 'override', ...data },
+      create: { pageId, studentId, siteId, componentId, source: 'override', ...data },
       update: data,
     })
 

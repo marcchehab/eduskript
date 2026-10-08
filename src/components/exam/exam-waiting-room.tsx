@@ -24,6 +24,7 @@ import { Clock, Wifi, WifiOff, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { HandInButton } from './hand-in-button'
 import { useIsInSEB } from '@/hooks/use-is-in-seb'
+import { withSite } from '@/lib/site-scope-client'
 
 interface ExamWaitingRoomProps {
   pageId: string
@@ -78,7 +79,7 @@ export function ExamWaitingRoom({
       return !hasStudentOverride
     }
 
-    const eventSource = new EventSource(`/api/exams/${pageId}/state/stream?classId=${classId}`)
+    const eventSource = new EventSource(withSite(`/api/exams/${pageId}/state/stream?classId=${classId}`))
     eventSourceRef.current = eventSource
 
     eventSource.onopen = () => {
@@ -105,8 +106,8 @@ export function ExamWaitingRoom({
     // Poll fallback: covers a dropped stream, a backgrounded tab that missed the
     // event, and a change on another class's row (which this channel never
     // carries). Reads the single row that decides this student's state.
-    const pollUrl = `/api/exams/${pageId}/state?classId=${classId}` +
-      (hasStudentOverride && studentId ? `&studentId=${encodeURIComponent(studentId)}` : '')
+    const pollUrl = withSite(`/api/exams/${pageId}/state?classId=${classId}` +
+      (hasStudentOverride && studentId ? `&studentId=${encodeURIComponent(studentId)}` : ''))
     const poll = setInterval(async () => {
       try {
         const res = await fetch(pollUrl, { cache: 'no-store' })

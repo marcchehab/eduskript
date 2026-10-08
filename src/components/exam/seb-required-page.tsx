@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { SEBQuitButton } from './seb-quit-button'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { withSite } from '@/lib/site-scope-client'
 
 interface SEBRequiredPageProps {
   pageTitle: string
@@ -33,7 +34,7 @@ export function SEBRequiredPage({
   const handleOpenSEB = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/exams/${pageId}/download-link`)
+      const response = await fetch(withSite(`/api/exams/${pageId}/download-link`))
       if (!response.ok) {
         throw new Error('Failed to generate download link')
       }

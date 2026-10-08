@@ -78,6 +78,7 @@ import { karaLineHighlighting, showKaraLine, type KaraLineTarget } from './kara-
 import { KARA_MODULE_SOURCE, KARA_RUNNER } from '@/lib/kara/kara-module'
 import { KARA_COMPLETIONS } from '@/lib/kara/completions'
 import { karaAftermathInput, karaDataFiles, karaRunInput, karaStars, parseKaraLevel, type KaraTrace, type KaraWorld } from '@/lib/kara/world'
+import { withSite } from '@/lib/site-scope-client'
 
 /**
  * Hard wall-clock cap on a single Pyodide run from the Run / Check buttons.
@@ -2365,7 +2366,7 @@ export const CodeEditor = memo(function CodeEditor({
     const sid = selectedStudent.id
     const seq = ++snapListReqSeq.current
     const ctrl = new AbortController()
-    fetch(`/api/exams/${pageId}/component-snapshots?studentId=${encodeURIComponent(sid)}&componentId=${encodeURIComponent(componentId)}`, { signal: ctrl.signal })
+    fetch(withSite(`/api/exams/${pageId}/component-snapshots?studentId=${encodeURIComponent(sid)}&componentId=${encodeURIComponent(componentId)}`), { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : { snapshots: [] }))
       .then((j) => { if (seq === snapListReqSeq.current) { setSnapList(j.snapshots ?? []); setViewedSnapshotId(null); setEditedSinceSnapshot(false) } })
       .catch(() => { if (!ctrl.signal.aborted && seq === snapListReqSeq.current) setSnapList([]) })

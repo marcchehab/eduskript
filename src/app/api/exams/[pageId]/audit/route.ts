@@ -1,21 +1,23 @@
 /**
  * Exam Audit Log API
  *
- * GET /api/exams/[pageId]/audit?classId=xxx
+ * GET /api/exams/[pageId]/audit?classId=xxx&siteId=yyy
  *
  * Returns the append-only event log (started / submitted / reopened) for
  * every student in the given class. Used by the teacher roster to compute
  * total time-on-exam across attempts and to render the per-student event
  * timeline tooltip.
  *
- * Same auth gating as `/api/exams/[pageId]/students`: caller must be a
- * page author AND the teacher of the requested class.
+ * Same auth gating as `/api/exams/[pageId]/students`: caller must OWN the
+ * personal site `siteId` (placing the page) AND teach the requested class.
+ * Only that site's events are returned (site scoping).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getSiteAccess, isItemPlacedOnSite } from '@/lib/site-access'
 
 export type ExamAuditEvent = 'started' | 'submitted' | 'reopened'
 
@@ -42,6 +44,7 @@ export async function GET(
     const { pageId } = await params
     const { searchParams } = new URL(request.url)
     const classId = searchParams.get('classId')
+    const siteId = searchParams.get('siteId')
 
     if (!classId) {
       return NextResponse.json(
@@ -50,16 +53,9 @@ export async function GET(
       )
     }
 
-    // Verify caller is a page author
-    const page = await prisma.page.findFirst({
-      where: {
-        id: pageId,
-        authors: { some: { userId: session.user.id } },
-      },
-      select: { id: true },
-    })
-
-    if (!page) {
+    // Site scoping: own personal site that places the page.
+    const access = siteId ? await getSiteAccess(session.user.id, siteId) : null
+    if (!siteId || !access?.isOwner || !(await isItemPlacedOnSite(pageId, siteId))) {
       return NextResponse.json(
         { error: 'Page not found or access denied' },
         { status: 404 }
@@ -96,6 +92,7 @@ export async function GET(
     const rows = await prisma.examAuditLog.findMany({
       where: {
         pageId,
+        siteId,
         studentId: { in: studentIds },
         // Attempt-lifecycle events only — the log now also holds grading events
         // (return / take_back), which must not leak into the duration roster.

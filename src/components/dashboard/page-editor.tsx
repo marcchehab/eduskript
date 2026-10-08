@@ -375,7 +375,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     const entries = await Promise.all(
       teacherClasses.map(async (cls): Promise<[string, ExamLifecycleState]> => {
         try {
-          const r = await fetch(`/api/exams/${page.id}/state?classId=${cls.id}`)
+          // Site scoping: assignments live on the site the editor is for.
+          const r = await fetch(`/api/exams/${page.id}/state?classId=${cls.id}${site ? `&siteId=${encodeURIComponent(site.id)}` : ''}`)
           if (!r.ok) return [cls.id, 'hidden']
           const j = await r.json()
           return [cls.id, (j.state ?? 'hidden') as ExamLifecycleState]
@@ -385,7 +386,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       })
     )
     setExamStates(Object.fromEntries(entries))
-  }, [page.id, pageType, teacherClasses])
+  }, [page.id, pageType, teacherClasses, site])
 
   useEffect(() => {
     loadExamStates()
@@ -400,7 +401,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       const r = await fetch(`/api/exams/${page.id}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classId, state }),
+        body: JSON.stringify({ classId, state, siteId: site?.id }),
       })
       if (!r.ok) throw new Error('failed')
     } catch (error) {

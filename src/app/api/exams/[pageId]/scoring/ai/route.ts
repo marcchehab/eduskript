@@ -4,9 +4,11 @@
  * and a saved rubric, the LLM awards points per criterion; the result is stored
  * as a ComponentScore(source="ai") — points + feedback only, never a grade.
  *
- * POST { componentId? , all? , studentIds? }   (teacher who authored the page)
+ * POST { componentId? , all? , studentIds? }   (manager of a site holding the
+ *   exam — site scoping, src/lib/scoring/site-scope.ts; scores are written per
+ *   student on that student's site)
  *   - componentId: score just this component;  all: score every component
- *   - studentIds: restrict to these (else every student the teacher teaches)
+ *   - studentIds: restrict to these (else every student in the caller's grading scope)
  * Returns per-student results + any errors. Synchronous (bounded concurrency);
  * the UI shows a spinner. A rubric must exist for each scored component.
  */
@@ -16,9 +18,8 @@ import { aiConfigured } from '@/lib/ai/provider'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { examClassActivityWhere } from '@/lib/exam-state'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
-import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getExamScope, getGradingStudentIds, resolveStudentSite, resolveStudentSites } from '@/lib/scoring/site-scope'
 import { getCurrentReturnsForPage, isStudentReturned, returnedLockResponse } from '@/lib/scoring/return-state'
 import { parseGradableComponents, extractComponentContext } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
@@ -51,14 +52,6 @@ async function scoreWithRetry(
   return res
 }
 
-async function teacherStudentIds(userId: string, pageId: string): Promise<string[]> {
-  const rows = await prisma.classMembership.findMany({
-    where: { class: { teacherId: userId, ...examClassActivityWhere(pageId) } },
-    select: { studentId: true },
-  })
-  return [...new Set(rows.map((r) => r.studentId))]
-}
-
 /** Run `worker` over items with bounded concurrency, preserving order. */
 async function pool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length)
@@ -81,8 +74,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
   }
   const { pageId } = await params
-  const page = await getAuthoredExamPage(session.user.id, pageId)
-  if (!page) return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
+  const scope = await getExamScope(session.user.id, pageId)
+  if (!scope) return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
+  const page = scope.page
 
   const body = await request.json().catch(() => ({}))
   const { componentId, componentIds, all, studentIds: requested } = body as {
@@ -104,14 +98,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'No matching gradable component' }, { status: 400 })
   }
 
-  const allowed = await teacherStudentIds(session.user.id, pageId)
+  const allowed = (await getGradingStudentIds(scope, session.user.id, pageId, 'all')) ?? []
   const allowedSet = new Set(allowed)
   const studentIds = (requested && requested.length ? requested.filter((s) => allowedSet.has(s)) : allowed)
   if (studentIds.length === 0) return NextResponse.json({ scored: 0, results: [], errors: [] })
+  const studentSites = await resolveStudentSites(pageId, studentIds, scope.siteIds)
 
   // A returned exam's scores are an immutable record — reject the whole batch if
   // ANY target student is currently returned (the teacher must take it back first).
-  const returns = await getCurrentReturnsForPage(pageId, studentIds)
+  const returns = await getCurrentReturnsForPage(pageId, studentSites)
   if (studentIds.some((s) => returns.get(s)?.returned)) return returnedLockResponse('student')
 
   const rubrics = await prisma.scoringRubric.findMany({
@@ -135,7 +130,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const criteria = rubric.criteria as unknown as RubricCriterion[]
     const max = rubric.maxPoints ?? c.maxPoints ?? null
-    const subs = await readComponentSubmissions(pageId, c, studentIds)
+    const subs = await readComponentSubmissions(pageId, c, studentIds, studentSites)
     // Scope the context to this exercise's h1/h2 SECTION, not the whole page: a
     // reasoning model can spiral on a single submission when handed the entire
     // exam (e.g. Part 1's "predict the output" programs derail it) → empty
@@ -146,6 +141,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await pool(studentIds, CONCURRENCY, async (sid) => {
       const sub = subs.get(sid)
       if (!sub || sub.empty) return // nothing submitted → leave to the check source
+      const siteId = studentSites.get(sid)!
       const res = await scoreWithRetry({
         pageContext: componentContext,
         label: c.label,
@@ -159,16 +155,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       await prisma.componentScore.upsert({
         where: {
-          pageId_studentId_componentId_source: {
+          pageId_studentId_componentId_source_siteId: {
             pageId,
             studentId: sid,
             componentId: c.componentId,
             source: 'ai',
+            siteId,
           },
         },
         create: {
           pageId,
           studentId: sid,
+          siteId,
           componentId: c.componentId,
           source: 'ai',
           priority: SCORE_PRIORITY.ai,
@@ -193,13 +191,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // the override total against the NEW AI score: their edited criteria stay,
       // the rest follow the fresh AI points. (Resolver still reads override.earned.)
       const ov = await prisma.componentScore.findUnique({
-        where: { pageId_studentId_componentId_source: { pageId, studentId: sid, componentId: c.componentId, source: 'override' } },
+        where: { pageId_studentId_componentId_source_siteId: { pageId, studentId: sid, componentId: c.componentId, source: 'override', siteId } },
         select: { meta: true },
       })
       const ovCriteria = (ov?.meta as { criteria?: OverrideCriterion[] } | null)?.criteria
       if (Array.isArray(ovCriteria) && ovCriteria.length) {
         await prisma.componentScore.update({
-          where: { pageId_studentId_componentId_source: { pageId, studentId: sid, componentId: c.componentId, source: 'override' } },
+          where: { pageId_studentId_componentId_source_siteId: { pageId, studentId: sid, componentId: c.componentId, source: 'override', siteId } },
           data: { earned: mergedCriterionTotal(criteria.map((rc) => rc.id), res.criteria, ovCriteria) },
         })
       }
@@ -223,10 +221,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!studentId || !componentId) {
     return NextResponse.json({ error: 'studentId and componentId required' }, { status: 400 })
   }
-  if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
+  const scope = await getExamScope(session.user.id, pageId)
+  const siteId = scope ? await resolveStudentSite(scope, pageId, studentId, url.searchParams.get('siteId')) : null
+  if (!siteId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (await isStudentReturned(pageId, studentId)) return returnedLockResponse('student')
-  await prisma.componentScore.deleteMany({ where: { pageId, studentId, componentId, source: 'ai' } })
+  if (await isStudentReturned(pageId, studentId, siteId)) return returnedLockResponse('student')
+  await prisma.componentScore.deleteMany({ where: { pageId, studentId, siteId, componentId, source: 'ai' } })
   return NextResponse.json({ cleared: true })
 }

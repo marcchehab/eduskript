@@ -7,7 +7,11 @@
  * that a live hand-in would have produced.
  *
  * Auth: NextAuth teacher session. The file's embedded keyId must belong to
- * the calling teacher — recovery cannot be triggered by anyone else.
+ * the calling teacher — recovery cannot be triggered by anyone else — AND the
+ * caller must manage the site the exam was taken on (site scoping,
+ * src/lib/site-access.ts; authorship is not enough). The site comes from the
+ * file's meta.siteId; legacy files without it use the caller's first managed
+ * site that places the page.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,6 +25,7 @@ import {
   type ExamBackupFile,
 } from '@/lib/exam-backup'
 import { applyHandinSnapshots } from '@/lib/exam-recovery'
+import { canManageSite, getManagedSiteIds, getPlacementSiteIdsForPage } from '@/lib/site-access'
 
 function isExamBackupFile(value: unknown): value is ExamBackupFile {
   if (!value || typeof value !== 'object') return false
@@ -87,19 +92,7 @@ export async function POST(request: NextRequest) {
     // which pages exist — they need the matching private key first.
     const page = await prisma.page.findUnique({
       where: { id: plaintext.meta.pageId },
-      select: {
-        id: true,
-        title: true,
-        skript: {
-          select: {
-            id: true,
-            authors: {
-              where: { userId: teacherId, permission: 'author' },
-              select: { userId: true },
-            },
-          },
-        },
-      },
+      select: { id: true, title: true },
     })
     if (!page) {
       return NextResponse.json(
@@ -107,10 +100,17 @@ export async function POST(request: NextRequest) {
         { status: 404 },
       )
     }
-    const isPageAuthor = page.skript.authors.length > 0
-    if (!isPageAuthor) {
+    let siteId = plaintext.meta.siteId ?? ''
+    if (!siteId) {
+      const [managed, placed] = await Promise.all([
+        getManagedSiteIds(teacherId),
+        getPlacementSiteIdsForPage(page.id),
+      ])
+      siteId = managed.filter((id) => placed.includes(id)).sort()[0] ?? ''
+    }
+    if (!siteId || !(await canManageSite(teacherId, siteId))) {
       return NextResponse.json(
-        { error: 'You are not an author of this exam page' },
+        { error: 'You do not manage the site this exam was taken on' },
         { status: 403 },
       )
     }
@@ -134,6 +134,7 @@ export async function POST(request: NextRequest) {
       return applyHandinSnapshots(tx, {
         pageId: plaintext.meta.pageId,
         studentId: plaintext.meta.studentId,
+        siteId,
         snapshots: plaintext.snapshots,
         label: 'recovered from offline backup',
         source: 'recovery',
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
     const membership = await prisma.classMembership.findFirst({
       where: {
         studentId: plaintext.meta.studentId,
-        class: { examStates: { some: { pageId: plaintext.meta.pageId } } },
+        class: { examStates: { some: { pageId: plaintext.meta.pageId, siteId } } },
       },
       select: { classId: true },
     })

@@ -49,13 +49,20 @@ function quizText(raw: unknown): string {
   return ''
 }
 
+/**
+ * Site scoping: `studentSites` maps each student to the site whose answers
+ * count (src/lib/scoring/site-scope.ts); rows of other sites are ignored.
+ */
 export async function readComponentSubmissions(
   pageId: string,
   component: GradableComponent,
   studentIds: string[],
+  studentSites: Map<string, string>,
 ): Promise<Map<string, ComponentSubmission>> {
   const result = new Map<string, ComponentSubmission>()
   if (studentIds.length === 0) return result
+  const siteIds = [...new Set(studentSites.values())]
+  const mine = (userId: string, siteId: string) => studentSites.get(userId) === siteId
   const put = (studentId: string, text: string) =>
     result.set(studentId, { studentId, text, empty: text.trim() === '' })
 
@@ -63,28 +70,31 @@ export async function readComponentSubmissions(
     const editorId = 'code-editor-' + component.componentId.replace(/^python-check-/, '')
     const [checkpoints, liveRows] = await Promise.all([
       prisma.userDataCheckpoint.findMany({
-        where: { userId: { in: studentIds }, pageId, componentId: editorId, kind: 'handin' },
+        where: { userId: { in: studentIds }, pageId, componentId: editorId, kind: 'handin', siteId: { in: siteIds } },
         orderBy: { createdAt: 'desc' },
-        distinct: ['userId'],
-        select: { userId: true, payload: true },
+        select: { userId: true, siteId: true, payload: true },
       }),
       prisma.userData.findMany({
-        where: { userId: { in: studentIds }, itemId: pageId, adapter: editorId, targetType: null },
-        select: { userId: true, data: true },
+        where: { userId: { in: studentIds }, itemId: pageId, adapter: editorId, targetType: null, siteId: { in: siteIds } },
+        select: { userId: true, siteId: true, data: true },
       }),
     ])
-    const handin = new Map(checkpoints.map((c) => [c.userId, c.payload]))
-    const live = new Map(liveRows.map((r) => [r.userId, r.data]))
+    // Latest handin per student on THEIR site (rows are newest-first).
+    const handin = new Map<string, unknown>()
+    for (const c of checkpoints) {
+      if (mine(c.userId, c.siteId) && !handin.has(c.userId)) handin.set(c.userId, c.payload)
+    }
+    const live = new Map(liveRows.filter((r) => mine(r.userId, r.siteId)).map((r) => [r.userId, r.data]))
     for (const sid of studentIds) put(sid, codeText(handin.get(sid) ?? live.get(sid) ?? null))
     return result
   }
 
   // quiz: answers live under adapter === componentId
   const rows = await prisma.userData.findMany({
-    where: { userId: { in: studentIds }, itemId: pageId, adapter: component.componentId, targetType: null },
-    select: { userId: true, data: true },
+    where: { userId: { in: studentIds }, itemId: pageId, adapter: component.componentId, targetType: null, siteId: { in: siteIds } },
+    select: { userId: true, siteId: true, data: true },
   })
-  const byStudent = new Map(rows.map((r) => [r.userId, r.data]))
+  const byStudent = new Map(rows.filter((r) => mine(r.userId, r.siteId)).map((r) => [r.userId, r.data]))
   for (const sid of studentIds) put(sid, quizText(byStudent.get(sid) ?? null))
   return result
 }

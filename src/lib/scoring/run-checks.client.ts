@@ -14,6 +14,7 @@
 
 import type { PythonFile } from '@/components/public/code-editor/types'
 import { runChecks, warmPyodideWorker } from '@/lib/pyodide-worker.client'
+import { withSite } from '@/lib/site-scope-client'
 
 const TIMEOUT_MS = 6_000
 
@@ -85,12 +86,12 @@ export async function runChecksForStudents(
   let done = 0
   for (const studentId of studentIds) {
     try {
-      const res = await fetch(`/api/exams/${pageId}/check-inputs?studentId=${encodeURIComponent(studentId)}`)
+      const res = await fetch(withSite(`/api/exams/${pageId}/check-inputs?studentId=${encodeURIComponent(studentId)}`))
       const { inputs } = (await res.json()) as { inputs: CheckInput[] }
       for (const input of inputs ?? []) {
         const result = await runCheck(input)
         if (result.notRun) continue // no submitted code → leave unscored
-        await fetch(`/api/exams/${pageId}/check-run`, {
+        await fetch(withSite(`/api/exams/${pageId}/check-run`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ studentId, ...result }),

@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { AiScoringModal } from '@/components/dashboard/ai-scoring-modal'
+import { currentSiteId } from '@/lib/site-scope-client'
 
 interface AiQuestion {
   componentId: string
@@ -122,7 +123,8 @@ function GradingBar({
     fetch(`/api/exams/${pageId}/grading/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      // Site scoping: a single-student action targets THIS site's attempt.
+      body: JSON.stringify({ ...body, siteId: currentSiteId() ?? undefined }),
     })
       .then((r) => r.json())
       .then((j) =>

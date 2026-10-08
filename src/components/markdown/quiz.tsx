@@ -25,6 +25,7 @@ import { useComponentReview } from '@/contexts/exam-review-context'
 import { ScoreBadge } from '@/components/exam/score-badge'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { TextAnswerHistory } from './text-answer-history'
+import { withSite } from '@/lib/site-scope-client'
 
 interface QuestionProps {
   children: ReactNode
@@ -1259,7 +1260,7 @@ function SyncedQuestion({
     const key = `${reviewStudentId}:${componentId}`
     if (autoGradedRef.current === key) return
     autoGradedRef.current = key
-    fetch(`/api/exams/${pageId}/check-run`, {
+    fetch(withSite(`/api/exams/${pageId}/check-run`), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

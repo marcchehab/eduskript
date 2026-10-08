@@ -1,19 +1,11 @@
 /**
- * Authorization helpers for the grading endpoints. Mirror the checks already
- * used by the exam roster (`/api/exams/[pageId]/students`) and student-snapshot
- * routes: the caller must author the page, and for class- or student-scoped
- * actions also teach the relevant class.
+ * Class helpers for the exam endpoints. Authorization to see student data is
+ * SITE management now (src/lib/scoring/site-scope.ts + src/lib/site-access.ts),
+ * not page authorship; these helpers only answer class questions (which of
+ * the teacher's classes relate to the exam, is X the class teacher).
  */
 
 import { prisma } from '@/lib/prisma'
-
-/** The page if `userId` is one of its authors, else null. */
-export async function getAuthoredExamPage(userId: string, pageId: string) {
-  return prisma.page.findFirst({
-    where: { id: pageId, authors: { some: { userId } } },
-    select: { id: true, skriptId: true, title: true, content: true },
-  })
-}
 
 /**
  * The teacher's classes for an exam page: those assigned (a class-level ExamState
@@ -22,6 +14,10 @@ export async function getAuthoredExamPage(userId: string, pageId: string) {
  * branch keeps a class visible after it's set back to hidden while answers still
  * need grading. Shape is `{ id, name }[]`, deduped by the query, name-ordered.
  *
+ * Site scoping: with `siteIds`, only assignments/submissions on those sites
+ * count (the in-exam toolbar passes its own site; grading passes the viewer's
+ * managed scope sites).
+ *
  * `ExamSubmission.submittedAt` is non-null, so a row existing == submitted.
  * Limitation: a class only surfaces while a submitting member is still enrolled —
  * if both the assignment and the membership are gone, the ExamSubmission persists
@@ -29,13 +25,14 @@ export async function getAuthoredExamPage(userId: string, pageId: string) {
  * over-include a student's *other* classes (ExamSubmission carries no classId to
  * disambiguate); all are the same teacher's, so the teacher just picks the right one.
  */
-export async function getExamClassesForTeacher(pageId: string, teacherId: string) {
+export async function getExamClassesForTeacher(pageId: string, teacherId: string, siteIds?: string[]) {
+  const site = siteIds ? { siteId: { in: siteIds } } : {}
   return prisma.class.findMany({
     where: {
       teacherId,
       OR: [
-        { examStates: { some: { pageId, studentId: null } } },
-        { memberships: { some: { student: { examSubmissions: { some: { pageId } } } } } },
+        { examStates: { some: { pageId, studentId: null, ...site } } },
+        { memberships: { some: { student: { examSubmissions: { some: { pageId, ...site } } } } } },
       ],
     },
     select: { id: true, name: true },
@@ -44,29 +41,23 @@ export async function getExamClassesForTeacher(pageId: string, teacherId: string
 }
 
 /**
- * The /exam/... URL for a page (resolving site + skript + page slugs), so the
- * grading table can link a student to the in-exam view. null if unresolved.
+ * The URL a teacher opens to see a student's exam in place, for one site.
+ * Personal site → /exam/<siteSlug>/<skriptSlug>/<pageSlug>. Org sites have no
+ * /exam route (the org /c/ route renders exam pages inline) →
+ * /org/<orgSlug>/c/<skriptSlug>/<pageSlug>. null if unresolved.
  */
-export async function getExamUrl(pageId: string): Promise<string | null> {
-  const page = await prisma.page.findUnique({
-    where: { id: pageId },
-    select: {
-      slug: true,
-      skript: {
-        select: {
-          slug: true,
-          collectionSkripts: {
-            take: 1,
-            select: { collection: { select: { site: { select: { slug: true } } } } },
-          },
-        },
-      },
-    },
-  })
-  const siteSlug = page?.skript?.collectionSkripts?.[0]?.collection?.site?.slug
-  const skriptSlug = page?.skript?.slug
-  if (!siteSlug || !skriptSlug || !page?.slug) return null
-  return `/exam/${siteSlug}/${skriptSlug}/${page.slug}`
+export async function getExamUrl(pageId: string, siteId: string | null | undefined): Promise<string | null> {
+  if (!siteId) return null
+  const [page, site] = await Promise.all([
+    prisma.page.findUnique({
+      where: { id: pageId },
+      select: { slug: true, skript: { select: { slug: true } } },
+    }),
+    prisma.site.findUnique({ where: { id: siteId }, select: { slug: true, organizationId: true } }),
+  ])
+  if (!page?.skript?.slug || !site) return null
+  if (site.organizationId) return `/org/${site.slug}/c/${page.skript.slug}/${page.slug}`
+  return `/exam/${site.slug}/${page.skript.slug}/${page.slug}`
 }
 
 /** True if `userId` is the teacher of `classId`. */
@@ -76,29 +67,4 @@ export async function isClassTeacher(userId: string, classId: string): Promise<b
     select: { id: true },
   })
   return Boolean(c)
-}
-
-/**
- * True if `userId` teaches a class containing `studentId` that is associated with
- * `pageId` — i.e. the class (or student) has an ExamState row for the page, OR the
- * student has already submitted it. The submission branch keeps teacher access
- * working after the exam is set back to hidden (so grading isn't locked out).
- */
-export async function isTeacherOfStudentForPage(
-  userId: string,
-  studentId: string,
-  pageId: string,
-): Promise<boolean> {
-  const membership = await prisma.classMembership.findFirst({
-    where: {
-      studentId,
-      class: { teacherId: userId },
-      OR: [
-        { class: { examStates: { some: { pageId } } } },
-        { student: { examSubmissions: { some: { pageId } } } },
-      ],
-    },
-    select: { id: true },
-  })
-  return Boolean(membership)
 }

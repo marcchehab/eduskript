@@ -8,6 +8,10 @@
  * ExamSubmission row is rolled back too. Idempotent on (pageId, studentId)
  * via the existing unique constraint — a second call returns the existing
  * submission and only adds new (label-distinguished) checkpoints.
+ *
+ * Site scoping: everything is written under `siteId` — the submission, its
+ * audit event, the checkpoints and recovered quiz answers belong to the site
+ * the exam was taken on (src/lib/site-access.ts).
  */
 
 import type { Prisma } from '@prisma/client'
@@ -53,28 +57,30 @@ export async function applyHandinSnapshots(
   args: {
     pageId: string
     studentId: string
+    /** Site the exam was taken on. */
+    siteId: string
     snapshots: HandinSnapshot[]
     label?: string | null
     /** How this submission was created — see ExamSubmission.source. Default "student". */
     source?: string
   },
 ): Promise<ApplyHandinResult> {
-  const { pageId, studentId, snapshots, label, source } = args
+  const { pageId, studentId, siteId, snapshots, label, source } = args
 
   let alreadyExisted = false
   let submission = await tx.examSubmission.findUnique({
-    where: { pageId_studentId: { pageId, studentId } },
+    where: { pageId_studentId_siteId: { pageId, studentId, siteId } },
   })
   if (submission) {
     alreadyExisted = true
   } else {
     submission = await tx.examSubmission.create({
-      data: { pageId, studentId, source: source ?? 'student' },
+      data: { pageId, studentId, siteId, source: source ?? 'student' },
     })
     // Audit log lives inside the same tx so a rolled-back submission
     // doesn't leave a spurious "submitted" event behind.
     await tx.examAuditLog.create({
-      data: { pageId, studentId, event: 'submitted' },
+      data: { pageId, studentId, siteId, event: 'submitted' },
     })
   }
 
@@ -84,6 +90,7 @@ export async function applyHandinSnapshots(
       data: snapshots.map((s) => ({
         userId: studentId,
         pageId,
+        siteId,
         componentId: s.componentId,
         kind: 'handin',
         payload: s.payload as Prisma.InputJsonValue,
@@ -100,7 +107,7 @@ export async function applyHandinSnapshots(
     for (const s of snapshots) {
       if (!s.componentId.startsWith('quiz-')) continue
       const existing = await tx.userData.findFirst({
-        where: { userId: studentId, adapter: s.componentId, itemId: pageId, targetType: null, targetId: null },
+        where: { userId: studentId, siteId, adapter: s.componentId, itemId: pageId, targetType: null, targetId: null },
         select: { id: true, version: true },
       })
       if (existing) {
@@ -110,7 +117,7 @@ export async function applyHandinSnapshots(
         })
       } else {
         await tx.userData.create({
-          data: { userId: studentId, adapter: s.componentId, itemId: pageId, data: s.payload as Prisma.InputJsonValue },
+          data: { userId: studentId, siteId, adapter: s.componentId, itemId: pageId, data: s.payload as Prisma.InputJsonValue },
         })
       }
     }

@@ -103,6 +103,8 @@ async function saveEncryptedBackup(args: {
       pageId: args.pageId,
       studentId: args.studentId,
       skriptId: args.skriptId,
+      // Site scoping: recovery writes the submission under this site.
+      siteId: userDataService.getCurrentSite() || undefined,
       createdAt: new Date().toISOString(),
     }
     const file = await encryptSnapshotsForBackup(
@@ -186,7 +188,8 @@ export function HandInButton({
       const response = await fetch(`/api/exams/${pageId}/hand-in`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ snapshots }),
+        // Site scoping: the submission belongs to the current site.
+        body: JSON.stringify({ snapshots, siteId: userDataService.getCurrentSite() }),
       })
 
       if (!response.ok) {

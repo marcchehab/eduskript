@@ -43,14 +43,15 @@ export interface ReviewScores {
   components: ReviewScoreComponent[]
 }
 
-export async function buildReviewScores(pageId: string, studentId: string): Promise<ReviewScores> {
-  const grading = await computeExamGrades(pageId, [studentId])
+/** Site scoping: scores of `siteId` only (src/lib/scoring/site-scope.ts). */
+export async function buildReviewScores(pageId: string, studentId: string, siteId: string): Promise<ReviewScores> {
+  const grading = await computeExamGrades(pageId, [studentId], new Map([[studentId, siteId]]))
   const g = grading.byStudent.get(studentId)!
   const componentIds = grading.components.map((c) => c.componentId)
 
   const [scoreRows, rubricRows] = await Promise.all([
     prisma.componentScore.findMany({
-      where: { pageId, studentId, componentId: { in: componentIds } },
+      where: { pageId, studentId, siteId, componentId: { in: componentIds } },
       select: { componentId: true, source: true, earned: true, max: true, feedback: true, meta: true },
     }),
     componentIds.length

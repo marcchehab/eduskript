@@ -4,7 +4,8 @@
  * SUBMITTED code. The client runner (`run-checks.client.ts`) consumes this and
  * POSTs results to `check-run`.
  *
- * GET /api/exams/[pageId]/check-inputs?studentId=X   (teacher-of-student only)
+ * GET /api/exams/[pageId]/check-inputs?studentId=X[&siteId=S]
+ *   Site scoping: caller must manage the site of the student's attempt.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,7 +13,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { parseGradableComponents } from '@/lib/scoring/components'
-import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { authorizeStudentSite } from '@/lib/scoring/site-scope'
 
 interface CodeFile { name?: string; content?: string }
 interface CodeEditorPayload { files?: CodeFile[]; activeFileIndex?: number }
@@ -27,11 +28,13 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const { pageId } = await params
-    const studentId = new URL(request.url).searchParams.get('studentId')
+    const searchParams = new URL(request.url).searchParams
+    const studentId = searchParams.get('studentId')
     if (!studentId) {
       return NextResponse.json({ error: 'studentId required' }, { status: 400 })
     }
-    if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
+    const siteId = await authorizeStudentSite(session.user.id, pageId, studentId, searchParams.get('siteId'))
+    if (!siteId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -50,13 +53,13 @@ export async function GET(
 
     const [checkpoints, liveRows] = await Promise.all([
       prisma.userDataCheckpoint.findMany({
-        where: { userId: studentId, pageId, componentId: { in: editorIds }, kind: 'handin' },
+        where: { userId: studentId, pageId, siteId, componentId: { in: editorIds }, kind: 'handin' },
         orderBy: { createdAt: 'desc' },
         distinct: ['componentId'],
         select: { componentId: true, payload: true },
       }),
       prisma.userData.findMany({
-        where: { userId: studentId, itemId: pageId, adapter: { in: editorIds }, targetType: null },
+        where: { userId: studentId, siteId, itemId: pageId, adapter: { in: editorIds }, targetType: null },
         select: { adapter: true, data: true },
       }),
     ])
