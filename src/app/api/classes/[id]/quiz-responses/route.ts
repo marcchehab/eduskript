@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { checkPagePermissions } from '@/lib/permissions'
+import { checkClassSiteRead } from '@/lib/class-site-auth'
 
 interface RouteParams {
   params: Promise<{
@@ -37,7 +37,7 @@ interface QuizStats {
   total: number
 }
 
-// GET /api/classes/[id]/quiz-responses?pageId=X&componentId=Y
+// GET /api/classes/[id]/quiz-responses?pageId=X&componentId=Y&siteId=S
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id: classId } = await params
@@ -59,16 +59,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Verify class exists; resolve auth two ways:
-    //  (a) classic class teacher (the existing behaviour)
-    //  (b) implicit survey class: any author of the bound page (via
-    //      checkPagePermissions inheriting up to skript/collection).
+    // Site scoping: data of ONE site; caller must manage it (class teacher +
+    // site owner for regular classes, site manager for implicit survey
+    // classes). See src/lib/class-site-auth.ts.
+    const siteId = searchParams.get('siteId')
     const classRecord = await prisma.class.findUnique({
       where: { id: classId },
       select: {
         teacherId: true,
         isImplicit: true,
-        implicitPageId: true,
       },
     })
 
@@ -76,39 +75,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 })
     }
 
-    let authorized = classRecord.teacherId === session.user.id
-
-    if (!authorized && classRecord.isImplicit && classRecord.implicitPageId) {
-      // Implicit (survey) class: viewer must be an author of the bound page,
-      // or inherit edit rights via skript/collection authorship. Mirrors
-      // the auth model used for editing the page itself.
-      const pageWithAuthors = await prisma.page.findUnique({
-        where: { id: classRecord.implicitPageId },
-        include: {
-          authors: { include: { user: { select: { id: true } } } },
-          skript: {
-            include: {
-              authors: { include: { user: { select: { id: true } } } },
-            },
-          },
-        },
-      })
-      if (pageWithAuthors) {
-        const perms = checkPagePermissions(
-          session.user.id,
-          pageWithAuthors.authors,
-          pageWithAuthors.skript.authors,
-        )
-        authorized = perms.canEdit
-      }
-    }
-
-    if (!authorized) {
-      return NextResponse.json(
-        { error: 'You do not have permission to view this class' },
-        { status: 403 }
-      )
-    }
+    const denied = await checkClassSiteRead(session.user.id, classRecord, siteId)
+    if (denied) return denied
 
     // Get all members of the class
     const memberships = await prisma.classMembership.findMany({
@@ -137,6 +105,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const respondingRows = await prisma.userData.findMany({
         where: {
           userId: { in: studentIds },
+          siteId: siteId!,
           itemId: pageId,
           adapter: { startsWith: 'quiz-' },
         },
@@ -152,6 +121,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const responses = await prisma.userData.findMany({
       where: {
         userId: { in: studentIds },
+        siteId: siteId!,
         adapter: componentId,
         itemId: pageId
       },

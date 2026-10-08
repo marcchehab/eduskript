@@ -191,7 +191,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
     const fetchClasses = async () => {
       try {
-        const res = await fetch(`/api/classes?pageId=${encodeURIComponent(pageId)}`)
+        const res = await fetch(`/api/classes?pageId=${encodeURIComponent(pageId)}&siteId=${encodeURIComponent(currentSiteId ?? '')}`)
         if (res.ok) {
           const data = await res.json()
           setTeacherClasses(data.classes?.map((c: { id: string; name: string; hasAnnotationsOnPage?: boolean }) => ({
@@ -206,7 +206,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
 
     fetchClasses()
-  }, [isTeacher, pageId])
+  }, [isTeacher, pageId, currentSiteId])
 
   // Public layers (page-broadcast annotations + snaps) for non-author viewers.
   // SSR prop seeds first paint; we always reconcile with the server on mount
@@ -276,7 +276,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         // 2) Server `revealedEmail` — set when identityConsent is true AND the student
         //    has a populated email column. Rare in production, mostly seed/dev data.
         const [res, reverseMap] = await Promise.all([
-          fetch(`/api/classes/${selectedClass.id}/students?pageId=${encodeURIComponent(pageId)}`),
+          fetch(`/api/classes/${selectedClass.id}/students?pageId=${encodeURIComponent(pageId)}&siteId=${encodeURIComponent(currentSiteId ?? '')}`),
           getReverseMappingsForClass(selectedClass.id).catch(() => ({} as Record<string, string>)),
         ])
         if (res.ok) {
@@ -295,7 +295,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
 
     fetchStudents()
-  }, [isTeacher, selectedClass, pageId])
+  }, [isTeacher, selectedClass, pageId, currentSiteId])
 
   // Compute targeting options based on teacher selection
   // - 'my-view': No targeting (personal annotations)

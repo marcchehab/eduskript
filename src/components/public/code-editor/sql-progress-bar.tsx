@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { useCurrentSite } from '@/contexts/current-site-context'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 
 interface SqlResponseItem {
@@ -37,6 +38,8 @@ interface SqlProgressBarProps {
 }
 
 export function SqlProgressBar({ classId, className, pageId, componentId }: SqlProgressBarProps) {
+  // Site scoping: answers given on THIS site only (src/lib/site-access.ts).
+  const { siteId } = useCurrentSite()
   const [stats, setStats] = useState<SqlStats | null>(null)
   const [responses, setResponses] = useState<SqlResponseItem[]>([])
   const [isExpanded, setIsExpanded] = useState(false)
@@ -60,7 +63,7 @@ export function SqlProgressBar({ classId, className, pageId, componentId }: SqlP
     setIsLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ pageId, componentId })
+      const params = new URLSearchParams({ pageId, componentId, siteId: siteId ?? '' })
       const res = await fetch(`/api/classes/${classId}/sql-responses?${params}`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
@@ -76,13 +79,13 @@ export function SqlProgressBar({ classId, className, pageId, componentId }: SqlP
     } finally {
       if (mountedRef.current) setIsLoading(false)
     }
-  }, [classId, pageId, componentId])
+  }, [classId, pageId, componentId, siteId])
 
   // Real-time refresh when any student updates their work on this page
   useRealtimeEvents(
     ['student-work-update'],
     (event) => {
-      if (event.type === 'student-work-update' && event.classId === classId && event.pageId === pageId) {
+      if (event.type === 'student-work-update' && event.classId === classId && event.pageId === pageId && (!event.siteId || event.siteId === siteId)) {
         fetchResponses()
       }
     },

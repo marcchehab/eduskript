@@ -19,6 +19,7 @@ import { useSession } from 'next-auth/react'
 import { useExamSession } from '@/contexts/exam-session-context'
 import { useTeacherBroadcastContext } from '@/contexts/teacher-broadcast-context'
 import { useRealtimeEvents } from './use-realtime-events'
+import { useCurrentSite } from '@/contexts/current-site-context'
 
 export interface TeacherClassAnnotation {
   classId: string
@@ -140,10 +141,12 @@ export function useTeacherBroadcast(pageId: string): TeacherBroadcastResult {
 
   // Consider authenticated if either NextAuth session OR exam session is active
   const isAuthenticated = status === 'authenticated' || examSession.isInExamSession
+  // Site scoping: broadcasts are per site (src/lib/site-access.ts).
+  const { siteId } = useCurrentSite()
 
   // Fetch teacher annotations from API (only when context not available)
   const fetchAnnotations = useCallback(async () => {
-    if (useContext || !isAuthenticated || !pageId) {
+    if (useContext || !isAuthenticated || !pageId || !siteId) {
       setIsLoading(false)
       return
     }
@@ -151,7 +154,7 @@ export function useTeacherBroadcast(pageId: string): TeacherBroadcastResult {
     try {
       setError(null)
 
-      const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}&_t=${Date.now()}`)
+      const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}&siteId=${encodeURIComponent(siteId)}&_t=${Date.now()}`)
       if (!res.ok) {
         throw new Error(`Failed to fetch: ${res.status}`)
       }
@@ -185,7 +188,7 @@ export function useTeacherBroadcast(pageId: string): TeacherBroadcastResult {
     } finally {
       setIsLoading(false)
     }
-  }, [pageId, isAuthenticated, useContext])
+  }, [pageId, siteId, isAuthenticated, useContext])
 
   // Initial fetch (only when context not available)
   useEffect(() => {
@@ -200,6 +203,8 @@ export function useTeacherBroadcast(pageId: string): TeacherBroadcastResult {
     ['teacher-annotations-update', 'teacher-feedback'],
     (event) => {
       if (useContext) return // Context handles this
+      const evSite = (event as { siteId?: string }).siteId
+      if (evSite && evSite !== siteId) return // another site's broadcast
       console.log('[useTeacherBroadcast] Received SSE event (fallback):', event.type, 'pageId:', (event as { pageId?: string }).pageId, 'current pageId:', pageId)
       if (event.type === 'teacher-annotations-update') {
         if ((event as { pageId?: string }).pageId === pageId) {

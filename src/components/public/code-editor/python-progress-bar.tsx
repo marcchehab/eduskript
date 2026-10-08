@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Clock, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { useCurrentSite } from '@/contexts/current-site-context'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 
 interface PythonResponseItem {
@@ -47,6 +48,8 @@ interface PythonProgressBarProps {
 }
 
 export function PythonProgressBar({ classId, className, pageId, componentId }: PythonProgressBarProps) {
+  // Site scoping: answers given on THIS site only (src/lib/site-access.ts).
+  const { siteId } = useCurrentSite()
   const [stats, setStats] = useState<PythonStats | null>(null)
   const [responses, setResponses] = useState<PythonResponseItem[]>([])
   const [isExpanded, setIsExpanded] = useState(false)
@@ -70,7 +73,7 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
     setIsLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ pageId, componentId })
+      const params = new URLSearchParams({ pageId, componentId, siteId: siteId ?? '' })
       const res = await fetch(`/api/classes/${classId}/python-responses?${params}`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
@@ -86,12 +89,12 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
     } finally {
       if (mountedRef.current) setIsLoading(false)
     }
-  }, [classId, pageId, componentId])
+  }, [classId, pageId, componentId, siteId])
 
   useRealtimeEvents(
     ['student-work-update'],
     (event) => {
-      if (event.type === 'student-work-update' && event.classId === classId && event.pageId === pageId) {
+      if (event.type === 'student-work-update' && event.classId === classId && event.pageId === pageId && (!event.siteId || event.siteId === siteId)) {
         fetchResponses()
       }
     },

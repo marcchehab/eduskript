@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { useCurrentSite } from '@/contexts/current-site-context'
 
 // Class-wide "how many got it right" bar for a GeoGebra exercise. Mirrors
 // SqlProgressBar (src/components/public/code-editor/sql-progress-bar.tsx) but
@@ -32,6 +33,8 @@ interface GeogebraProgressBarProps {
 }
 
 export function GeogebraProgressBar({ classId, className, pageId, componentId }: GeogebraProgressBarProps) {
+  // Site scoping: answers given on THIS site only (src/lib/site-access.ts).
+  const { siteId } = useCurrentSite()
   const [stats, setStats] = useState<Stats | null>(null)
   const [responses, setResponses] = useState<ResponseItem[]>([])
   const [isExpanded, setIsExpanded] = useState(false)
@@ -47,7 +50,7 @@ export function GeogebraProgressBar({ classId, className, pageId, componentId }:
     setIsLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ pageId, componentId })
+      const params = new URLSearchParams({ pageId, componentId, siteId: siteId ?? '' })
       const res = await fetch(`/api/classes/${classId}/geogebra-responses?${params}`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
@@ -63,13 +66,13 @@ export function GeogebraProgressBar({ classId, className, pageId, componentId }:
     } finally {
       if (mountedRef.current) setIsLoading(false)
     }
-  }, [classId, pageId, componentId])
+  }, [classId, pageId, componentId, siteId])
 
   // Live refresh when a student updates their work on this page.
   useRealtimeEvents(
     ['student-work-update'],
     (event) => {
-      if (event.type === 'student-work-update' && event.classId === classId && event.pageId === pageId) {
+      if (event.type === 'student-work-update' && event.classId === classId && event.pageId === pageId && (!event.siteId || event.siteId === siteId)) {
         fetchResponses()
       }
     },

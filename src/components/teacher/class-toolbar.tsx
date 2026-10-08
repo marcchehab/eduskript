@@ -184,7 +184,7 @@ function ClassToolbarInner({
     }
     if (!isOwnSite) return
     let cancelled = false
-    fetch(`/api/classes?pageId=${encodeURIComponent(pageId)}`, {
+    fetch(`/api/classes?pageId=${encodeURIComponent(pageId)}&siteId=${encodeURIComponent(siteId ?? '')}`, {
       credentials: 'include',
       cache: 'no-store',
     })
@@ -197,7 +197,7 @@ function ClassToolbarInner({
         if (!cancelled) setTeacherClasses([])
       })
     return () => { cancelled = true }
-  }, [pageId, isTeacherAccount, isPaid, isOwnSite, isOrgManager])
+  }, [pageId, siteId, isTeacherAccount, isPaid, isOwnSite, isOrgManager])
 
   const {
     selectedClass,

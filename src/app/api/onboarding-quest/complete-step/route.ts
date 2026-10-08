@@ -51,7 +51,8 @@ export async function POST(request: NextRequest) {
       // findFirst + create/update, not upsert — upsert has issues with the
       // nullable compound key here (targetType/targetId), same as the sync route.
       const existing = await tx.userData.findFirst({
-        where: { userId, adapter: ADAPTER, itemId: ITEM_ID, targetType: null, targetId: null },
+        // Server-owned account-level row (itemId 'global'): siteId stays ''.
+        where: { userId, siteId: '', adapter: ADAPTER, itemId: ITEM_ID, targetType: null, targetId: null },
       })
 
       const now = Date.now()

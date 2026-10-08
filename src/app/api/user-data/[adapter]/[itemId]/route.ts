@@ -3,7 +3,9 @@
  *
  * GET /api/user-data/[adapter]/[itemId]?siteId=…[&targetType=&targetId=]
  * Fetch a single user data item ON ONE SITE (site scoping,
- * src/lib/site-access.ts). siteId is required; without it nothing is returned.
+ * src/lib/site-access.ts). The siteId param is required; an EMPTY value
+ * (`?siteId=`) reads server-owned account rows (siteId '', e.g. the
+ * onboarding quest at itemId 'global').
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -28,7 +30,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const targetType = searchParams.get('targetType') as 'class' | 'student' | 'page' | null
     const targetId = searchParams.get('targetId')
     const siteId = searchParams.get('siteId')
-    if (!siteId) {
+    if (siteId === null) {
       return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
     }
 

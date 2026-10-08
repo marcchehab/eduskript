@@ -19,9 +19,15 @@
  *   POST: NextAuth session OR exam_session cookie. Teachers must be on a paid
  *         plan (consistent with /api/user-data/sync from bd3162d). Students
  *         inherit their teacher's plan via class membership.
- *   GET:  NextAuth session. A user can list their own checkpoints; teachers
- *         can list checkpoints for students in their classes on pages those
- *         classes have unlocked.
+ *   GET:  NextAuth session. A user can list their own checkpoints; site
+ *         managers can list any user's checkpoints on their site.
+ *
+ * Site scoping (src/lib/site-access.ts): every checkpoint carries the site it
+ * was taken on. POST requires `siteId` per item and the page must be placed on
+ * that site; an SEB exam session bound to a site only accepts that site. GET
+ * requires `siteId` and filters by it; reading someone else's checkpoints
+ * requires managing that site (no superadmin bypass, authorship grants
+ * nothing).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -29,12 +35,13 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { examClassActivityWhere } from '@/lib/exam-state'
+import { canManageSite, isItemPlacedOnSite } from '@/lib/site-access'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { eventBus } from '@/lib/events'
 
 interface CheckpointInput {
   pageId: string
+  siteId: string
   componentId: string
   kind: 'manual' | 'check' | 'handin' | 'run' | 'autosave'
   payload: unknown
@@ -43,7 +50,7 @@ interface CheckpointInput {
 
 const VALID_KINDS = new Set(['manual', 'check', 'handin', 'run', 'autosave'])
 
-async function resolveAuthUserId(): Promise<{ userId: string; isTeacher: boolean } | null> {
+async function resolveAuthUserId(): Promise<{ userId: string; isTeacher: boolean; examSiteId?: string } | null> {
   const session = await getServerSession(authOptions)
   if (session?.user?.id) {
     const isTeacher = session.user.accountType === 'teacher'
@@ -62,10 +69,11 @@ async function resolveAuthUserId(): Promise<{ userId: string; isTeacher: boolean
     const examSession = await prisma.examSession.findUnique({
       // Cookie holds `sessionId` (random hex), not the row PK `id`.
       where: { sessionId: examSessionCookie },
-      select: { userId: true, expiresAt: true },
+      select: { userId: true, expiresAt: true, siteId: true },
     })
     if (examSession && new Date(examSession.expiresAt) > new Date()) {
-      return { userId: examSession.userId, isTeacher: false }
+      // '' = legacy session from before site scoping: no site pin.
+      return { userId: examSession.userId, isTeacher: false, examSiteId: examSession.siteId || undefined }
     }
   } catch (error) {
     console.error('[checkpoints] exam-session lookup failed:', error)
@@ -113,6 +121,19 @@ export async function POST(request: NextRequest) {
       if (item.payload === undefined) {
         return NextResponse.json({ error: 'Each checkpoint requires payload' }, { status: 400 })
       }
+      if (!item.siteId || typeof item.siteId !== 'string') {
+        return NextResponse.json({ error: 'Each checkpoint requires siteId' }, { status: 400 })
+      }
+      if (auth.examSiteId && item.siteId !== auth.examSiteId) {
+        return NextResponse.json({ error: 'Exam session is bound to another site' }, { status: 403 })
+      }
+    }
+    // Placement check per distinct (page, site) pair.
+    const pairs = [...new Map(items.map((i) => [`${i.siteId}\u0000${i.pageId}`, i])).values()]
+    for (const { pageId, siteId } of pairs) {
+      if (!(await isItemPlacedOnSite(pageId, siteId))) {
+        return NextResponse.json({ error: 'Page is not placed on this site' }, { status: 403 })
+      }
     }
 
     const created = await prisma.$transaction(
@@ -120,6 +141,7 @@ export async function POST(request: NextRequest) {
         prisma.userDataCheckpoint.create({
           data: {
             userId: auth.userId,
+            siteId: item.siteId,
             pageId: item.pageId,
             componentId: item.componentId,
             kind: item.kind,
@@ -144,15 +166,16 @@ export async function POST(request: NextRequest) {
           select: { classId: true },
         })
         if (memberships.length > 0) {
-          const pageIds = [...new Set(liveItems.map((item) => item.pageId))]
+          const pageSites = [...new Map(liveItems.map((item) => [`${item.siteId}:${item.pageId}`, item])).values()]
           await Promise.all(
-            pageIds.flatMap((pageId) =>
+            pageSites.flatMap(({ pageId, siteId }) =>
               memberships.map((m) =>
                 eventBus.publish(`class:${m.classId}:teacher`, {
                   type: 'student-work-update',
                   studentId: auth.userId,
                   classId: m.classId,
                   pageId,
+                  siteId,
                   timestamp: Date.now(),
                 })
               )
@@ -172,13 +195,12 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET /api/user-data/checkpoints?pageId=X&componentId=Y&studentId=Z
+ * GET /api/user-data/checkpoints?pageId=X&siteId=S&componentId=Y&studentId=Z
  *
- * Lists checkpoint metadata (no payload). studentId defaults to the caller.
- * Authorization:
+ * Lists checkpoint metadata (no payload) on site S. studentId defaults to the
+ * caller. Authorization:
  *   - studentId == self: always allowed.
- *   - studentId != self: caller must be a teacher of a class that the target
- *     student belongs to AND has the requested page unlocked.
+ *   - studentId != self: caller must manage site S.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -191,25 +213,25 @@ export async function GET(request: NextRequest) {
     const pageId = searchParams.get('pageId')
     const componentId = searchParams.get('componentId')
     const studentId = searchParams.get('studentId') ?? session.user.id
+    const siteId = searchParams.get('siteId')
 
-    if (!pageId) {
-      return NextResponse.json({ error: 'pageId required' }, { status: 400 })
+    if (!pageId || !siteId) {
+      return NextResponse.json({ error: 'pageId and siteId required' }, { status: 400 })
     }
 
     const isSelf = studentId === session.user.id
-    if (!isSelf) {
-      const allowed = await isTeacherOfStudentForPage(session.user.id, studentId, pageId)
-      if (!allowed) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    if (!isSelf && !(await canManageSite(session.user.id, siteId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const where: {
       userId: string
+      siteId: string
       pageId: string
       componentId?: string
     } = {
       userId: studentId,
+      siteId,
       pageId,
     }
     if (componentId) where.componentId = componentId
@@ -232,27 +254,4 @@ export async function GET(request: NextRequest) {
     console.error('[checkpoints] GET failed:', error)
     return NextResponse.json({ error: 'Failed to list checkpoints' }, { status: 500 })
   }
-}
-
-/**
- * True if `viewerId` teaches a class that contains `studentId` and has
- * `pageId` unlocked. Mirrors the authorization shape used by the per-class
- * SQL/Python response endpoints.
- */
-async function isTeacherOfStudentForPage(
-  viewerId: string,
-  studentId: string,
-  pageId: string
-): Promise<boolean> {
-  const membership = await prisma.classMembership.findFirst({
-    where: {
-      studentId,
-      class: {
-        teacherId: viewerId,
-        ...examClassActivityWhere(pageId),
-      },
-    },
-    select: { id: true },
-  })
-  return Boolean(membership)
 }

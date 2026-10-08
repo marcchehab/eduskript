@@ -1,7 +1,7 @@
 /**
  * Student Teacher Broadcast API
  *
- * GET /api/student/teacher-annotations?pageId={pageId}
+ * GET /api/student/teacher-annotations?pageId={pageId}&siteId={siteId}
  * Fetch teacher broadcasts visible to the current student:
  * - Class broadcasts (where student is enrolled)
  * - Individual feedback (targeted at this student)
@@ -82,34 +82,27 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Free-teacher early-return: if NO author can broadcast, no broadcasts can
-    // exist (a free author's sync endpoint returns 402). Skip the 10+ downstream
-    // queries and return an empty payload.
-    //
-    // Must inspect ALL authors, not `take: 1`: a skript can be co-authored by
-    // both a free and a paid teacher (e.g. shared/forked org content co-authored
-    // by the free eduadmin account). The paid co-author's broadcasts are real, so
-    // bail only when EVERY author is free. The previous `take: 1` (no orderBy)
-    // picked an arbitrary author and suppressed broadcasts whenever that row
-    // happened to be the free one.
-    const pageOwner = await prisma.page.findUnique({
-      where: { id: pageId },
-      select: {
-        skript: {
-          select: {
-            authors: {
-              where: { permission: 'author' },
-              select: { user: { select: { billingPlan: true } } },
-            },
-          },
-        },
-      },
+    // Site scoping (src/lib/site-access.ts): broadcasts are written by the
+    // owner of the site the page is shown on, per site. Only rows of THIS site
+    // are returned; without a siteId there is nothing to return.
+    const siteId = searchParamsForQuery.get('siteId')
+    if (!siteId) {
+      return NextResponse.json(
+        { error: 'siteId query parameter is required' },
+        { status: 400 }
+      )
+    }
+
+    // Free-teacher early-return: class/student broadcasts can only be written
+    // by the owner of a personal site (org sites have no classes), and a free
+    // owner's sync endpoint returns 402 — so a free owner (or an org site)
+    // means no broadcasts exist here. Skip the 10+ downstream queries.
+    const siteOwner = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { user: { select: { billingPlan: true } } },
     })
-    const authors = pageOwner?.skript?.authors ?? []
-    const hasPaidAuthor = authors.some(a =>
-      isPaidUser({ billingPlan: a.user?.billingPlan, accountType: 'teacher' })
-    )
-    if (authors.length > 0 && !hasPaidAuthor) {
+    const ownerCanBroadcast = !!siteOwner?.user && isPaidUser({ billingPlan: siteOwner.user.billingPlan, accountType: 'teacher' })
+    if (!ownerCanBroadcast) {
       return NextResponse.json({
         classAnnotations: [],
         classSnaps: [],
@@ -147,6 +140,7 @@ export async function GET(request: NextRequest) {
         targetId: { in: classIds },
         adapter: 'annotations',
         itemId: pageId,
+        siteId,
       },
       select: {
         targetId: true,
@@ -162,6 +156,7 @@ export async function GET(request: NextRequest) {
         targetId: { in: classIds },
         adapter: 'snaps',
         itemId: pageId,
+        siteId,
       },
       select: {
         targetId: true,
@@ -177,6 +172,7 @@ export async function GET(request: NextRequest) {
         targetId: { in: classIds },
         adapter: 'spacers',
         itemId: pageId,
+        siteId,
       },
       select: {
         targetId: true,
@@ -192,6 +188,7 @@ export async function GET(request: NextRequest) {
         targetId: { in: classIds },
         adapter: 'sticky-notes',
         itemId: pageId,
+        siteId,
       },
       select: {
         targetId: true,
@@ -207,6 +204,7 @@ export async function GET(request: NextRequest) {
         targetId: { in: classIds },
         adapter: { startsWith: 'code-highlights-' },
         itemId: pageId,
+        siteId,
       },
       select: {
         targetId: true,
@@ -308,6 +306,7 @@ export async function GET(request: NextRequest) {
         targetId: userId,
         adapter: 'annotations',
         itemId: pageId,
+        siteId,
       },
       select: {
         data: true,
@@ -328,6 +327,7 @@ export async function GET(request: NextRequest) {
         targetId: userId,
         adapter: 'snaps',
         itemId: pageId,
+        siteId,
       },
       select: {
         data: true,
@@ -348,6 +348,7 @@ export async function GET(request: NextRequest) {
         targetId: userId,
         adapter: 'spacers',
         itemId: pageId,
+        siteId,
       },
       select: {
         data: true,
@@ -362,6 +363,7 @@ export async function GET(request: NextRequest) {
         targetId: userId,
         adapter: 'sticky-notes',
         itemId: pageId,
+        siteId,
       },
       select: {
         data: true,
@@ -382,6 +384,7 @@ export async function GET(request: NextRequest) {
         targetId: userId,
         adapter: { startsWith: 'code-highlights-' },
         itemId: pageId,
+        siteId,
       },
       select: {
         adapter: true,

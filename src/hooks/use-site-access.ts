@@ -5,9 +5,9 @@ import { useSession } from 'next-auth/react'
 
 /**
  * The viewer's rights on a site's presentation data (GET /api/sites/[id]/access,
- * rule in src/lib/site-access.ts). One request per site per browser session,
- * shared by every caller (module cache; cleared on sign-in/out because the key
- * includes the user id). Logged-out viewers and a null siteId make no request.
+ * rule in src/lib/site-access.ts). One request per (user, site) per browser
+ * session, shared by every caller (module cache). Logged-out viewers and a
+ * null siteId make no request.
  *
  * `resolved` is false until the answer is known — callers that render
  * owner-only UI should render nothing until then (no flash).
@@ -26,15 +26,11 @@ const cache = new Map<string, Promise<SiteAccessState>>()
 export function useSiteAccess(siteId: string | null | undefined): SiteAccessState {
   const { data: session, status } = useSession()
   const userId = session?.user?.id ?? null
-  const [state, setState] = useState<SiteAccessState>(PENDING)
+  const key = siteId && userId ? `${userId}:${siteId}` : null
+  const [loaded, setLoaded] = useState<{ key: string; value: SiteAccessState } | null>(null)
 
   useEffect(() => {
-    if (status === 'loading') return
-    if (!siteId || !userId) {
-      setState(NONE)
-      return
-    }
-    const key = `${userId}:${siteId}`
+    if (!key || !siteId) return
     let p = cache.get(key)
     if (!p) {
       p = fetch(`/api/sites/${encodeURIComponent(siteId)}/access`, { cache: 'no-store' })
@@ -46,9 +42,11 @@ export function useSiteAccess(siteId: string | null | undefined): SiteAccessStat
       cache.set(key, p)
     }
     let live = true
-    void p.then(v => { if (live) setState(v) })
+    void p.then(v => { if (live) setLoaded({ key, value: v }) })
     return () => { live = false }
-  }, [siteId, userId, status])
+  }, [key, siteId])
 
-  return state
+  if (status === 'loading') return PENDING
+  if (!key) return NONE
+  return loaded?.key === key ? loaded.value : PENDING
 }

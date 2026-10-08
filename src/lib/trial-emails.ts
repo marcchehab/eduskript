@@ -225,14 +225,15 @@ function isMailable(user: Recipient): user is Recipient & { email: string } {
 
 async function alreadySent(userId: string, subscriptionId: string, kind: TrialEmailKind): Promise<boolean> {
   const row = await prisma.userData.findFirst({
-    where: { userId, adapter: ADAPTER, itemId: subscriptionId, targetType: null, targetId: null },
+    where: { userId, siteId: '', adapter: ADAPTER, itemId: subscriptionId, targetType: null, targetId: null },
     select: { data: true },
   })
   return Boolean((row?.data as Record<string, unknown> | undefined)?.[kind])
 }
 
 async function markSent(userId: string, subscriptionId: string, kind: TrialEmailKind): Promise<void> {
-  const where = { userId, adapter: ADAPTER, itemId: subscriptionId, targetType: null, targetId: null }
+  // Server-owned bookkeeping row: not site data, siteId stays ''.
+  const where = { userId, siteId: '', adapter: ADAPTER, itemId: subscriptionId, targetType: null, targetId: null }
   const row = await prisma.userData.findFirst({ where, select: { id: true, data: true } })
   const data = { ...((row?.data as Record<string, unknown> | undefined) ?? {}), [kind]: Date.now() }
   if (row) {

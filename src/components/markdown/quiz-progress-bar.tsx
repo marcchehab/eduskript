@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Minus, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { useCurrentSite } from '@/contexts/current-site-context'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 
 function resolveDisplayName(
@@ -223,6 +224,8 @@ export function QuizProgressBar({
   maxValue = 100,
   autoCheck = false
 }: QuizProgressBarProps) {
+  // Site scoping: answers given on THIS site only (src/lib/site-access.ts).
+  const { siteId } = useCurrentSite()
   const [stats, setStats] = useState<QuizStats | null>(null)
   const [responses, setResponses] = useState<QuizResponseItem[]>([])
   const [isExpanded, setIsExpanded] = useState(false)
@@ -257,6 +260,7 @@ export function QuizProgressBar({
       const params = new URLSearchParams({
         pageId,
         componentId,
+        siteId: siteId ?? '',
         correctIndices: correctIndicesKey
       })
       const url = `/api/classes/${classId}/quiz-responses?${params}`
@@ -298,7 +302,7 @@ export function QuizProgressBar({
         setIsLoading(false)
       }
     }
-  }, [classId, pageId, componentId, correctIndicesKey])
+  }, [classId, pageId, componentId, correctIndicesKey, siteId])
 
   // Subscribe to real-time quiz submission events via SSE
   useRealtimeEvents(
@@ -309,6 +313,7 @@ export function QuizProgressBar({
         event.type === 'quiz-submission' &&
         event.classId === classId &&
         event.pageId === pageId &&
+        (!event.siteId || event.siteId === siteId) &&
         event.questionId === componentId
       ) {
         fetchResponses()

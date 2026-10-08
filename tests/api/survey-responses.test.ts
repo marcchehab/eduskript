@@ -29,6 +29,9 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: mocks.mockPrisma,
 }))
+vi.mock('@/lib/site-access', () => ({
+  isItemPlacedOnSite: vi.fn(async () => true),
+}))
 vi.mock('@/lib/privacy/pseudonym', () => ({
   generatePseudonym: (input: string) => `pseudo-${input}`,
   getStableStudentNickname: (pseudonym: string) => `Wise Seneca ${pseudonym.slice(0, 4)}`,
@@ -37,6 +40,7 @@ vi.mock('@/lib/privacy/pseudonym', () => ({
 import { getServerSession } from 'next-auth'
 import { clearAllRateLimits } from '@/lib/rate-limit'
 import { POST } from '@/app/api/survey-responses/route'
+import { isItemPlacedOnSite } from '@/lib/site-access'
 
 const mockPrisma = mocks.mockPrisma
 
@@ -54,8 +58,11 @@ function makeRequest(body: unknown, ip = '127.0.0.1') {
 const VALID_SESSION_ID = '11111111-2222-3333-4444-555555555555'
 const VALID_PAGE_ID = 'page-abc'
 
+const VALID_SITE_ID = 'site-a'
+
 const validBody = {
   pageId: VALID_PAGE_ID,
+  siteId: VALID_SITE_ID,
   sessionId: VALID_SESSION_ID,
   answers: [
     { questionId: 'q1', type: 'single', value: [0] },
@@ -173,8 +180,34 @@ describe('POST /api/survey-responses', () => {
       })
     )
 
-    // One userData row per answer (2 in valid body)
+    // One userData row per answer (2 in valid body), each on the given site
     expect(mockPrisma.userData.create).toHaveBeenCalledTimes(2)
+    for (const call of mockPrisma.userData.create.mock.calls) {
+      expect(call[0].data.siteId).toBe(VALID_SITE_ID)
+    }
+    expect(mockPrisma.userData.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ siteId: VALID_SITE_ID }) })
+    )
+  })
+
+  it('rejects a submission without siteId (400)', async () => {
+    vi.mocked(getServerSession).mockResolvedValue(null)
+    const { siteId: _omit, ...noSite } = validBody
+    const res = await POST(makeRequest(noSite))
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects a submission for a site the page is not placed on (404)', async () => {
+    vi.mocked(getServerSession).mockResolvedValue(null)
+    mockPrisma.page.findUnique.mockResolvedValue({
+      id: VALID_PAGE_ID,
+      title: 'Material-Alltag',
+      content: '<survey><question id="q1">...</question></survey>',
+    })
+    vi.mocked(isItemPlacedOnSite).mockResolvedValueOnce(false)
+    const res = await POST(makeRequest(validBody))
+    expect(res.status).toBe(404)
+    expect(mockPrisma.userData.create).not.toHaveBeenCalled()
   })
 
   it('returns 200 idempotent on Prisma P2002 unique-constraint violation', async () => {

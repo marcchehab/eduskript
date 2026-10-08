@@ -3,16 +3,18 @@
  *
  * GET /api/user-data/checkpoints/[id]
  *
- * Authorization mirrors the list endpoint: caller can read their own
- * checkpoints, or a teacher can read a student's checkpoint if they teach a
- * class containing that student and the page is unlocked for that class.
+ * Authorization (site scoping, src/lib/site-access.ts): caller can read their
+ * own checkpoints; anyone else must manage the site the checkpoint was taken
+ * on (personal owner / org owner+admin). Legacy rows with siteId '' (skript
+ * placed nowhere at migration time) are readable by their owner only. No
+ * superadmin bypass; authorship grants nothing.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { examClassActivityWhere } from '@/lib/exam-state'
+import { canManageSite } from '@/lib/site-access'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -34,12 +36,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     if (checkpoint.userId !== session.user.id) {
-      const allowed = await isTeacherOfStudentForPage(
-        session.user.id,
-        checkpoint.userId,
-        checkpoint.pageId
-      )
-      if (!allowed) {
+      if (!checkpoint.siteId || !(await canManageSite(session.user.id, checkpoint.siteId))) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
@@ -49,22 +46,4 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     console.error('[checkpoints/:id] GET failed:', error)
     return NextResponse.json({ error: 'Failed to fetch checkpoint' }, { status: 500 })
   }
-}
-
-async function isTeacherOfStudentForPage(
-  viewerId: string,
-  studentId: string,
-  pageId: string
-): Promise<boolean> {
-  const membership = await prisma.classMembership.findFirst({
-    where: {
-      studentId,
-      class: {
-        teacherId: viewerId,
-        ...examClassActivityWhere(pageId),
-      },
-    },
-    select: { id: true },
-  })
-  return Boolean(membership)
 }

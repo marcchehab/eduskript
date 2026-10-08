@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react'
 import { useSession } from 'next-auth/react'
 import { useSyncedUserData } from '@/lib/userdata'
+import { useCurrentSite } from '@/contexts/current-site-context'
 import { cn } from '@/lib/utils'
 
 /**
@@ -98,6 +99,8 @@ function serializeForCompare(answers: Map<string, SurveyAnswer>): string {
 }
 
 export function SurveyProvider({ pageId, children }: { pageId: string; children: ReactNode }) {
+  // Site scoping: answers and the manager view are per site (src/lib/site-access.ts).
+  const { siteId } = useCurrentSite()
   const { status } = useSession()
   const isAuthenticated = status === 'authenticated'
 
@@ -168,9 +171,9 @@ export function SurveyProvider({ pageId, children }: { pageId: string; children:
   const [implicitClassId, setImplicitClassId] = useState<string | null>(null)
   const [responseCount, setResponseCount] = useState(0)
   useEffect(() => {
-    if (!pageId) return
+    if (!pageId || !siteId) return
     let cancelled = false
-    fetch(`/api/pages/${encodeURIComponent(pageId)}/survey-meta`, {
+    fetch(`/api/pages/${encodeURIComponent(pageId)}/survey-meta?siteId=${encodeURIComponent(siteId)}`, {
       credentials: 'include',
       cache: 'no-store',
     })
@@ -191,12 +194,12 @@ export function SurveyProvider({ pageId, children }: { pageId: string; children:
     return () => {
       cancelled = true
     }
-  }, [pageId])
+  }, [pageId, siteId])
 
   const handleSubmit = useCallback(async () => {
     if (submitState === 'submitting') return
     if (isAuthenticated) return
-    if (!sessionId || !pageId) return
+    if (!sessionId || !pageId || !siteId) return
     if (answersRef.current.size === 0) return
 
     setSubmitState('submitting')
@@ -208,7 +211,7 @@ export function SurveyProvider({ pageId, children }: { pageId: string; children:
       const res = await fetch('/api/survey-responses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId, sessionId, answers }),
+        body: JSON.stringify({ pageId, siteId, sessionId, answers }),
       })
 
       if (!res.ok) {
@@ -230,7 +233,7 @@ export function SurveyProvider({ pageId, children }: { pageId: string; children:
       setSubmitError(err instanceof Error ? err.message : 'Unknown error')
       setSubmitState('error')
     }
-  }, [submitState, isAuthenticated, sessionId, pageId, updateSurveyMeta])
+  }, [submitState, isAuthenticated, sessionId, pageId, siteId, updateSurveyMeta])
 
   const value = useMemo<SurveyContextValue>(() => ({
     pageId,
@@ -260,6 +263,7 @@ export function SurveyProvider({ pageId, children }: { pageId: string; children:
         implicitClassId={implicitClassId}
         responseCount={responseCount}
         pageId={pageId}
+        siteId={siteId}
       />
     </SurveyContext.Provider>
   )
@@ -277,6 +281,7 @@ function SurveyFooter({
   implicitClassId,
   responseCount,
   pageId,
+  siteId,
 }: {
   isAuthenticated: boolean
   submitState: 'idle' | 'submitting' | 'submitted' | 'error'
@@ -289,13 +294,14 @@ function SurveyFooter({
   implicitClassId: string | null
   responseCount: number
   pageId: string
+  siteId: string | null
 }) {
   if (isAuthor) {
-    const csvHref = `/api/survey-responses/export?pageId=${encodeURIComponent(pageId)}`
+    const csvHref = `/api/survey-responses/export?pageId=${encodeURIComponent(pageId)}&siteId=${encodeURIComponent(siteId ?? '')}`
     return (
       <div className="my-8 p-4 rounded-lg border border-blue-500/40 bg-blue-500/5">
         <p className="font-medium text-blue-700 dark:text-blue-400">
-          Survey preview (you author this page)
+          Survey preview (you manage this site)
         </p>
         <p className="text-muted-foreground text-sm mt-1">
           Anonymous visitors see a Send button. Your own input isn&rsquo;t

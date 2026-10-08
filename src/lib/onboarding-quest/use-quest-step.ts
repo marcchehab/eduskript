@@ -36,7 +36,7 @@ export function fetchQuestState(): Promise<QuestState | null> {
   if (cachedStateLoaded) return Promise.resolve(cachedState)
   if (inFlightFetch) return inFlightFetch
 
-  inFlightFetch = fetch('/api/user-data/onboarding-quest/global')
+  inFlightFetch = fetch('/api/user-data/onboarding-quest/global?siteId=') // server-owned account row: siteId ''
     .then((res) => (res.ok ? res.json() : null))
     .then((body) => {
       // body is null only on a failed/erroring request — a successful response
@@ -65,7 +65,7 @@ export function fetchQuestState(): Promise<QuestState | null> {
  * reconciliation (src/components/annotations/annotation-layer.tsx).
  */
 export function refreshQuestState(): Promise<QuestState | null> {
-  return fetch('/api/user-data/onboarding-quest/global')
+  return fetch('/api/user-data/onboarding-quest/global?siteId=') // server-owned account row: siteId ''
     .then((res) => (res.ok ? res.json() : null))
     .then((body) => {
       const state = body ? ((body.data as QuestState | null) ?? DEFAULT_QUEST_STATE) : null

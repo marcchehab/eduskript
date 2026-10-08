@@ -2,25 +2,22 @@
  * Student User Data API (for teachers)
  *
  * GET /api/classes/[classId]/students/[studentId]/user-data
- *   ?pageId={pageId}
+ *   ?pageId={pageId}&siteId={siteId}
  *   &adapters=annotations,code,snaps,quiz-q1
  *
  * Fetch a specific student's user data for teacher viewing.
  *
- * Security Requirements (both must be true):
+ * Security (site scoping, src/lib/class-site-auth.ts):
  * 1. Teacher must own the class that the student is enrolled in
- * 2. Teacher must have view rights on the page (author on page, skript, or collection)
- *
- * This dual check ensures:
- * - Teachers can't view student work on pages they don't teach
- * - Teachers can't view students who aren't in their class
+ * 2. Teacher must own the site (`siteId`) — rows are filtered to that site.
+ *    Page authorship grants nothing.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { checkPagePermissions } from '@/lib/permissions'
+import { checkClassSiteRead } from '@/lib/class-site-auth'
 
 interface RouteParams {
   params: Promise<{
@@ -49,53 +46,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Verify teacher owns this class
+    // Site scoping: the student's data ON ONE SITE. Class teacher must own
+    // that (personal) site — authorship of the page grants nothing.
+    const siteId = searchParams.get('siteId')
     const classRecord = await prisma.class.findUnique({
       where: { id: classId },
-      select: { teacherId: true },
+      select: { teacherId: true, isImplicit: true },
     })
 
     if (!classRecord) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 })
     }
 
-    if (classRecord.teacherId !== teacherId) {
-      return NextResponse.json(
-        { error: 'You do not own this class' },
-        { status: 403 }
-      )
-    }
-
-    // Verify teacher has view rights on this page
-    // This prevents teachers from viewing student work on pages they don't teach
-    const page = await prisma.page.findUnique({
-      where: { id: pageId },
-      include: {
-        authors: { include: { user: { select: { id: true } } } },
-        skript: {
-          include: {
-            authors: { include: { user: { select: { id: true } } } },
-          },
-        },
-      },
-    })
-
-    if (!page) {
-      return NextResponse.json({ error: 'Page not found' }, { status: 404 })
-    }
-
-    const pagePermissions = checkPagePermissions(
-      teacherId,
-      page.authors,
-      page.skript?.authors || [],
-    )
-
-    if (!pagePermissions.canView) {
-      return NextResponse.json(
-        { error: 'You do not have access to this page' },
-        { status: 403 }
-      )
-    }
+    const denied = await checkClassSiteRead(teacherId, classRecord, siteId)
+    if (denied) return denied
 
     // Verify student is in this class
     const membership = await prisma.classMembership.findUnique({
@@ -134,6 +98,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const userData = await prisma.userData.findMany({
       where: {
         userId: studentId,
+        siteId: siteId!,
         itemId: pageId,
         targetType: null, // Only personal data, not targeted data
         targetId: null,
@@ -159,6 +124,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       quizData = await prisma.userData.findMany({
         where: {
           userId: studentId,
+          siteId: siteId!,
           itemId: pageId,
           targetType: null,
           targetId: null,

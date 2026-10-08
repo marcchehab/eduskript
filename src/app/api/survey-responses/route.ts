@@ -15,6 +15,11 @@
  *
  * Logged-in users are silently dropped (return 200 skipped). Defence-in-depth
  * with the client-side gate in SurveyProvider.
+ *
+ * Site scoping (src/lib/site-access.ts): the body names the site the survey
+ * was answered on; the page must be placed there and every answer row carries
+ * that siteId. The implicit class stays per page (shared across sites) — the
+ * teacher views filter by site.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -23,6 +28,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { generatePseudonym, getStableStudentNickname } from '@/lib/privacy/pseudonym'
 import { RateLimiter, getClientIdentifier } from '@/lib/rate-limit'
+import { isItemPlacedOnSite } from '@/lib/site-access'
 
 const SURVEY_PROVIDER = 'survey'
 
@@ -46,6 +52,7 @@ interface SurveyAnswerInput {
 
 interface SurveyResponseBody {
   pageId: string
+  siteId: string
   sessionId: string
   answers: SurveyAnswerInput[]
 }
@@ -54,6 +61,7 @@ function isValidBody(body: unknown): body is SurveyResponseBody {
   if (!body || typeof body !== 'object') return false
   const b = body as Record<string, unknown>
   if (typeof b.pageId !== 'string' || !b.pageId) return false
+  if (typeof b.siteId !== 'string' || !b.siteId) return false
   if (typeof b.sessionId !== 'string' || !UUID_PATTERN.test(b.sessionId)) return false
   if (!Array.isArray(b.answers)) return false
   if (b.answers.length === 0 || b.answers.length > MAX_ANSWERS_PER_SUBMISSION) return false
@@ -109,7 +117,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    const { pageId, sessionId, answers } = body
+    const { pageId, siteId, sessionId, answers } = body
 
     // Page must exist and must actually contain a <survey> region. This is
     // the auth gate for anonymous submissions — without it, anyone could
@@ -123,6 +131,9 @@ export async function POST(request: NextRequest) {
     }
     if (!SURVEY_REGION_PATTERN.test(page.content)) {
       return NextResponse.json({ error: 'Page is not a survey' }, { status: 400 })
+    }
+    if (!(await isItemPlacedOnSite(pageId, siteId))) {
+      return NextResponse.json({ error: 'Page is not on this site' }, { status: 404 })
     }
 
     // Logged-in users: silently drop. The client-side provider also gates
@@ -221,6 +232,7 @@ export async function POST(request: NextRequest) {
         const existing = await tx.userData.findFirst({
           where: {
             userId: shellUser.id,
+            siteId,
             adapter,
             itemId: pageId,
             targetType: null,
@@ -238,6 +250,7 @@ export async function POST(request: NextRequest) {
           await tx.userData.create({
             data: {
               userId: shellUser.id,
+              siteId,
               adapter,
               itemId: pageId,
               data: answerValueToQuizData(a),

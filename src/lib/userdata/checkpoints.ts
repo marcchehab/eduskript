@@ -12,6 +12,8 @@
  */
 
 import { createLogger } from '@/lib/logger'
+import { userDataService } from './userDataService'
+import { isSyncableSite } from './sync-engine'
 
 const log = createLogger('userdata:checkpoints')
 
@@ -26,6 +28,9 @@ export interface CheckpointPayload {
   kind: CheckpointKind
   payload: unknown
   label?: string
+  /** Site the checkpoint belongs to (site scoping). Defaults to the current
+   *  site context (set by CurrentSiteProvider). */
+  siteId?: string
 }
 
 export interface PostCheckpointResult {
@@ -34,11 +39,15 @@ export interface PostCheckpointResult {
 }
 
 export async function postCheckpoint(input: CheckpointPayload): Promise<PostCheckpointResult> {
+  // No site context (dashboard preview) or legacy: the server would reject it.
+  // The local IndexedDB history still has the snapshot.
+  const siteId = input.siteId ?? userDataService.getCurrentSite()
+  if (!isSyncableSite(siteId)) return { id: null }
   try {
     const res = await fetch('/api/user-data/checkpoints', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, siteId }),
     })
     if (res.status === 402) {
       // Free-tier teacher's class — silent no-op, mirrors sync engine behavior.

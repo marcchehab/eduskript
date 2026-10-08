@@ -1,18 +1,19 @@
 /**
  * Survey responses CSV export.
  *
- * GET /api/survey-responses/export?pageId=X — returns one CSV row per
+ * GET /api/survey-responses/export?pageId=X&siteId=S — returns one CSV row per
  * respondent with one column per question (question IDs derived from the
  * page's current markdown so column order is stable and reproducible).
  *
- * Auth: viewer must be an author of the page (PageAuthor inheritance via
- * checkPagePermissions — same as the inline results view).
+ * Auth (site scoping, src/lib/site-access.ts): viewer must MANAGE the site
+ * (personal owner / org owner+admin); only answers given on that site are
+ * exported. Page authorship grants nothing; no superadmin bypass.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { checkPagePermissions } from '@/lib/permissions'
+import { canManageSite } from '@/lib/site-access'
 import { getStudentDisplayName } from '@/lib/privacy/pseudonym'
 
 interface StoredQuizData {
@@ -67,19 +68,17 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const pageId = searchParams.get('pageId')
-    if (!pageId) {
-      return NextResponse.json({ error: 'Missing pageId' }, { status: 400 })
+    const siteId = searchParams.get('siteId')
+    if (!pageId || !siteId) {
+      return NextResponse.json({ error: 'Missing pageId or siteId' }, { status: 400 })
+    }
+    if (!(await canManageSite(session.user.id, siteId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const page = await prisma.page.findUnique({
       where: { id: pageId },
       include: {
-        authors: { include: { user: { select: { id: true } } } },
-        skript: {
-          include: {
-            authors: { include: { user: { select: { id: true } } } },
-          },
-        },
         implicitSurveyClass: {
           include: {
             memberships: {
@@ -96,15 +95,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    const perms = checkPagePermissions(
-      session.user.id,
-      page.authors,
-      page.skript.authors,
-    )
-    if (!perms.canEdit) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     // Question IDs from current markdown — these are the CSV columns.
     const questionIds = extractQuestionIds(page.content)
 
@@ -112,13 +102,14 @@ export async function GET(request: NextRequest) {
     // doesn't exist yet. Return a header-only CSV so the teacher gets a
     // sensible empty export.
     const implicitClass = page.implicitSurveyClass
-    const respondents = implicitClass?.memberships ?? []
-    const respondentIds = respondents.map((m) => m.student.id)
+    const members = implicitClass?.memberships ?? []
+    const memberIds = members.map((m) => m.student.id)
 
-    const userData = respondentIds.length > 0
+    const userData = memberIds.length > 0
       ? await prisma.userData.findMany({
           where: {
-            userId: { in: respondentIds },
+            userId: { in: memberIds },
+            siteId,
             itemId: pageId,
             adapter: { startsWith: 'quiz-' },
           },
@@ -142,6 +133,10 @@ export async function GET(request: NextRequest) {
         latestUpdateByUser.set(row.userId, row.updatedAt)
       }
     }
+
+    // The implicit class is per page, shared by every site that shows it —
+    // only respondents with answers on THIS site are listed.
+    const respondents = members.filter((m) => latestUpdateByUser.has(m.student.id))
 
     // Build CSV rows
     const headerCols = ['submitted_at', 'pseudonym', 'display_name', ...questionIds]

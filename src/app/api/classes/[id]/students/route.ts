@@ -39,6 +39,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Check for optional pageId to include annotation status
     const { searchParams } = new URL(request.url)
     const pageId = searchParams.get('pageId')
+    // Site scoping: feedback flags only for the named site (teacher's own
+    // feedback rows written there).
+    const siteId = searchParams.get('siteId')
 
     // Get all members with identity consent status
     const memberships = await prisma.classMembership.findMany({
@@ -61,10 +64,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // If pageId provided, check which students have annotations on that page
     let studentsWithAnnotations: Set<string> = new Set()
-    if (pageId) {
+    if (pageId && siteId) {
       const studentIds = memberships.map(m => m.student.id)
       const annotations = await prisma.userData.findMany({
         where: {
+          userId: session.user.id,
+          siteId,
           targetType: 'student',
           targetId: { in: studentIds },
           adapter: 'annotations',

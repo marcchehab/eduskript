@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRealtimeEvents } from './use-realtime-events'
+import { useCurrentSite } from '@/contexts/current-site-context'
 
 export interface StudentWorkData {
   annotations?: {
@@ -53,6 +54,8 @@ export function useStudentWork({
   pageId,
   adapters
 }: UseStudentWorkOptions): UseStudentWorkResult {
+  // Site scoping: the student's data on THIS site only (src/lib/site-access.ts).
+  const { siteId } = useCurrentSite()
   const [data, setData] = useState<StudentWorkData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -65,14 +68,14 @@ export function useStudentWork({
   const lastFetchKeyRef = useRef<string>('')
 
   const fetchStudentWork = useCallback(async () => {
-    if (!classId || !studentId || !pageId) {
+    if (!classId || !studentId || !pageId || !siteId) {
       setData(null)
       setIsLoading(false)
       return
     }
 
     // Create a unique key for this request
-    const fetchKey = `${classId}:${studentId}:${pageId}:${adaptersKey}`
+    const fetchKey = `${siteId}:${classId}:${studentId}:${pageId}:${adaptersKey}`
 
     // Skip if we already fetched this exact data
     if (lastFetchKeyRef.current === fetchKey && data !== null) {
@@ -85,6 +88,7 @@ export function useStudentWork({
     try {
       const params = new URLSearchParams({
         pageId,
+        siteId,
         adapters: adaptersRef.current.join(',')
       })
 
@@ -106,12 +110,12 @@ export function useStudentWork({
     } finally {
       setIsLoading(false)
     }
-  }, [classId, studentId, pageId, adaptersKey, data])
+  }, [classId, studentId, pageId, siteId, adaptersKey, data])
 
   useEffect(() => {
     fetchStudentWork()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchStudentWork has `data` in its deps, including it here would cause infinite refetch
-  }, [classId, studentId, pageId, adaptersKey])
+  }, [classId, studentId, pageId, siteId, adaptersKey])
 
   // Subscribe to real-time student work updates via SSE
   // When the student we're viewing saves their work, automatically refetch
@@ -119,7 +123,7 @@ export function useStudentWork({
     ['student-work-update'],
     (event) => {
       // Only refetch if this is the student we're currently viewing
-      if (event.studentId === studentId && event.pageId === pageId) {
+      if (event.studentId === studentId && event.pageId === pageId && (!event.siteId || event.siteId === siteId)) {
         console.log('[useStudentWork] Received student-work-update, refetching...')
         // Clear the lastFetchKey to force a refetch
         lastFetchKeyRef.current = ''

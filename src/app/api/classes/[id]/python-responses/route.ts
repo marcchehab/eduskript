@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkClassSiteRead } from '@/lib/class-site-auth'
 import { scoreComponent, type ScoreSource } from '@/lib/scoring/score-component'
 
 interface RouteParams {
@@ -39,17 +40,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Verify class exists and caller is its teacher
+    // Site scoping: answers of ONE site; class teacher must own that site
+    // (src/lib/class-site-auth.ts).
+    const siteId = searchParams.get('siteId')
     const classRecord = await prisma.class.findUnique({
       where: { id: classId },
-      select: { teacherId: true }
+      select: { teacherId: true, isImplicit: true }
     })
 
     if (!classRecord) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 })
     }
-    if (classRecord.teacherId !== session.user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const denied = await checkClassSiteRead(session.user.id, classRecord, siteId)
+    if (denied) return denied
 
     // All class members
     const memberships = await prisma.classMembership.findMany({
@@ -68,11 +71,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // run checks). The X/Y tests detail always comes from the client run.
     const [records, scoreRows] = await Promise.all([
       prisma.userData.findMany({
-        where: { userId: { in: studentIds }, adapter: componentId, itemId: pageId },
+        where: { userId: { in: studentIds }, siteId: siteId!, adapter: componentId, itemId: pageId },
         select: { userId: true, data: true, updatedAt: true },
       }),
       prisma.componentScore.findMany({
-        where: { pageId, componentId, studentId: { in: studentIds } },
+        where: { pageId, componentId, studentId: { in: studentIds }, siteId: siteId! },
         select: { studentId: true, source: true, priority: true, earned: true, max: true, feedback: true, updatedAt: true },
       }),
     ])

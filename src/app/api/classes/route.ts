@@ -30,6 +30,9 @@ export async function GET(request: NextRequest) {
     // Check for optional pageId to include annotation status
     const { searchParams } = new URL(request.url)
     const pageId = searchParams.get('pageId')
+    // Site scoping: class broadcasts are per (page, site); annotation status is
+    // only reported for the site named here (src/lib/site-access.ts).
+    const siteId = searchParams.get('siteId')
 
     // Get all classes for this teacher with member counts. Implicit
     // (survey pseudo-) classes are hidden — they belong on a teacher's
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     // If pageId provided, check which classes have annotations on that page
     let classesWithAnnotations: Set<string> = new Set()
-    if (pageId) {
+    if (pageId && siteId) {
       const classIds = classes.map(c => c.id)
       const annotations = await prisma.userData.findMany({
         where: {
@@ -63,6 +66,7 @@ export async function GET(request: NextRequest) {
           targetId: { in: classIds },
           adapter: 'annotations',
           itemId: pageId,
+          siteId,
         },
         select: {
           targetId: true,

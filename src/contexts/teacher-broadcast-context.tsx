@@ -19,6 +19,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { useSession } from 'next-auth/react'
 import { useExamSession } from '@/contexts/exam-session-context'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { useCurrentSite } from '@/contexts/current-site-context'
 
 export interface TeacherClassAnnotation {
   classId: string
@@ -112,9 +113,11 @@ export function TeacherBroadcastProvider({ pageId, children }: TeacherBroadcastP
 
   // Consider authenticated if either NextAuth session OR exam session is active
   const isAuthenticated = status === 'authenticated' || examSession.isInExamSession
+  // Site scoping: broadcasts are per site (src/lib/site-access.ts).
+  const { siteId } = useCurrentSite()
 
   const fetchAnnotations = useCallback(async () => {
-    if (!isAuthenticated || !pageId) {
+    if (!isAuthenticated || !pageId || !siteId) {
       setIsLoading(false)
       return
     }
@@ -123,7 +126,7 @@ export function TeacherBroadcastProvider({ pageId, children }: TeacherBroadcastP
       setError(null)
 
       // Single timestamp per fetch - prevents duplicate requests
-      const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}&_t=${Date.now()}`)
+      const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}&siteId=${encodeURIComponent(siteId)}&_t=${Date.now()}`)
       if (!res.ok) {
         throw new Error(`Failed to fetch: ${res.status}`)
       }
@@ -144,7 +147,7 @@ export function TeacherBroadcastProvider({ pageId, children }: TeacherBroadcastP
     } finally {
       setIsLoading(false)
     }
-  }, [pageId, isAuthenticated])
+  }, [pageId, siteId, isAuthenticated])
 
   // Initial fetch
   useEffect(() => {
@@ -155,7 +158,8 @@ export function TeacherBroadcastProvider({ pageId, children }: TeacherBroadcastP
   useRealtimeEvents(
     ['teacher-annotations-update', 'teacher-feedback'],
     (event) => {
-      if ((event.type === 'teacher-annotations-update' || event.type === 'teacher-feedback') && (event as { pageId?: string }).pageId === pageId) {
+      const evSite = (event as { siteId?: string }).siteId
+      if ((event.type === 'teacher-annotations-update' || event.type === 'teacher-feedback') && (event as { pageId?: string }).pageId === pageId && (!evSite || evSite === siteId)) {
         fetchAnnotations()
       }
     },
