@@ -6,6 +6,7 @@ import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import crypto from 'crypto'
 import { encode } from 'next-auth/jwt'
 import { createLogger } from '@/lib/logger'
+import { getPublicOrigin } from '@/lib/public-origin'
 
 const log = createLogger('auth:cross-domain')
 
@@ -65,8 +66,10 @@ export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     log.info(`Cross-domain auth: user not authenticated, redirecting to sign in`)
-    const signInUrl = `/auth/signin?callbackUrl=${encodeURIComponent(request.url)}`
-    return NextResponse.redirect(new URL(signInUrl, request.url))
+    const origin = getPublicOrigin(request)
+    const selfUrl = `${origin}${request.nextUrl.pathname}${request.nextUrl.search}`
+    const signInUrl = `/auth/signin?callbackUrl=${encodeURIComponent(selfUrl)}`
+    return NextResponse.redirect(new URL(signInUrl, origin))
   }
 
   // Tunnel domains (ngrok etc.) can't query production's DB for token lookup,

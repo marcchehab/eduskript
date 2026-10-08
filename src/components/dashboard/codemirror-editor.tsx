@@ -1591,21 +1591,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertFlex = () => insertBlockTemplate('\n<flex>\n<flex-item>\n\nLeft column — put text, images, or any markdown here.\n\n</flex-item>\n<flex-item>\n\nRight column — the columns share the width equally.\n\n</flex-item>\n</flex>\n')
   const insertFullwidth = () => insertBlockTemplate('\n<fullwidth>\n\n</fullwidth>\n')
   const insertStickme = () => insertBlockTemplate('\n<stickme>\n\n</stickme>\n')
-  // <banner> goes to the TOP of the document, not the cursor: it only sits
-  // flush with the paper edge as the first element (see .es-banner CSS).
-  // Layout tab is CodeMirror-only, so no textarea branch.
-  const insertBanner = () => {
-    const view = editorViewRef.current
-    if (!view) return
-    const template = '<banner>\n\n</banner>\n\n'
-    view.dispatch({
-      changes: { from: 0, insert: template },
-      selection: { anchor: '<banner>\n'.length },
-      scrollIntoView: true,
-    })
-    onChange(view.state.doc.toString())
-    view.focus()
-  }
+  // At the caret like other blocks. Only a <banner> that is the first element
+  // sits flush with the paper edge (see .es-banner CSS); elsewhere it renders
+  // as an inline coloured bar.
+  const insertBanner = () => insertBlockTemplate('\n<banner>\n\n</banner>\n')
   const insertTabsContainer = () => insertBlockTemplate('\n<tabs-container data-items=\'["Tab 1","Tab 2"]\'>\n<tab-item>\n\n</tab-item>\n<tab-item>\n\n</tab-item>\n</tabs-container>\n')
   const insertSqlEditor = () => insertBlockTemplate(`\`\`\`sql editor id="${generateId()}" db=""\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\`\n`)
   const insertHtmlEditor = () => insertBlockTemplate(`\`\`\`html editor id="${generateId()}"\n<h1>Hello!</h1>\n\`\`\`\n`)

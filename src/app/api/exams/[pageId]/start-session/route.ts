@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createExamSession } from '@/lib/exam-tokens'
+import { getPublicOrigin } from '@/lib/public-origin'
 
 export async function GET(
   request: NextRequest,
@@ -46,13 +47,7 @@ export async function GET(
   })
 
   // Redirect back to the exam page (without the seb_token since session is now active)
-  // Use forwarded host/proto headers when behind a proxy (like ngrok), otherwise
-  // request.nextUrl.origin would resolve to localhost which SEB can't reach
-  const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host')
-  const forwardedProto = request.headers.get('x-forwarded-proto') || 'https'
-  const origin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : request.nextUrl.origin
-
-  const redirectUrl = new URL(returnUrl, origin)
+  const redirectUrl = new URL(returnUrl, getPublicOrigin(request))
   redirectUrl.searchParams.delete('seb_token')
 
   return NextResponse.redirect(redirectUrl)

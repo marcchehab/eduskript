@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { gzipSync } from 'zlib'
 import { generateSEBConfig, getSEBMimeType, getSEBFilename } from '@/lib/seb'
+import { encodeSEBFile } from '@/lib/seb-file'
 
 /**
  * GET /api/seb/site-config?from=<path>
@@ -27,11 +27,7 @@ export async function GET(request: NextRequest) {
     const isDevelopment = process.env.NODE_ENV !== 'production'
     const sebConfigXml = generateSEBConfig(startUrl, 'Eduskript', { isDevelopment })
     const filename = getSEBFilename('eduskript')
-
-    // SEB file format: "plnd" prefix (4 bytes) + gzip-compressed XML.
-    // See: https://safeexambrowser.org/developer/seb-file-format.html
-    const compressed = gzipSync(Buffer.from(sebConfigXml, 'utf-8'))
-    const sebFile = Buffer.concat([Buffer.from('plnd', 'utf-8'), compressed])
+    const sebFile = encodeSEBFile(sebConfigXml)
 
     return new NextResponse(sebFile, {
       status: 200,

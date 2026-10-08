@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { deleteExamSession } from '@/lib/exam-tokens'
+import { getPublicOrigin } from '@/lib/public-origin'
 
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies()
@@ -27,5 +28,5 @@ export async function GET(request: NextRequest) {
   }
 
   // Redirect to the completion page
-  return NextResponse.redirect(new URL('/exam-complete', request.nextUrl.origin))
+  return NextResponse.redirect(new URL('/exam-complete', getPublicOrigin(request)))
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { gzipSync } from 'zlib'
 import { prisma } from '@/lib/prisma'
 import { generateSEBConfig, getSEBMimeType, getSEBFilename } from '@/lib/seb'
+import { encodeSEBFile } from '@/lib/seb-file'
 import { generateExamToken } from '@/lib/exam-tokens'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -112,11 +112,7 @@ export async function GET(
     const isDevelopment = process.env.NODE_ENV !== 'production'
     const sebConfigXml = generateSEBConfig(examUrl, examTitle, { isDevelopment })
     const filename = getSEBFilename(page.title)
-
-    // SEB file format: "plnd" prefix (4 bytes) + gzip-compressed XML
-    // See: https://safeexambrowser.org/developer/seb-file-format.html
-    const compressedConfig = gzipSync(Buffer.from(sebConfigXml, 'utf-8'))
-    const sebFile = Buffer.concat([Buffer.from('plnd', 'utf-8'), compressedConfig])
+    const sebFile = encodeSEBFile(sebConfigXml)
 
     // Return as downloadable .seb file
     return new NextResponse(sebFile, {
