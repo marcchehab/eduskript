@@ -10,6 +10,7 @@ import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { readExtraSettings } from '@/lib/settings'
+import { placedOnSiteWhere } from '@/lib/site-access'
 
 // ISR: published content only and no session read, so every visitor gets the
 // same HTML. Next.js 16 needs generateStaticParams() — even empty — or a
@@ -87,6 +88,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
+      id: true,
       // Page-display fields live on Site; org carries only the entity name.
       pageDescription: true,
       pageIcon: true,
@@ -118,19 +120,11 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   // rendering (and an org-membership query per request with it). Admins
   // preview unpublished skripts from the dashboard.
 
-  // Get org admins for content lookup
-  const adminMembers = await prisma.organizationMember.findMany({
-    where: {
-      organizationId: organization.id,
-      role: { in: ['owner', 'admin'] }
-    },
-    select: { userId: true }
-  })
-  const adminUserIds = adminMembers.map(m => m.userId)
-
-  // Find skript by slug scoped to org admins. Skript.slug is not unique: an
-  // admin's own site may carry a same-slug skript, so candidates linked to an
-  // org-site collection win over admin-site / admin-authored ones.
+  // Site scoping: only skripts PLACED on the org site (layout root item,
+  // org-owned collection, or a collection the org layout references) render
+  // here — src/lib/site-access.ts. Skript.slug is not unique: candidates in an
+  // org-owned collection win, then the oldest placed one.
+  const orgSiteId = orgSite!.id
   const skriptInclude = {
     collectionSkripts: {
       include: { collection: true },
@@ -153,11 +147,9 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
     (await prisma.skript.findFirst({
       where: {
         slug: skriptSlug,
-        OR: [
-          { authors: { some: { userId: { in: adminUserIds } } } },
-          { collectionSkripts: { some: { collection: { site: { userId: { in: adminUserIds } } } } } }
-        ]
+        ...(await placedOnSiteWhere(orgSiteId)),
       },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       include: skriptInclude,
     }))
 
@@ -181,7 +173,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
 
   // Fetch public annotations, snaps, and sticky notes for this skript front page
   const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
-    ? await getPublicLayers(frontPage.id)
+    ? await getPublicLayers(frontPage.id, orgSiteId)
     : EMPTY_PUBLIC_LAYERS
 
   // Authorship for the annotation toolbar is resolved client-side inside
@@ -238,7 +230,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       : undefined
 
     return (
-      <CurrentSiteProvider siteId={collection?.siteId ?? null} organizationId={organization.id}>
+      <CurrentSiteProvider siteId={orgSiteId} organizationId={organization.id}>
       <PublicSiteLayout
         teacher={orgAsTeacher}
         siteStructure={siteStructure}

@@ -6,6 +6,7 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { ReflowGate } from '@/components/public/reflow-gate'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
+import { placedOnSiteWhere } from '@/lib/site-access'
 
 // Force dynamic rendering — the page is session-dependent (author gating).
 // ISR: the route renders published content only and reads no session, so every
@@ -32,6 +33,7 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
     const teacherSite = await prisma.site.findUnique({
       where: { slug: domain },
       select: {
+        id: true,
         pageIcon: true,
         user: { select: { id: true, name: true, title: true } },
       },
@@ -47,14 +49,13 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
       }
     }
 
+    // Site scoping: only skripts placed on THIS site (src/lib/site-access.ts).
     const skript = await prisma.skript.findFirst({
       where: {
         slug: skriptSlug,
-        OR: [
-          { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
-        ]
+        ...(await placedOnSiteWhere(teacherSite!.id)),
       },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { title: true }
     })
 
@@ -97,7 +98,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
 
     const teacherSiteRow = await prisma.site.findUnique({
       where: { slug: domain },
-      select: { pageLanguage: true, user: { select: { id: true, email: true, billingPlan: true } } }
+      select: { id: true, pageLanguage: true, user: { select: { id: true, email: true, billingPlan: true } } }
     })
     const teacher = teacherSiteRow?.user
 
@@ -105,14 +106,14 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
       notFound()
     }
 
+    // Site scoping: a skript renders only on sites that place it.
+    const siteId = teacherSiteRow!.id
     const skript = await prisma.skript.findFirst({
       where: {
         slug: skriptSlug,
-        OR: [
-          { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
-        ]
+        ...(await placedOnSiteWhere(siteId)),
       },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
         title: true,
@@ -153,7 +154,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     // which is never invalidated on billing_plan changes — so a free→pro
     // upgrade left public layers permanently empty.
     const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
-      ? await getPublicLayers(frontPage.id)
+      ? await getPublicLayers(frontPage.id, siteId)
       : EMPTY_PUBLIC_LAYERS
 
     // Authorship for the annotation toolbar is resolved client-side inside
@@ -168,7 +169,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
             pageId={frontPage.id}
             pageType="standard"
             unlockedClasses={[]}
-            requireOwnerSlug={domain}
+            siteId={siteId}
           />
         )}
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

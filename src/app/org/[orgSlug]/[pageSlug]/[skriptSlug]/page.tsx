@@ -178,7 +178,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
           pageId={skript.frontPage.id}
           pageType="standard"
           unlockedClasses={[]}
-          requireOwnerSlug={teacherSite?.slug}
+          siteId={teacherSite?.id ?? null}
         />
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

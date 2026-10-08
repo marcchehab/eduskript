@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
 
     const content = await getPublishedPage(
-      teacher.id,
+      teacher.siteId,
       skriptSlug,
       pageSlug,
       domain
@@ -140,7 +140,7 @@ export default async function PublicPage({ params }: PageProps) {
   const teacher = await getTeacherByUsernameDeduped(domain)
   if (!teacher) notFound()
 
-  const content = await getPublishedPage(teacher.id, skriptSlug, pageSlug, domain)
+  const content = await getPublishedPage(teacher.siteId, skriptSlug, pageSlug, domain)
   if (!content) notFound()
 
   const { skript, page } = content
@@ -164,7 +164,7 @@ export default async function PublicPage({ params }: PageProps) {
   // permanently zero-ing out every public layer for the upgraded teacher.
   // The three findFirst/findMany queries are indexed and cheap (~3 ms) for
   // free teachers' empty rows; not worth a permanent silent-empty failure mode.
-  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id, teacher.siteId)
 
   const canonical = canonicalUrl({
     type: 'teacher',
@@ -212,6 +212,7 @@ export default async function PublicPage({ params }: PageProps) {
         publicSnaps={publicSnaps}
         publicStickyNotes={publicStickyNotes}
         teacherPageSlug={teacher.pageSlug}
+        siteId={teacher.siteId}
         pageLanguage={teacher.pageLanguage}
       />
     </>

@@ -122,6 +122,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
   const orgSiteRow = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
+      id: true,
       // Page-display fields live on Site.
       pageDescription: true,
       pageIcon: true,
@@ -174,7 +175,8 @@ export default async function OrgPublicPage({ params }: PageProps) {
   const { collection, skript, page, allPages } = content
 
   // Fetch public annotations, snaps, and sticky notes
-  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
+  const orgSiteId = orgSiteRow!.id
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id, orgSiteId)
 
   // Build site structure for navigation
   const siteStructure = collection
@@ -257,7 +259,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
   ]
 
   return (
-    <CurrentSiteProvider siteId={collection?.siteId ?? null} organizationId={organization.id}>
+    <CurrentSiteProvider siteId={orgSiteId} organizationId={organization.id}>
     <JsonLd schema={ldSchemas} />
     <PublicSiteLayout
       teacher={orgAsTeacher}
@@ -271,20 +273,18 @@ export default async function OrgPublicPage({ params }: PageProps) {
       homeUrl={`/org/${orgSlug}`}
       pageId={page.id}
     >
-      {/* Class toolbar (portals into the sidebar slot) — the only UI that sets
-          the broadcast target, so without it teachers can't broadcast
-          annotations to a class on org content pages. This route is ISR and
-          has no owner slug to match, so the toolbar self-gates client-side on
-          the server-verified page-author flag (gateOnPageAuthor). Wrapped in
-          Suspense because ClassToolbar calls useSearchParams(). Skipped for
-          exam pages, mirroring PublicPageBody. */}
+      {/* Site toolbar (portals into the sidebar slot) — the only UI that sets
+          the public broadcast target. Self-gates client-side on org
+          owner/admin (src/lib/site-access.ts); org sites have no classes.
+          Wrapped in Suspense because ClassToolbar calls useSearchParams().
+          Skipped for exam pages, mirroring PublicPageBody. */}
       {page.pageType !== 'exam' && (
         <Suspense fallback={null}>
           <ClassToolbar
             pageId={page.id}
             pageType={page.pageType ?? 'standard'}
             unlockedClasses={[]}
-            gateOnPageAuthor
+            siteId={orgSiteId}
           />
         </Suspense>
       )}

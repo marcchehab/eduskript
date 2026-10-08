@@ -178,7 +178,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
 
   // Fetch public annotations, snaps, and sticky notes for this front page
   const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
-    ? await getPublicLayers(frontPage.id)
+    ? await getPublicLayers(frontPage.id, teacherSite?.id)
     : EMPTY_PUBLIC_LAYERS
 
   // Authorship for the annotation toolbar is resolved client-side inside

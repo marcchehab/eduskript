@@ -99,10 +99,10 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
     redirect(`/exam/${pageSlug}/${skriptSlug}/${contentPageSlug}`)
   }
 
-  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id, teacher.sites[0]?.id)
 
   // Authorship is resolved client-side (AnnotationLayer for the toolbar,
-  // ClassToolbar's own gateOnPageAuthor); reading the session here would opt
+  // ClassToolbar's own site-management gate); reading the session here would opt
   // the route out of static rendering again.
 
   // Build site structure
@@ -202,15 +202,14 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
       pageId={page.id}
     >
-      {/* Submissions list for the page's author. The server-side gate went with
-          the session read, so the toolbar self-gates client-side on page
-          authorship — same as the org /c/ content route. Exam controls are not
-          needed here: exam pages redirect to /exam/... above. */}
+      {/* Class toolbar for the site's owner. Self-gates client-side on
+          site management (src/lib/site-access.ts) — the route stays ISR.
+          Exam controls are not needed here: exam pages redirect to /exam/... */}
       <ClassToolbar
         pageId={page.id}
         pageType={page.pageType ?? 'standard'}
         unlockedClasses={[]}
-        gateOnPageAuthor
+        siteId={teacherSite?.id ?? null}
       />
 
       {body}

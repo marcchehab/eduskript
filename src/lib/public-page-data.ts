@@ -1,6 +1,9 @@
 /**
  * Server-side prefetch for the page-broadcast ("public") layers — annotations,
- * snaps, and sticky notes published by the page author for every visitor.
+ * snaps, and sticky notes published by the SITE's managers (personal-site
+ * owner / org owner+admins, see src/lib/site-access.ts) for every visitor of
+ * that site. Keyed per (page, site): the same page on another site shows that
+ * site's own public layer.
  *
  * Centralises what nine page routes used to copy-paste, so adding a new
  * public layer (or changing the select shape) is a one-file change. Lives in
@@ -34,18 +37,18 @@ export const EMPTY_PUBLIC_LAYERS: PublicLayers = {
   publicStickyNotes: [],
 }
 
-async function fetchPublicLayers(pageId: string): Promise<PublicLayers> {
+async function fetchPublicLayers(pageId: string, siteId: string): Promise<PublicLayers> {
   const [publicAnnotations, publicSnaps, stickyRecord] = await Promise.all([
     prisma.userData.findMany({
-      where: { adapter: 'annotations', itemId: pageId, targetType: 'page' },
+      where: { adapter: 'annotations', itemId: pageId, targetType: 'page', siteId },
       select: { data: true, userId: true, user: { select: { name: true } } },
     }),
     prisma.userData.findMany({
-      where: { adapter: 'snaps', itemId: pageId, targetType: 'page' },
+      where: { adapter: 'snaps', itemId: pageId, targetType: 'page', siteId },
       select: { data: true, userId: true, user: { select: { name: true } } },
     }),
     prisma.userData.findFirst({
-      where: { adapter: 'sticky-notes', itemId: pageId, targetType: 'page' },
+      where: { adapter: 'sticky-notes', itemId: pageId, targetType: 'page', siteId },
       select: { data: true },
     }),
   ])
@@ -68,10 +71,13 @@ async function fetchPublicLayers(pageId: string): Promise<PublicLayers> {
  * rows change. If a new writer of those rows appears, it must invalidate too,
  * or published layers will go stale until the next deploy.
  */
-export async function getPublicLayers(pageId: string): Promise<PublicLayers> {
+export async function getPublicLayers(pageId: string, siteId: string | null | undefined): Promise<PublicLayers> {
+  // Site scoping: the public layer belongs to the site (its owner / org
+  // admins write it), so each (page, site) has its own. No site → nothing.
+  if (!siteId) return EMPTY_PUBLIC_LAYERS
   return unstable_cache(
-    () => fetchPublicLayers(pageId),
-    ['public-layers', pageId],
+    () => fetchPublicLayers(pageId, siteId),
+    ['public-layers', pageId, siteId],
     { tags: [CACHE_TAGS.page(pageId)], revalidate: false }
   )()
 }

@@ -150,7 +150,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
 
   // Fetch public annotations, snaps, and sticky notes for this front page
   const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
-    ? await getPublicLayers(frontPage.id)
+    ? await getPublicLayers(frontPage.id, organization.siteId)
     : EMPTY_PUBLIC_LAYERS
 
   // Authorship for the annotation toolbar is resolved client-side inside
@@ -204,16 +204,15 @@ export default async function OrgPage({ params }: OrgPageProps) {
       homeUrl={`/org/${orgSlug}`}
       pageId={frontPage?.id}
     >
-      {/* Class toolbar (portals into the sidebar slot). The server-side isAdmin
-          gate went with the session read, so it self-gates client-side on page
-          authorship — the same mechanism the ISR org /c/ content route uses.
-          It still self-gates on paid + has-classes. */}
+      {/* Site toolbar (portals into the sidebar slot). Self-gates
+          client-side on org owner/admin (src/lib/site-access.ts); org sites
+          have no classes, so it offers only the public layer + answers. */}
       {frontPage?.id && (
         <ClassToolbar
           pageId={frontPage.id}
           pageType="standard"
           unlockedClasses={[]}
-          gateOnPageAuthor
+          siteId={organization.siteId}
         />
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

@@ -31,6 +31,8 @@ import { resolveExamStateDetail, type ExamLifecycleState } from '@/lib/exam-stat
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
 import { getPublicLayers } from '@/lib/public-page-data'
+import { getSiteAccess } from '@/lib/site-access'
+import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import type { Metadata } from 'next'
 
 interface PageProps {
@@ -62,10 +64,13 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   const teacher = await getTeacherByUsernameDeduped(domain)
   if (!teacher) notFound()
 
-  const content = await getPublishedPage(teacher.id, skriptSlug, pageSlug, domain)
+  const content = await getPublishedPage(teacher.siteId, skriptSlug, pageSlug, domain)
   if (!content) notFound()
 
-  const { collection, skript, page } = content
+  const { skript, page } = content
+  // Site scoping: everything below (submissions, exam state, public layer,
+  // client user data) is keyed on the site this route renders.
+  const siteId = teacher.siteId
 
   // Defensive: if someone hits /exam/... for a non-exam page, redirect back
   // to the canonical public URL. Shouldn't happen via normal flow.
@@ -98,6 +103,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
       const startSessionUrl = `/api/exams/${page.id}/start-session?` +
         `userId=${encodeURIComponent(authenticatedUserId)}&` +
         `skriptId=${encodeURIComponent(skript.id)}&` +
+        `siteId=${encodeURIComponent(siteId)}&` +
         `returnUrl=${encodeURIComponent(currentUrl)}`
       redirect(startSessionUrl)
     }
@@ -133,34 +139,12 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   const studentId = authenticatedUserId
   const hasUnlockForAll = examSettings?.unlockForAll === true
 
-  // Teacher-author detection: SkriptAuthor, or owning the site the collection
-  // sits on (org-admin membership for org-owned sites).
-  const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
-    where: { skriptId: skript.id, userId: studentId, permission: 'author' }
-  })
-  let isSiteOwner = false
-  if (!skriptAuthorRecord && collection) {
-    const collectionWithSite = await prisma.collection.findUnique({
-      where: { id: collection.id },
-      select: { site: { select: { userId: true, organizationId: true } } },
-    })
-    if (collectionWithSite?.site) {
-      if (collectionWithSite.site.userId === studentId) {
-        isSiteOwner = true
-      } else if (collectionWithSite.site.organizationId) {
-        const membership = await prisma.organizationMember.findFirst({
-          where: {
-            organizationId: collectionWithSite.site.organizationId,
-            userId: studentId,
-            role: { in: ['owner', 'admin'] },
-          },
-          select: { id: true },
-        })
-        if (membership) isSiteOwner = true
-      }
-    }
-  }
-  const isTeacherAuthor = !!skriptAuthorRecord || isSiteOwner
+  // Teacher view = the viewer MANAGES this site (personal owner / org
+  // owner+admin, src/lib/site-access.ts). Skript authorship alone grants
+  // nothing here: an author viewing the exam on someone else's site sees it as
+  // a student would (rule: authorship gives no rights on student data).
+  const siteAccess = await getSiteAccess(studentId, siteId)
+  const isTeacherAuthor = !!siteAccess?.canManage
 
   // Submission state — needed both for the returned-review bypass and the
   // already-submitted gate. A RETURNED exam stays viewable read-only regardless
@@ -171,13 +155,13 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   let submittedAt: Date | null = null
   if (!isTeacherAuthor) {
     const existingSubmission = await prisma.examSubmission.findUnique({
-      where: { pageId_studentId: { pageId: page.id, studentId } },
+      where: { pageId_studentId_siteId: { pageId: page.id, studentId, siteId } },
       select: { submittedAt: true }
     })
     if (existingSubmission) {
       // Returned state is derived from the exam log (single source of truth), so a
       // take-back drops the student back to the "submitted" view automatically.
-      if (await isStudentReturned(page.id, studentId)) isReturnedReview = true
+      if (await isStudentReturned(page.id, studentId, siteId)) isReturnedReview = true
       else submittedAt = existingSubmission.submittedAt
     }
   }
@@ -186,15 +170,17 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   // see lib/exam-state). Teachers and unlockForAll pages bypass to 'open'.
   const examResolution = isTeacherAuthor || hasUnlockForAll
     ? { state: 'open' as ExamLifecycleState, classId: null, isStudentOverride: false }
-    : await resolveExamStateDetail(page.id, studentId)
+    : await resolveExamStateDetail(page.id, studentId, siteId)
   const examState: ExamLifecycleState = examResolution.state
 
   // Classes shown in the teacher's class toolbar: assigned (has an ExamState row)
   // OR having a submitted answer. See getExamClassesForTeacher. `studentId` here
   // is the current (teacher) user id.
   let unlockedClassesForExam: { id: string; name: string }[] = []
-  if (isTeacherAuthor) {
-    unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId)
+  // Classes only exist on personal sites (owner = class teacher); org sites
+  // have none.
+  if (siteAccess?.isOwner) {
+    unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId, siteId)
   }
 
   // Gate: already submitted (not yet returned) → submitted page, before the
@@ -264,21 +250,23 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   // state is forced to 'open' / handled above).
   if (examState === 'lobby' && !isTeacherAuthor && !isReturnedReview && examResolution.classId) {
     return (
-      <ExamWaitingRoom
-        pageId={page.id}
-        classId={examResolution.classId}
-        examTitle={page.title}
-        studentId={studentId}
-        skriptId={skript.id}
-        hasStudentOverride={examResolution.isStudentOverride}
-        backupPublicKeyJwk={backupKey?.publicKeyJwk}
-        backupKeyId={backupKey?.keyId}
-      />
+      <CurrentSiteProvider siteId={siteId}>
+        <ExamWaitingRoom
+          pageId={page.id}
+          classId={examResolution.classId}
+          examTitle={page.title}
+          studentId={studentId}
+          skriptId={skript.id}
+          hasStudentOverride={examResolution.isStudentOverride}
+          backupPublicKeyJwk={backupKey?.publicKeyJwk}
+          backupKeyId={backupKey?.keyId}
+        />
+      </CurrentSiteProvider>
     )
   }
 
   // Fetch public annotations, snaps, and sticky notes (same as non-exam path)
-  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id, siteId)
 
   // Layout: the /exam/... segment doesn't inherit the [domain] sidebar layout,
   // so render PublicSiteLayout inline. During exams students benefit from the
@@ -323,7 +311,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
           pageId={page.id}
           pageType="exam"
           unlockedClasses={unlockedClassesForExam}
-          requireOwnerSlug={teacher.pageSlug}
+          siteId={siteId}
         />
       )}
       <PublicPageBody
@@ -334,6 +322,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         publicStickyNotes={publicStickyNotes}
         isExamStudent={isExamStudent}
         teacherPageSlug={teacher.pageSlug}
+        siteId={siteId}
         pageLanguage={teacher.pageLanguage}
       />
       {isExamTaker && (
@@ -352,6 +341,10 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   )
 
   return (
+    // The /exam segment doesn't inherit [domain]/(site)/layout.tsx, so mount
+    // the site context here — the client user-data layer keys every record on
+    // it (src/lib/userdata/userDataService.ts).
+    <CurrentSiteProvider siteId={siteId}>
     <PublicSiteLayout
       teacher={teacherForLayout}
       siteStructure={fullSiteStructure}
@@ -390,5 +383,6 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
       )}
       </ExamPageContextProvider>
     </PublicSiteLayout>
+    </CurrentSiteProvider>
   )
 }

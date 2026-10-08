@@ -24,12 +24,14 @@ interface PublicPageBodyProps {
   /** True when the viewer is authenticated in an SEB exam session (no NextAuth session). */
   isExamStudent?: boolean
   /**
-   * pageSlug of the teacher whose [domain] this page lives under. Forwarded to
-   * `ClassToolbar` as `requireOwnerSlug` so it can self-gate to "viewer is on
-   * their own site". Required for ISR-cached routes (server can't read the
-   * session at render time).
+   * pageSlug of the site this page lives under (markdown asset resolution).
    */
   teacherPageSlug: string
+  /**
+   * Site the page is rendered on (route context). The class toolbar uses it
+   * to self-gate to "viewer manages this site" (src/lib/site-access.ts).
+   */
+  siteId: string | null
   /** Site language (BCP-47) — localizes the GFM footnotes heading. null → English. */
   pageLanguage?: string | null
 }
@@ -40,13 +42,13 @@ interface PublicPageBodyProps {
  * (see annotation-layer.tsx:349-368) so this body can live on an ISR route.
  *
  * The `ClassToolbar` (id="class-toolbar") is mounted unconditionally for
- * non-exam pages and self-gates on own-site + paid-teacher + has-classes via
+ * non-exam pages and self-gates on site-management + paid-teacher via
  * its own fetches — same ISR-friendly pattern as the annotation layer. Exam
  * pages skip the mount here because the `/exam/...` route mounts the toolbar
  * separately above this body with full server-side props (state controls,
  * unlocked classes).
  */
-export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps, publicStickyNotes, isExamStudent, teacherPageSlug, pageLanguage }: PublicPageBodyProps) {
+export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps, publicStickyNotes, isExamStudent, teacherPageSlug, siteId, pageLanguage }: PublicPageBodyProps) {
   const showToolbar = page.pageType !== 'exam' && !isExamStudent
   return (
     <>
@@ -60,7 +62,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
             pageId={page.id}
             pageType={page.pageType ?? 'standard'}
             unlockedClasses={[]}
-            requireOwnerSlug={teacherPageSlug}
+            siteId={siteId}
           />
         </Suspense>
       )}

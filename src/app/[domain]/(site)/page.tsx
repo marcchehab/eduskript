@@ -138,7 +138,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
   // upgrade left the cache returning 'free' forever and permanently zero-ed
   // every public layer for the upgraded teacher.
   const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
-    ? await getPublicLayers(frontPage.id)
+    ? await getPublicLayers(frontPage.id, teacher.siteId)
     : EMPTY_PUBLIC_LAYERS
 
   // Authorship for the annotation toolbar is resolved client-side inside
@@ -174,7 +174,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
           pageId={frontPage.id}
           pageType="standard"
           unlockedClasses={[]}
-          requireOwnerSlug={teacher.pageSlug}
+          siteId={teacher.siteId}
         />
       )}
     <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

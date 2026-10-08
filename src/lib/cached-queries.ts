@@ -5,6 +5,7 @@ import { buildSiteStructure, type SiteStructure } from './site-structure'
 import { createLogger } from './logger'
 import { PRIMARY_SITE_ORDER } from './sites'
 import { readExtraSettings } from './settings'
+import { placedOnSiteWhere } from './site-access'
 
 const log = createLogger('cache:queries')
 
@@ -297,24 +298,25 @@ export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
  * Queries skript directly by unique slug (no collection needed in URL).
  */
 export const getPublishedPage = (
-  teacherId: string,
+  siteId: string,
   skriptSlug: string,
   contentPageSlug: string,
   ownerPageSlug?: string
 ) =>
   unstable_cache(
     async () => {
-      log('MISS getPublishedPage', { skriptSlug, contentPageSlug })
-      // Skript slugs are scoped per-user, so query by slug + author
+      log('MISS getPublishedPage', { siteId, skriptSlug, contentPageSlug })
+      // Site scoping: a page renders only on sites that PLACE its skript
+      // (src/lib/site-access.ts). Authorship alone no longer makes a skript
+      // reachable under every slug of its author. Skript slugs aren't unique,
+      // so among placed same-slug skripts the oldest wins (deterministic).
       const skript = await prisma.skript.findFirst({
         where: {
           slug: skriptSlug,
           isPublished: true,
-          OR: [
-            { authors: { some: { userId: teacherId } } },
-            { collectionSkripts: { some: { collection: { site: { userId: teacherId } } } } }
-          ]
+          ...(await placedOnSiteWhere(siteId)),
         },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         include: {
           collectionSkripts: {
             include: {
@@ -374,7 +376,7 @@ export const getPublishedPage = (
         allPages: skript.pages,
       }
     },
-    [`published-page-${teacherId}-${skriptSlug}-${contentPageSlug}`],
+    [`published-page-site-${siteId}-${skriptSlug}-${contentPageSlug}`],
     {
       tags: ownerPageSlug ? [
         CACHE_TAGS.pageBySlug(ownerPageSlug, skriptSlug, contentPageSlug),
@@ -524,15 +526,14 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
  * NOT cached - used for preview mode.
  * Verifies teacher authorship via skript or collection authors.
  */
-export const getSkriptForPreview = async (teacherId: string, skriptSlug: string) => {
+export const getSkriptForPreview = async (siteId: string, skriptSlug: string) => {
+  // Site scoping: only skripts placed on the site (src/lib/site-access.ts).
   const skript = await prisma.skript.findFirst({
     where: {
       slug: skriptSlug,
-      OR: [
-        { authors: { some: { userId: teacherId } } },
-        { collectionSkripts: { some: { collection: { site: { userId: teacherId } } } } }
-      ]
+      ...(await placedOnSiteWhere(siteId)),
     },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     include: {
       collectionSkripts: {
         include: {
@@ -765,30 +766,24 @@ export const getOrgPublishedPage = (
 ) =>
   unstable_cache(
     async () => {
-      // Get all admin/owner user IDs for this org
-      const adminMembers = await prisma.organizationMember.findMany({
-        where: {
-          organizationId: orgId,
-          role: { in: ['owner', 'admin'] }
-        },
-        select: { userId: true }
+      const orgSite = await prisma.site.findUnique({
+        where: { organizationId: orgId },
+        select: { id: true },
       })
-      const adminUserIds = adminMembers.map(m => m.userId)
+      if (!orgSite) return null
 
-      // Find skript by slug scoped to org admins. Skript.slug is not unique:
-      // an admin's own site may carry a same-slug skript (informatikgarten
-      // has "komponenten" next to the org's "komponenten"), so collect every
-      // candidate and pick the one reachable from the org layout below.
+      // Site scoping: candidates are skripts PLACED on the org site
+      // (src/lib/site-access.ts). Skript.slug is not unique: an admin's own
+      // site may carry a same-slug skript (informatikgarten has "komponenten"
+      // next to the org's "komponenten"), so collect every placed candidate
+      // and prefer the one reachable from the org layout below.
       const candidates = await prisma.skript.findMany({
         where: {
           slug: skriptSlug,
           isPublished: true,
-          OR: [
-            { authors: { some: { userId: { in: adminUserIds } } } },
-            { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },
-            { collectionSkripts: { some: { collection: { site: { userId: { in: adminUserIds } } } } } },
-          ]
+          ...(await placedOnSiteWhere(orgSite.id)),
         },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         include: {
           collectionSkripts: {
             include: {
@@ -834,17 +829,18 @@ export const getOrgPublishedPage = (
           items: { where: { type: { in: ['collection', 'skript'] } } }
         }
       })
-      if (!orgPageLayout) return null
       const layoutCollectionIds = new Set(
-        orgPageLayout.items.filter(i => i.type === 'collection').map(i => i.contentId)
+        orgPageLayout?.items.filter(i => i.type === 'collection').map(i => i.contentId) ?? []
       )
       const layoutSkriptIds = new Set(
-        orgPageLayout.items.filter(i => i.type === 'skript').map(i => i.contentId)
+        orgPageLayout?.items.filter(i => i.type === 'skript').map(i => i.contentId) ?? []
       )
+      // Prefer a candidate reachable from the org nav; any placed one (e.g.
+      // in an org-owned collection not pinned in the layout) is still valid.
       const skript = candidates.find(c =>
         layoutSkriptIds.has(c.id) ||
         c.collectionSkripts.some(cs => layoutCollectionIds.has(cs.collection.id))
-      )
+      ) ?? candidates[0]
       if (!skript) return null
       // Prefer the membership whose collection is in the org nav (drives the
       // breadcrumb/structure); fall back to the first membership for display.
@@ -1089,6 +1085,9 @@ export const getOrgTeacherContentPage = (
       })
       if (!teacher) return null
 
+      const teacherSiteId = teacher.sites[0]?.id
+      if (!teacherSiteId) return null
+      // Site scoping: only skripts placed on THIS teacher site render here.
       const page = await prisma.page.findFirst({
         where: {
           slug: contentPageSlug,
@@ -1096,12 +1095,10 @@ export const getOrgTeacherContentPage = (
           skript: {
             slug: skriptSlug,
             isPublished: true,
-            OR: [
-              { authors: { some: { userId: teacher.id } } },
-              { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } },
-            ],
+            ...(await placedOnSiteWhere(teacherSiteId)),
           },
         },
+        orderBy: [{ skript: { createdAt: 'asc' } }, { id: 'asc' }],
         include: {
           skript: {
             include: {
@@ -1206,15 +1203,16 @@ export const getOrgTeacherSkript = (
       })
       if (!teacher) return null
 
+      const teacherSiteId = teacher.sites[0]?.id
+      if (!teacherSiteId) return null
+      // Site scoping: only skripts placed on THIS teacher site render here.
       const skript = await prisma.skript.findFirst({
         where: {
           slug: skriptSlug,
           isPublished: true,
-          OR: [
-            { authors: { some: { userId: teacher.id } } },
-            { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } },
-          ],
+          ...(await placedOnSiteWhere(teacherSiteId)),
         },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         include: {
           frontPage: true,
           collectionSkripts: {

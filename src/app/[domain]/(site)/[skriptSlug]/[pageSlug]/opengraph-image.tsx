@@ -15,7 +15,7 @@ export default async function Image({ params }: Params) {
   const { domain, skriptSlug, pageSlug } = await params
   const teacher = await getTeacherByUsernameDeduped(domain).catch(() => null)
   const content = teacher
-    ? await getPublishedPage(teacher.id, skriptSlug, pageSlug, domain).catch(() => null)
+    ? await getPublishedPage(teacher.siteId, skriptSlug, pageSlug, domain).catch(() => null)
     : null
 
   const title = content?.page.title || 'Page'
