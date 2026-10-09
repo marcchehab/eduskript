@@ -120,6 +120,21 @@ export async function getSiteManagerIds(siteId: string): Promise<string[]> {
   ]
 }
 
+/**
+ * The student's classes whose teacher OWNS `siteId` — the only class
+ * channels that may hear about the student's activity on that site
+ * (bughunt #31). Org sites have no classes → [].
+ */
+export async function getStudentClassIdsForSite(studentId: string, siteId: string): Promise<string[]> {
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  if (!site?.userId) return []
+  const rows = await prisma.classMembership.findMany({
+    where: { studentId, class: { teacherId: site.userId } },
+    select: { classId: true },
+  })
+  return rows.map(r => r.classId)
+}
+
 /** Personal sites `userId` owns (class-toolbar sites). */
 export async function getOwnedSiteIds(userId: string): Promise<string[]> {
   const sites = await prisma.site.findMany({ where: { userId }, select: { id: true } })

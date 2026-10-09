@@ -27,7 +27,7 @@ import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
-import { getSiteAccess, isItemPlacedOnSite, type SiteAccess } from '@/lib/site-access'
+import { getSiteAccess, getStudentClassIdsForSite, isItemPlacedOnSite, type SiteAccess } from '@/lib/site-access'
 import { revalidateItemOnSite } from '@/lib/site-revalidate'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { uploadSnapImage, deleteSnapImage, isS3Configured } from '@/lib/s3'
@@ -445,14 +445,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Site scoping (bughunt #31): activity on a site is announced only to
+    // the student's classes whose teacher owns that site.
+    const classMemo = new Map<string, Promise<string[]>>()
+    const classesForSite = (siteId: string) => {
+      if (!classMemo.has(siteId)) classMemo.set(siteId, getStudentClassIdsForSite(userId!, siteId))
+      return classMemo.get(siteId)!
+    }
+
     // Publish SSE events for quiz submissions
-    // Notify all classes the student is enrolled in so teachers see real-time updates
+    // Notify the student's classes on that site so teachers see real-time updates
     if (quizSubmissions.length > 0 && !isTeacher) {
       try {
-        const memberships = await prisma.classMembership.findMany({
-          where: { studentId: userId },
-          select: { classId: true }
-        })
         // Get student pseudonym from database (for exam session case where we don't have session)
         const studentUser = await prisma.user.findUnique({
           where: { id: userId },
@@ -461,10 +465,10 @@ export async function POST(request: NextRequest) {
         const studentPseudonym = studentUser?.studentPseudonym ?? ''
 
         for (const submission of quizSubmissions) {
-          for (const membership of memberships) {
-            await eventBus.publish(`class:${membership.classId}:teacher`, {
+          for (const classId of await classesForSite(submission.siteId)) {
+            await eventBus.publish(`class:${classId}:teacher`, {
               type: 'quiz-submission',
-              classId: membership.classId,
+              classId,
               pageId: submission.pageId,
               siteId: submission.siteId,
               questionId: submission.questionId,
@@ -488,27 +492,19 @@ export async function POST(request: NextRequest) {
 
       if (personalItems.length > 0) {
         try {
-          // Find all classes this student is in
-          const memberships = await prisma.classMembership.findMany({
-            where: { studentId: userId },
-            select: { classId: true }
-          })
+          // Deduplicate by (site, page) to avoid spamming
+          const pageSites = [...new Map(personalItems.map(item => [`${item.siteId}:${item.itemId}`, item])).values()]
 
-          if (memberships.length > 0) {
-            // Deduplicate by (site, page) to avoid spamming
-            const pageSites = [...new Map(personalItems.map(item => [`${item.siteId}:${item.itemId}`, item])).values()]
-
-            for (const { itemId: pageId, siteId } of pageSites) {
-              for (const membership of memberships) {
-                await eventBus.publish(`class:${membership.classId}:teacher`, {
-                  type: 'student-work-update',
-                  studentId: userId,
-                  classId: membership.classId,
-                  pageId,
-                  siteId,
-                  timestamp: Date.now()
-                })
-              }
+          for (const { itemId: pageId, siteId } of pageSites) {
+            for (const classId of await classesForSite(siteId)) {
+              await eventBus.publish(`class:${classId}:teacher`, {
+                type: 'student-work-update',
+                studentId: userId,
+                classId,
+                pageId,
+                siteId,
+                timestamp: Date.now()
+              })
             }
           }
         } catch (err) {

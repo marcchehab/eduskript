@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   access: {
     getSiteAccess: vi.fn(),
     isItemPlacedOnSite: vi.fn(),
+    getStudentClassIdsForSite: vi.fn(async () => [] as string[]),
   },
 }))
 
@@ -123,5 +124,18 @@ describe('POST /api/user-data/sync — pre-site-scoping clients (bughunt #2)', (
     const res = await POST(req([item(), legacyItem]))
     expect(res.status).toBe(409)
     expect(p.userData.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/user-data/sync — live events (bughunt #31)', () => {
+  it('announces a student answer only to classes whose teacher owns the site', async () => {
+    const { eventBus } = await import('@/lib/events')
+    session.mockResolvedValue({ user: { id: 'student-1', accountType: 'student' } })
+    a.getStudentClassIdsForSite.mockImplementation(async (_s: string, siteId: string) => (siteId === 'site-a' ? ['class-of-a'] : []))
+    await POST(req([item({ data: '{"selected":[1],"isSubmitted":true}' })]))
+    const channels = vi.mocked(eventBus.publish).mock.calls.map((c) => c[0])
+    expect(channels.length).toBeGreaterThan(0)
+    expect(channels.every((c) => c === 'class:class-of-a:teacher')).toBe(true)
+    expect(a.getStudentClassIdsForSite).toHaveBeenCalledWith('student-1', 'site-a')
   })
 })

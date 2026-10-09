@@ -35,7 +35,7 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { canManageSite, isItemPlacedOnSite } from '@/lib/site-access'
+import { canManageSite, getStudentClassIdsForSite, isItemPlacedOnSite } from '@/lib/site-access'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { eventBus } from '@/lib/events'
 
@@ -161,27 +161,26 @@ export async function POST(request: NextRequest) {
     const liveItems = items.filter((item) => item.kind !== 'autosave')
     if (!auth.isTeacher && liveItems.length > 0) {
       try {
-        const memberships = await prisma.classMembership.findMany({
-          where: { studentId: auth.userId },
-          select: { classId: true },
-        })
-        if (memberships.length > 0) {
-          const pageSites = [...new Map(liveItems.map((item) => [`${item.siteId}:${item.pageId}`, item])).values()]
-          await Promise.all(
-            pageSites.flatMap(({ pageId, siteId }) =>
-              memberships.map((m) =>
-                eventBus.publish(`class:${m.classId}:teacher`, {
-                  type: 'student-work-update',
-                  studentId: auth.userId,
-                  classId: m.classId,
-                  pageId,
-                  siteId,
-                  timestamp: Date.now(),
-                })
-              )
+        // Only the student's classes whose teacher owns the site (bughunt #31).
+        const pageSites = [...new Map(liveItems.map((item) => [`${item.siteId}:${item.pageId}`, item])).values()]
+        const classesBySite = new Map<string, string[]>()
+        for (const { siteId } of pageSites) {
+          if (!classesBySite.has(siteId)) classesBySite.set(siteId, await getStudentClassIdsForSite(auth.userId, siteId))
+        }
+        await Promise.all(
+          pageSites.flatMap(({ pageId, siteId }) =>
+            (classesBySite.get(siteId) ?? []).map((classId) =>
+              eventBus.publish(`class:${classId}:teacher`, {
+                type: 'student-work-update',
+                studentId: auth.userId,
+                classId,
+                pageId,
+                siteId,
+                timestamp: Date.now(),
+              })
             )
           )
-        }
+        )
       } catch (err) {
         console.error('[checkpoints] failed to publish student-work-update:', err)
       }
