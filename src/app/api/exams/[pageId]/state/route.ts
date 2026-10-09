@@ -22,6 +22,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
@@ -29,9 +30,12 @@ import { EXAM_STATES, type ExamLifecycleState } from '@/lib/exam-state'
 import { getSiteAccess, isItemPlacedOnSite } from '@/lib/site-access'
 
 /**
- * GET /api/exams/[pageId]/state?classId=xxx[&studentId=yyy]
- * Get exam state for a class (or a specific student override within it).
- * Accessible by: teacher (page author) or students in the class.
+ * GET /api/exams/[pageId]/state?classId=xxx&siteId=sss[&studentId=yyy]
+ * Get exam state for a class (or a specific student override within it) on
+ * one site. Accessible by (bughunt #42/#43 — was unauthenticated with an
+ * optional site filter): the class teacher, or a member of the class
+ * (NextAuth session or SEB exam session; a member may only ask about the
+ * class row or their own override). siteId is required.
  */
 export async function GET(
   request: NextRequest,
@@ -44,15 +48,43 @@ export async function GET(
     const studentId = searchParams.get('studentId')
     const siteId = searchParams.get('siteId')
 
-    if (!classId) {
+    if (!classId || !siteId) {
       return NextResponse.json(
-        { error: 'classId query parameter is required' },
+        { error: 'classId and siteId query parameters are required' },
         { status: 400 }
       )
     }
 
+    // Who is asking: NextAuth session, else a valid SEB exam session (whose
+    // site pin must match).
+    let viewerId: string | null = (await getServerSession(authOptions))?.user?.id ?? null
+    if (!viewerId) {
+      const cookie = (await cookies()).get('exam_session')?.value
+      if (cookie) {
+        const es = await prisma.examSession.findUnique({
+          where: { sessionId: cookie },
+          select: { userId: true, expiresAt: true, siteId: true },
+        })
+        if (es && es.expiresAt > new Date() && (!es.siteId || es.siteId === siteId)) viewerId = es.userId
+      }
+    }
+    if (!viewerId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const cls = await prisma.class.findUnique({ where: { id: classId }, select: { teacherId: true } })
+    const isTeacher = !!cls && cls.teacherId === viewerId
+    if (!isTeacher) {
+      const member = await prisma.classMembership.findFirst({
+        where: { classId, studentId: viewerId },
+        select: { id: true },
+      })
+      if (!member || (studentId && studentId !== viewerId)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+
     const examState = await prisma.examState.findFirst({
-      where: { pageId, classId, studentId: studentId ?? null, ...(siteId ? { siteId } : {}) },
+      where: { pageId, classId, studentId: studentId ?? null, siteId },
       include: { class: { select: { id: true, name: true } } },
     })
 
