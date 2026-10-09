@@ -1,6 +1,8 @@
 /**
- * Upsert the grade key (formula + parameters) for an exam page. Teacher-only
- * (page author). One config per page.
+ * Upsert the grade key (formula + parameters) for an exam page. Exam CONTENT
+ * (rule 1): page authors only (bughunt #1/#3). One config per page, shared by
+ * every site that places it; graders on placing sites read it via the
+ * grading route.
  *
  * PUT /api/exams/[pageId]/grading/config
  * body: { formula, passPercent, passGrade, topGrade, bottomGrade, roundingStep, maxPoints }
@@ -10,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getExamScope } from '@/lib/scoring/site-scope'
+import { isExamContentAuthor } from '@/lib/scoring/site-scope'
 
 function numOr(value: unknown, fallback: number): number {
   const n = Number(value)
@@ -27,9 +29,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const { pageId } = await params
-    // Site scoping: graders = managers of a site holding the exam.
-    if (!(await getExamScope(session.user.id, pageId))) {
-      return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
+    if (!(await isExamContentAuthor(session.user.id, pageId))) {
+      return NextResponse.json({ error: 'Only authors of this exam can change its grade key' }, { status: 403 })
     }
 
     const body = await request.json().catch(() => ({}))

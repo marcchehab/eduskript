@@ -15,7 +15,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { computeExamGrades } from '@/lib/scoring/aggregate'
 import { getExamClassesForTeacher, getExamUrl } from '@/lib/scoring/auth'
-import { getExamScope, getGradingStudentIds, resolveStudentSites } from '@/lib/scoring/site-scope'
+import { getExamScope, getGradingStudentIds, isExamContentAuthor, resolveStudentSites } from '@/lib/scoring/site-scope'
 import { getCurrentReturnsForPage } from '@/lib/scoring/return-state'
 
 export async function GET(
@@ -156,6 +156,9 @@ export async function GET(
         maxPoints: grading.maxPointsOverride,
       },
       autoMaxPoints: grading.autoMaxPoints,
+      // Grade key / rubric are exam content: only authors may change them
+      // (rule 1). Graders on placing sites read them.
+      canEditContent: await isExamContentAuthor(session.user.id, pageId),
       questions: grading.components.map((c) => ({
         componentId: c.componentId,
         kind: c.kind,

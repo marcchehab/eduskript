@@ -6,8 +6,8 @@
  * PUT    { componentId, criteria, maxPoints? } → save a teacher-edited rubric (source="teacher")
  * DELETE ?componentId=X           → discard a rubric
  *
- * Page-level: gated on the teacher having authored the exam page. Generation
- * samples a few of the teacher's students' submissions to calibrate criteria.
+ * Writes: page authors only; reads: authors + managers of a placing site. Generation
+ * samples a few submissions from sites the caller manages to calibrate criteria.
  * The rubric only ever describes POINTS (Punkte) — never a grade.
  */
 
@@ -17,7 +17,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
-import { getExamScope, getGradingStudentIds, resolveStudentSites } from '@/lib/scoring/site-scope'
+import { canReadExamContent, getExamScope, getGradingStudentIds, isExamContentAuthor, resolveStudentSites } from '@/lib/scoring/site-scope'
 import { examHasReturnedStudent, returnedLockResponse } from '@/lib/scoring/return-state'
 import { parseGradableComponents } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
@@ -29,10 +29,11 @@ export const runtime = 'nodejs'
 
 const SAMPLE_SIZE = 5
 
-// Access (site scoping): the grader = a manager of a site holding the exam
-// (src/lib/scoring/site-scope.ts). The rubric itself is shared per page (exam
-// content); the SAMPLE answers fed to the AI come only from the caller's
-// managed sites.
+// Access (rule 1, bughunt #1/#3): the rubric is exam CONTENT, shared per
+// page. WRITES (POST generate, PUT, DELETE) need page authorship; READS are
+// allowed for authors and managers of a site that places the page (they grade
+// with it). The SAMPLE answers fed to the AI on POST come only from sites the
+// caller manages (none when the author manages no site holding the exam).
 
 function sumPoints(criteria: RubricCriterion[]): number {
   return Math.round(criteria.reduce((s, c) => s + c.points, 0) * 10) / 10
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { pageId } = await params
-  if (!(await getExamScope(session.user.id, pageId))) {
+  if (!(await canReadExamContent(session.user.id, pageId))) {
     return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
   }
   const componentId = new URL(request.url).searchParams.get('componentId')
@@ -60,9 +61,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
   }
   const { pageId } = await params
+  if (!(await isExamContentAuthor(session.user.id, pageId))) {
+    return NextResponse.json({ error: 'Only authors of this exam can change its rubric' }, { status: 403 })
+  }
+  const page = await prisma.page.findUnique({ where: { id: pageId }, select: { content: true } })
+  if (!page) return NextResponse.json({ error: 'Page not found' }, { status: 404 })
+  // Sample answers: only from sites the author manages (may be none).
   const scope = await getExamScope(session.user.id, pageId)
-  if (!scope) return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
-  const page = scope.page
   // Rubric changes re-base every student's AI score — locked once anyone is returned.
   if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')
 
@@ -85,8 +90,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'No matching gradable component' }, { status: 400 })
   }
 
-  const studentIds = (await getGradingStudentIds(scope, session.user.id, pageId, 'all')) ?? []
-  const studentSites = await resolveStudentSites(pageId, studentIds, scope.siteIds)
+  const studentIds = scope ? (await getGradingStudentIds(scope, session.user.id, pageId, 'all')) ?? [] : []
+  const studentSites = scope ? await resolveStudentSites(pageId, studentIds, scope.siteIds) : new Map<string, string>()
   const guidance = await loadAiGuidance(session.user.id)
   const model = scoringModel()
   const saved: unknown[] = []
@@ -140,8 +145,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { pageId } = await params
-  if (!(await getExamScope(session.user.id, pageId))) {
-    return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
+  if (!(await isExamContentAuthor(session.user.id, pageId))) {
+    return NextResponse.json({ error: 'Only authors of this exam can change its rubric' }, { status: 403 })
   }
   if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')
   const body = await request.json().catch(() => ({}))
@@ -180,8 +185,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { pageId } = await params
-  if (!(await getExamScope(session.user.id, pageId))) {
-    return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
+  if (!(await isExamContentAuthor(session.user.id, pageId))) {
+    return NextResponse.json({ error: 'Only authors of this exam can change its rubric' }, { status: 403 })
   }
   if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')
   const componentId = new URL(request.url).searchParams.get('componentId')

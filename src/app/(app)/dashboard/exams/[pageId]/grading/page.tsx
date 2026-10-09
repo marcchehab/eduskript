@@ -75,6 +75,8 @@ interface GradingData {
   selectedClassId: string
   config: ConfigState
   autoMaxPoints: number
+  /** False for graders who manage a placing site but don't author the exam. */
+  canEditContent?: boolean
   questions: Question[]
   students: StudentRow[]
 }
@@ -294,11 +296,18 @@ export default function ExamGradingPage() {
   }
   const saveConfig = () => {
     if (!data) return
+    if (data.canEditContent === false) {
+      dialog.showError("Only the exam's authors can change the grade key.")
+      loadGrading()
+      return
+    }
     fetch(`/api/exams/${pageId}/grading/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data.config),
-    }).catch(() => dialog.showError('Could not save the grade key.'))
+    })
+      .then((r) => { if (!r.ok) throw new Error() })
+      .catch(() => dialog.showError('Could not save the grade key.'))
   }
 
   // Flip the given students to "returned" in place. The frozen snapshot equals

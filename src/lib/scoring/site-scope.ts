@@ -172,3 +172,33 @@ export async function resolveStudentSite(
   if (explicitSiteId) return pickScopeSite(scope, explicitSiteId)
   return (await resolveStudentSites(pageId, [studentId], scope.siteIds)).get(studentId) ?? null
 }
+
+/**
+ * Exam CONTENT (rubrics, grade key) belongs to the page's authors (rule 1).
+ * WRITE: page author (PageAuthor 'author', else SkriptAuthor 'author' —
+ * checkPagePermissions semantics, no admin bypass). Bughunt #1/#3.
+ */
+export async function isExamContentAuthor(userId: string, pageId: string): Promise<boolean> {
+  const page = await prisma.page.findUnique({
+    where: { id: pageId },
+    select: {
+      authors: { select: { userId: true, permission: true } },
+      skript: { select: { authors: { select: { userId: true, permission: true } } } },
+    },
+  })
+  if (!page) return false
+  const own = (page.authors ?? []).find(a => a.userId === userId)
+  if (own) return own.permission === 'author'
+  return (page.skript?.authors ?? []).some(a => a.userId === userId && a.permission === 'author')
+}
+
+/**
+ * READ of exam content needed for grading: authors, plus managers of a site
+ * that PLACES the page (they grade with the shared rubric/grade key).
+ */
+export async function canReadExamContent(userId: string, pageId: string): Promise<boolean> {
+  if (await isExamContentAuthor(userId, pageId)) return true
+  const [managed, placed] = await Promise.all([getManagedSiteIds(userId), getPlacementSiteIdsForPage(pageId)])
+  const placedSet = new Set(placed)
+  return managed.some(id => placedSet.has(id))
+}
