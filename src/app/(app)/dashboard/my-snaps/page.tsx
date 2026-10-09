@@ -57,9 +57,15 @@ export default function MySnapsPage() {
     try {
       setIsDeleting(true)
 
-      // Fetch current snaps data for this page
+      // Fetch current snaps data for this page ON THE SNAP'S SITE (site
+      // scoping, bughunt #5) — same row the snap was listed from.
+      const qs = new URLSearchParams({ siteId: deletingSnap.siteId })
+      if (deletingSnap.targetType && deletingSnap.targetId) {
+        qs.set('targetType', deletingSnap.targetType)
+        qs.set('targetId', deletingSnap.targetId)
+      }
       const response = await fetch(
-        `/api/user-data/snaps/${encodeURIComponent(deletingSnap.pageId)}`
+        `/api/user-data/snaps/${encodeURIComponent(deletingSnap.pageId)}?${qs.toString()}`
       )
 
       if (!response.ok) {
@@ -81,6 +87,9 @@ export default function MySnapsPage() {
         body: JSON.stringify({
           items: [
             {
+              siteId: deletingSnap.siteId,
+              targetType: deletingSnap.targetType,
+              targetId: deletingSnap.targetId,
               adapter: 'snaps',
               itemId: deletingSnap.pageId,
               // Record the deletion so a stale copy elsewhere can't merge it back
@@ -95,7 +104,8 @@ export default function MySnapsPage() {
         }),
       })
 
-      if (!saveResponse.ok) {
+      const saveResult = saveResponse.ok ? await saveResponse.json().catch(() => null) : null
+      if (!saveResponse.ok || !saveResult || saveResult.synced !== 1) {
         throw new Error('Failed to delete snap')
       }
 

@@ -2,14 +2,17 @@
  * User Snaps API
  *
  * GET /api/user-data/snaps
- * Fetches all snaps for the current user across all pages, with page metadata.
+ * Fetches all of the current user's OWN snaps across all pages and sites, with
+ * page metadata. Site scoping (bughunt #5): every row belongs to one site, so
+ * each snap carries its siteId/target and links to the page on THAT site.
+ * Rows with no site ('' — skript placed nowhere at migration time) are not
+ * listed: they render nowhere and can't be edited through the site-scoped API.
  */
 
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import type { SnapsData, SnapData } from '@/lib/userdata/adapters'
 
 export interface SnapWithPageInfo extends SnapData {
@@ -19,7 +22,11 @@ export interface SnapWithPageInfo extends SnapData {
   skriptTitle: string
   skriptSlug: string
   collectionTitle: string | null
+  /** Path prefix of the site the snap was made on ("<slug>" or "org/<slug>/c"). */
   authorPageSlug: string | null
+  siteId: string
+  targetType: string | null
+  targetId: string | null
   createdAt: number
 }
 
@@ -36,73 +43,46 @@ export async function GET() {
 
     const userId = session.user.id
 
-    // Get all snap data for this user
     const snapEntries = await prisma.userData.findMany({
-      where: {
-        userId,
-        adapter: 'snaps',
-      },
-      select: {
-        itemId: true, // This is the pageId
-        data: true,
-        createdAt: true,
-      },
+      where: { userId, adapter: 'snaps', siteId: { not: '' } },
+      select: { itemId: true, data: true, createdAt: true, siteId: true, targetType: true, targetId: true },
     })
 
     if (snapEntries.length === 0) {
       return NextResponse.json({ snaps: [] })
     }
 
-    // Get all page IDs
-    const pageIds = snapEntries.map((entry) => entry.itemId)
+    const pageIds = [...new Set(snapEntries.map((entry) => entry.itemId))]
+    const siteIds = [...new Set(snapEntries.map((entry) => entry.siteId))]
 
-    // Fetch page info with relations
-    const pages = await prisma.page.findMany({
-      where: {
-        id: { in: pageIds },
-      },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        skript: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            collectionSkripts: {
-              take: 1, // Just get one collection (for URL building)
-              select: {
-                collection: {
-                  select: {
-                    title: true,
-                    site: { select: { slug: true } },
-                  },
-                },
-              },
-            },
-            // Fallback: a skript author's site provides the URL when the
-            // skript isn't placed in any collection.
-            authors: {
-              where: { permission: 'author' },
-              take: 1,
-              select: {
-                user: {
-                  select: {
-                    sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
-                  },
-                },
+    const [pages, sites] = await Promise.all([
+      prisma.page.findMany({
+        where: { id: { in: pageIds } },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          skript: {
+            select: {
+              title: true,
+              slug: true,
+              collectionSkripts: {
+                take: 1,
+                select: { collection: { select: { title: true } } },
               },
             },
           },
         },
-      },
-    })
+      }),
+      prisma.site.findMany({
+        where: { id: { in: siteIds } },
+        select: { id: true, slug: true, organizationId: true },
+      }),
+    ])
 
-    // Create a map of pageId -> page info
     const pageInfoMap = new Map(pages.map((page) => [page.id, page]))
+    const siteMap = new Map(sites.map((s) => [s.id, s]))
 
-    // Build the response with snaps and their page info
     const snapsWithInfo: SnapWithPageInfo[] = []
 
     for (const entry of snapEntries) {
@@ -112,18 +92,9 @@ export async function GET() {
       const snapsData = entry.data as unknown as SnapsData
       if (!snapsData?.snaps || snapsData.snaps.length === 0) continue
 
-      // Get collection info
-      const collectionSkript = pageInfo.skript.collectionSkripts[0]
-      const collection = collectionSkript?.collection
+      const site = siteMap.get(entry.siteId)
+      const authorPageSlug = site ? (site.organizationId ? `org/${site.slug}/c` : site.slug) : null
 
-      // Author page slug: prefer the collection's owning Site; fall back to
-      // a skript author's own Site for collection-less skripts.
-      const authorPageSlug =
-        collection?.site?.slug ||
-        pageInfo.skript.authors[0]?.user?.sites[0]?.slug ||
-        null
-
-      // Add each snap with page info
       for (const snap of snapsData.snaps) {
         snapsWithInfo.push({
           ...snap,
@@ -132,14 +103,16 @@ export async function GET() {
           pageSlug: pageInfo.slug,
           skriptTitle: pageInfo.skript.title,
           skriptSlug: pageInfo.skript.slug,
-          collectionTitle: collection?.title || null,
+          collectionTitle: pageInfo.skript.collectionSkripts[0]?.collection?.title || null,
           authorPageSlug,
+          siteId: entry.siteId,
+          targetType: entry.targetType,
+          targetId: entry.targetId,
           createdAt: entry.createdAt.getTime(),
         })
       }
     }
 
-    // Sort by createdAt (newest first)
     snapsWithInfo.sort((a, b) => b.createdAt - a.createdAt)
 
     return NextResponse.json({ snaps: snapsWithInfo })
