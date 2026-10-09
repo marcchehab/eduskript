@@ -181,11 +181,24 @@ UPDATE exam_sessions t SET site_id = COALESCE(pg_temp.site_scoping_pick_exam(p.i
 -- are duplicated (the re-backfill script must not copy live post-deploy data).
 -- ---------------------------------------------------------------------------
 
-CREATE TEMP TABLE _dup_cutoff AS
-  SELECT COALESCE(
-    (SELECT finished_at FROM _prisma_migrations WHERE migration_name LIKE '%\_site\_scoping' AND finished_at IS NOT NULL ORDER BY finished_at LIMIT 1),
-    now()
-  ) AS at;
+-- Cutoff = when the site_scoping migration finished (re-backfill runs), else
+-- now (inside the migration itself, or where _prisma_migrations doesn't
+-- exist, e.g. a shadow database — referenced dynamically for that reason).
+CREATE TEMP TABLE _dup_cutoff (at timestamptz);
+DO $cutoff$
+BEGIN
+  IF to_regclass('_prisma_migrations') IS NOT NULL THEN
+    EXECUTE $q$INSERT INTO _dup_cutoff
+      SELECT COALESCE(
+        (SELECT finished_at FROM _prisma_migrations
+          WHERE migration_name LIKE '%\_site\_scoping' AND finished_at IS NOT NULL
+          ORDER BY finished_at LIMIT 1),
+        now())$q$;
+  ELSE
+    INSERT INTO _dup_cutoff VALUES (now());
+  END IF;
+END
+$cutoff$;
 
 -- (skript, O, P, rule_c)
 CREATE TEMP TABLE _dup_pairs AS
