@@ -61,7 +61,8 @@ export async function GET(request: NextRequest) {
             select: { skriptId: true }
           })
           if (page?.skriptId) {
-            userId = await validateExamSession(examSessionCookie, page.skriptId)
+            // Enforce the SEB session's site pin (bughunt #32).
+            userId = await validateExamSession(examSessionCookie, page.skriptId, searchParams.get('siteId') ?? '')
           }
         }
       }

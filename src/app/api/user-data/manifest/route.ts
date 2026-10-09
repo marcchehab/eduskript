@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
     // `sessionId`, not the row PK). Without the exam-session fallback the sync
     // engine's manifest fetch 401s for SEB students and can't reconcile.
     let userId: string | null = null
+    // SEB session pin (bughunt #32): '' = legacy session without a site.
+    let examSessionSiteId = ''
     const session = await getServerSession(authOptions)
     if (session?.user?.id) {
       userId = session.user.id
@@ -35,10 +37,11 @@ export async function GET(request: NextRequest) {
       if (examSessionCookie) {
         const examSession = await prisma.examSession.findUnique({
           where: { sessionId: examSessionCookie },
-          select: { userId: true, expiresAt: true },
+          select: { userId: true, expiresAt: true, siteId: true },
         })
         if (examSession && new Date(examSession.expiresAt) > new Date()) {
           userId = examSession.userId
+          examSessionSiteId = examSession.siteId
         }
       }
     }
@@ -52,6 +55,9 @@ export async function GET(request: NextRequest) {
     const siteId = request.nextUrl.searchParams.get('siteId')
     if (!siteId) {
       return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
+    }
+    if (examSessionSiteId && siteId !== examSessionSiteId) {
+      return NextResponse.json({ error: 'Exam session is bound to another site' }, { status: 403 })
     }
 
     const items = await prisma.userData.findMany({
