@@ -92,8 +92,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const adminUserIds = orgAdmins.map((m) => m.userId)
 
     // SECURITY: Collection must belong to this org's site OR an admin's
-    // personal site. Skript must be accessible (read access suffices, rule 3)
-    // to the acting admin, or authored by some org admin (legacy rule).
+    // personal site. A NEW root skript must be accessible (read access
+    // suffices, rule 3) to the ACTING admin — the old "authored by any org
+    // admin" rule let an admin place skripts they cannot read (bughunt
+    // #41/#44). Skripts already in the layout stay (re-saving the layout must
+    // not drop another admin's placement).
+    const existingLayout = await prisma.pageLayout.findUnique({
+      where: { siteId: site.id },
+      select: { items: { where: { type: 'skript' }, select: { contentId: true } } },
+    })
+    const alreadyPlaced = new Set(existingLayout?.items.map((i) => i.contentId) ?? [])
     const validatedItems: Array<{ id: string; type: string }> = []
 
     for (const item of items) {
@@ -117,13 +125,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           )
         }
       } else if (item.type === 'skript') {
-        const skript = await prisma.skript.findFirst({
-          where: {
-            id: item.id,
-            authors: { some: { userId: { in: adminUserIds } } },
-          },
-        })
-        if (skript || (session?.user?.id && await canPlaceSkript(session.user.id, item.id))) {
+        if (alreadyPlaced.has(item.id) || (session?.user?.id && await canPlaceSkript(session.user.id, item.id))) {
           validatedItems.push(item)
         } else {
           console.warn(
