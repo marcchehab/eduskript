@@ -462,7 +462,9 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
                 id: { in: skriptIds },
                 isPublished: true,
                 isUnlisted: false,
-                authors: { some: { userId: teacherId } }
+                // No authorship filter (bughunt #16/#36): the layout item IS
+                // the placement, and placing already required read access
+                // (incl. page shares — site-access.ts canPlaceSkript).
               },
               include: {
                 collectionSkripts: { include: { collection: true } },
@@ -955,10 +957,8 @@ export const getOrgHomepageContent = (
                 id: { in: skriptIds },
                 isPublished: true,
                 isUnlisted: false,
-                OR: [
-                  { authors: { some: { userId: { in: adminUserIds } } } },
-                  { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },
-                ],
+                // No authorship filter (bughunt #17): the org layout item IS
+                // the placement; placing already required access.
               },
               include: {
                 collectionSkripts: { include: { collection: true } },
