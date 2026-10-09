@@ -14,7 +14,9 @@
  * instance; public layers reconcile client-side on focus.
  */
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
+import { CACHE_TAGS } from '@/lib/cached-queries'
+import { getPlacementSiteIdsForSkript } from '@/lib/site-access'
 import { prisma } from '@/lib/prisma'
 
 export async function revalidateItemOnSite(itemId: string, siteId: string): Promise<void> {
@@ -42,4 +44,51 @@ export async function revalidateItemOnSite(itemId: string, siteId: string): Prom
   if (!frontPage) return
   if (frontPage.siteId) revalidatePath(base)
   if (frontPage.skript) revalidatePath(`${skriptBase}/${frontPage.skript.slug}`)
+}
+
+export interface PlacingSite { slug: string; organizationId: string | null }
+
+/** Sites that currently place the skript (src/lib/site-access.ts rule). Load
+ *  BEFORE deleting a skript — collection memberships cascade away. */
+export async function getPlacingSites(skriptId: string): Promise<PlacingSite[]> {
+  const ids = await getPlacementSiteIdsForSkript(skriptId)
+  if (ids.length === 0) return []
+  return prisma.site.findMany({ where: { id: { in: ids } }, select: { slug: true, organizationId: true } })
+}
+
+/**
+ * Bughunt #4/#14: content edits (skript publish/unpublish/rename/delete, page
+ * edits) must invalidate EVERY site that places the skript, not just the
+ * editor's primary site — getPublishedPage & co. are cached per placing site
+ * with revalidate:false. Tags: personal → skriptBySlug/pageBySlug/
+ * teacherContent (also covers the org-teacher route eduskript.org/<slug>);
+ * org → orgContent. Plus the HTML paths.
+ */
+export async function revalidateSkriptOnPlacingSites(
+  skriptId: string,
+  skriptSlugs: string[],
+  pageSlugs: string[] = [],
+  sites?: PlacingSite[],
+): Promise<void> {
+  const placing = sites ?? await getPlacingSites(skriptId)
+  const slugs = [...new Set(skriptSlugs.filter(Boolean))]
+  for (const site of placing) {
+    if (site.organizationId) {
+      revalidateTag(CACHE_TAGS.orgContent(site.slug), { expire: 0 })
+      for (const s of slugs) {
+        revalidatePath(`/org/${site.slug}/c/${s}`)
+        for (const p of pageSlugs) revalidatePath(`/org/${site.slug}/c/${s}/${p}`)
+      }
+      continue
+    }
+    revalidateTag(CACHE_TAGS.teacherContent(site.slug), { expire: 0 })
+    for (const s of slugs) {
+      revalidateTag(CACHE_TAGS.skriptBySlug(site.slug, s), { expire: 0 })
+      revalidatePath(`/${site.slug}/${s}`)
+      for (const p of pageSlugs) {
+        revalidateTag(CACHE_TAGS.pageBySlug(site.slug, s, p), { expire: 0 })
+        revalidatePath(`/${site.slug}/${s}/${p}`)
+      }
+    }
+  }
 }

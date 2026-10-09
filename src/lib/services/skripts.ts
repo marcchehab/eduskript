@@ -20,6 +20,7 @@ import { generateExcerpt, generateSlug, isReservedSlug } from '@/lib/markdown'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { ensurePageLayoutItem, revalidateSiteContent } from '@/lib/page-layout'
 import { canPlaceSkript } from '@/lib/site-access'
+import { revalidateSkriptOnPlacingSites } from '@/lib/site-revalidate'
 import {
   ConflictError,
   NotFoundError,
@@ -195,6 +196,9 @@ export async function updateSkriptForUser(
   // SkriptVersion work can plug in without changing the MCP tool surface.
   void ctx.editSource
   void ctx.editClient
+
+  // Every site placing the skript (bughunt #4), old + new slug.
+  await revalidateSkriptOnPlacingSites(skriptId, [existing.slug, updated.slug])
 
   const userSite = await prisma.site.findFirst({
     where: { userId },

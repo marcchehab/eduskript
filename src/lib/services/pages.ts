@@ -24,6 +24,7 @@ import { checkPagePermissions } from '@/lib/permissions'
 import { generateSlug } from '@/lib/markdown'
 import { createLogger } from '@/lib/logger'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { revalidateSkriptOnPlacingSites } from '@/lib/site-revalidate'
 
 const log = createLogger('cache:invalidate')
 
@@ -216,6 +217,11 @@ export async function invalidatePublicPageCaches(
   userId: string
 ): Promise<void> {
   const siteSlugs = await resolveOwningSiteSlugs(existingPage, userId)
+
+  // Site scoping (bughunt #14): every site that PLACES the skript renders the
+  // page — including org sites the editor isn't a member of and layout-
+  // referenced collections — so invalidate all of them.
+  await revalidateSkriptOnPlacingSites(existingPage.skriptId, [existingPage.skript.slug], [page.slug])
 
   if (siteSlugs.length > 0) {
     for (const pageSlug of siteSlugs) {

@@ -8,6 +8,7 @@ import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { getPlacingSites, revalidateSkriptOnPlacingSites } from '@/lib/site-revalidate'
 
 export async function GET(
   request: NextRequest,
@@ -154,6 +155,13 @@ export async function PATCH(
       }
     })
 
+    // Every site placing the skript (bughunt #4), old + new slug, all pages.
+    await revalidateSkriptOnPlacingSites(
+      id,
+      [existingSkript.slug, updatedSkript.slug],
+      updatedSkript.pages.map((p) => p.slug),
+    )
+
     // Get the user's site slug for cache invalidation.
     const userSite = await prisma.site.findFirst({
       where: { userId: session.user.id },
@@ -218,10 +226,16 @@ export async function DELETE(
       )
     }
 
+    // Placing sites must be read BEFORE the delete (collection memberships
+    // cascade away) so their cached pages stop rendering (bughunt #4).
+    const placingSites = await getPlacingSites(id)
+    const pageSlugs = (await prisma.page.findMany({ where: { skriptId: id }, select: { slug: true } })).map((p) => p.slug)
+
     // Delete skript (cascading delete will handle pages)
     await prisma.skript.delete({
       where: { id }
     })
+    await revalidateSkriptOnPlacingSites(id, [existingSkript.slug], pageSlugs, placingSites)
 
     const userSite = await prisma.site.findFirst({
       where: { userId: session.user.id },

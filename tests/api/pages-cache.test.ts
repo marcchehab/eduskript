@@ -60,6 +60,12 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
+// Placing-site invalidation is covered by tests/lib/site-revalidate.test.ts.
+vi.mock('@/lib/site-revalidate', () => ({
+  revalidateSkriptOnPlacingSites: vi.fn(async () => {}),
+  getPlacingSites: vi.fn(async () => []),
+  revalidateItemOnSite: vi.fn(async () => {}),
+}))
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
   revalidateTag: vi.fn(),
