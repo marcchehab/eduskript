@@ -464,7 +464,7 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
                 isUnlisted: false,
                 // No authorship filter (bughunt #16/#36): the layout item IS
                 // the placement, and placing already required read access
-                // (incl. page shares — site-access.ts canPlaceSkript).
+                // (SkriptAuthor author/viewer — site-access.ts canPlaceSkript).
               },
               include: {
                 collectionSkripts: { include: { collection: true } },

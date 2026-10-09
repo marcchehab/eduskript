@@ -133,15 +133,13 @@ describe('placement', () => {
 })
 
 describe('canPlaceSkript (rule 3: read access suffices)', () => {
-  it('accepts any SkriptAuthor row (author OR viewer) or a page share — no permission filter', async () => {
+  it('accepts any SkriptAuthor row (author OR viewer) — no permission filter, no page shares (#29)', async () => {
     p.skript.count.mockResolvedValue(1)
     expect(await canPlaceSkript('viewer-u', 'sk')).toBe(true)
     const where = p.skript.count.mock.calls[0][0].where
-    expect(where.OR).toEqual([
-      { authors: { some: { userId: 'viewer-u' } } },
-      { pages: { some: { authors: { some: { userId: 'viewer-u' } } } } },
-    ])
+    expect(where).toEqual({ id: 'sk', authors: { some: { userId: 'viewer-u' } } })
     expect(JSON.stringify(where)).not.toContain('permission')
+    expect(JSON.stringify(where)).not.toContain('pages')
   })
 
   it('rejects users without any access', async () => {

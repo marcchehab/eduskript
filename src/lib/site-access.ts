@@ -157,19 +157,14 @@ export async function placedOnSiteWhere(siteId: string): Promise<Prisma.SkriptWh
 
 /**
  * Rule 3: a teacher may place (show) ANY skript they can ACCESS on a site
- * they manage — read access suffices (SkriptAuthor 'author' or 'viewer', or a
- * PageAuthor row on one of its pages). Editing content still requires
- * 'author' (permissions.ts); placing grants nothing on the content.
+ * they manage — read access to the SKRIPT suffices (a SkriptAuthor row,
+ * 'author' or 'viewer'). A PageAuthor share of a single page is NOT access to
+ * the whole skript (bughunt #29). Editing content still requires 'author'
+ * (permissions.ts); placing grants nothing on the content.
  */
 export async function canPlaceSkript(userId: string, skriptId: string): Promise<boolean> {
   const n = await prisma.skript.count({
-    where: {
-      id: skriptId,
-      OR: [
-        { authors: { some: { userId } } },
-        { pages: { some: { authors: { some: { userId } } } } },
-      ],
-    },
+    where: { id: skriptId, authors: { some: { userId } } },
   })
   return n > 0
 }
@@ -178,13 +173,7 @@ export async function canPlaceSkript(userId: string, skriptId: string): Promise<
 export async function placeableSkriptIds(userId: string, skriptIds: string[]): Promise<Set<string>> {
   if (skriptIds.length === 0) return new Set()
   const rows = await prisma.skript.findMany({
-    where: {
-      id: { in: skriptIds },
-      OR: [
-        { authors: { some: { userId } } },
-        { pages: { some: { authors: { some: { userId } } } } },
-      ],
-    },
+    where: { id: { in: skriptIds }, authors: { some: { userId } } },
     select: { id: true },
   })
   return new Set(rows.map(r => r.id))

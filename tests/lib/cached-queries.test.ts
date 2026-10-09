@@ -544,7 +544,7 @@ describe('getOrgPublishedPage - Access Control', () => {
 })
 
 describe('getTeacherHomepageContent root skripts (bughunt #16/#36)', () => {
-  it('does not filter layout root skripts by authorship (page-share placements show)', async () => {
+  it('does not filter layout root skripts by authorship (placements by viewers show)', async () => {
     vi.mocked(prisma.skript.findMany).mockResolvedValue([])
     await getTeacherHomepageContent('teacher-1', 'john', [{ type: 'skript', contentId: 'shared-sk' }])
     const where = vi.mocked(prisma.skript.findMany).mock.calls.at(-1)![0]!.where as Record<string, unknown>
