@@ -15,6 +15,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     skript: {
       findUnique: vi.fn(),
+      // canPlaceSkript (rule 3): no read access unless a test says so
+      count: vi.fn().mockResolvedValue(0),
     },
     collection: {
       findUnique: vi.fn(),
@@ -35,6 +37,15 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
+}))
+
+vi.mock('@/lib/site-revalidate', () => ({
+  getPlacingSites: vi.fn(async () => []),
+  revalidateSkriptOnPlacingSites: vi.fn(async () => {}),
+}))
+
+vi.mock('@/lib/page-stable-link.server', () => ({
+  invalidateStableLinks: vi.fn(),
 }))
 
 import { getServerSession } from 'next-auth'

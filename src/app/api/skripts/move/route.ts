@@ -5,11 +5,14 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions, checkCollectionPermissions } from '@/lib/permissions'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { canPlaceSkript } from '@/lib/site-access'
+import { getPlacingSites, revalidateSkriptOnPlacingSites } from '@/lib/site-revalidate'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.id) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -58,10 +61,12 @@ export async function POST(request: NextRequest) {
       skript.authors
     )
 
-    // Check if user has edit permission on the current collection(s) via
-    // their owning site (or org-admin membership).
+    // Check which of the current collection(s) the user can edit via their
+    // owning site (or org-admin membership). Bughunt #13: a move only ever
+    // touches THOSE memberships — other teachers' collections that also
+    // contain (place) this skript are left alone.
     let hasSourceCollectionEditPermission = false
-    let sourceCollectionId: string | null = null
+    const editableSourceIds: string[] = []
 
     for (const collectionSkript of skript.collectionSkripts) {
       if (!collectionSkript.collection) continue
@@ -83,13 +88,18 @@ export async function POST(request: NextRequest) {
 
       if (collectionPermissions.canEdit) {
         hasSourceCollectionEditPermission = true
-        sourceCollectionId = collectionSkript.collection.id
-        break
+        editableSourceIds.push(collectionSkript.collection.id)
       }
     }
 
-    // User needs edit permission on EITHER the skript OR its current collection
-    const canMoveSkript = skriptPermissions.canEdit || hasSourceCollectionEditPermission
+    // A move is a placement change: the user needs edit rights on a source
+    // collection, or read access to the skript (rule 3) to place it anew.
+    // It never grants content rights (the old code upgraded/created a
+    // SkriptAuthor 'author' row here — bughunt #13).
+    const canMoveSkript =
+      hasSourceCollectionEditPermission ||
+      skriptPermissions.canView ||
+      (await canPlaceSkript(session.user.id, skriptId))
 
     if (!canMoveSkript) {
       return NextResponse.json(
@@ -144,57 +154,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Sites placing the skript BEFORE the move (they may lose it).
+    const placingBefore = await getPlacingSites(skriptId)
+
     // Handle the move operation with junction table management
     const result = await prisma.$transaction(async (tx) => {
       const newOrder = order ?? 0
-      
-      // First, ensure the user has edit permission on the skript
-      // If they don't have it but can move it (via collection permission), grant it
-      if (!skriptPermissions.canEdit) {
-        // Check if user already has any permission entry
-        const existingPermission = await tx.skriptAuthor.findUnique({
-          where: {
-            skriptId_userId: {
-              skriptId: skriptId,
-              userId: session.user.id
-            }
-          }
-        })
-        
-        if (existingPermission) {
-          // Upgrade to edit permission
-          await tx.skriptAuthor.update({
-            where: { id: existingPermission.id },
-            data: { permission: 'author' }
-          })
-        } else {
-          // Grant new edit permission
-          await tx.skriptAuthor.create({
-            data: {
-              skriptId: skriptId,
-              userId: session.user.id,
-              permission: 'author'
-            }
-          })
-        }
-      }
-      
+
       // Get current collection relationships
       const currentCollectionSkripts = await tx.collectionSkript.findMany({
         where: { skriptId: skriptId },
         include: { collection: true }
       })
-      
+
       if (targetCollectionId) {
         // Moving to a specific collection
-        
+
         // Check if skript is already in the target collection
         const existingInTarget = currentCollectionSkripts.find(cs => cs.collectionId === targetCollectionId)
-        
+
         if (existingInTarget) {
           // Already in target collection, just reorder within it
           const currentOrder = existingInTarget.order
-          
+
           if (currentOrder !== newOrder) {
             // Make room at new position
             await tx.collectionSkript.updateMany({
@@ -206,7 +188,7 @@ export async function POST(request: NextRequest) {
                 order: { increment: 1 }
               }
             })
-            
+
             // Update the specific record
             await tx.collectionSkript.update({
               where: { id: existingInTarget.id },
@@ -215,12 +197,12 @@ export async function POST(request: NextRequest) {
           }
         } else {
           // Moving to new collection
-          
-          // Remove from all current collections
+
+          // Remove from the current collections THIS user can edit only
           await tx.collectionSkript.deleteMany({
-            where: { skriptId: skriptId }
+            where: { skriptId: skriptId, collectionId: { in: editableSourceIds } }
           })
-          
+
           // Make room in target collection
           await tx.collectionSkript.updateMany({
             where: {
@@ -231,7 +213,7 @@ export async function POST(request: NextRequest) {
               order: { increment: 1 }
             }
           })
-          
+
           // Add to target collection
           await tx.collectionSkript.create({
             data: {
@@ -246,10 +228,10 @@ export async function POST(request: NextRequest) {
         // placement now lives in PageLayout.items (added separately by the
         // site builder), not via a CollectionSkript row.
         await tx.collectionSkript.deleteMany({
-          where: { skriptId: skriptId }
+          where: { skriptId: skriptId, collectionId: { in: editableSourceIds } }
         })
       }
-      
+
       // Return the updated skript with its new relationships
       const updatedSkript = await tx.skript.findUnique({
         where: { id: skriptId },
@@ -261,9 +243,14 @@ export async function POST(request: NextRequest) {
           }
         }
       })
-      
+
       return updatedSkript
     })
+
+    // Old and new placing sites (bughunt #13/#4).
+    await revalidateSkriptOnPlacingSites(skriptId, [skript.slug], [], placingBefore)
+    await revalidateSkriptOnPlacingSites(skriptId, [skript.slug])
+    invalidateStableLinks()
 
     // Get the user's URL slug for revalidation (lives on Site now).
     const userSite = await prisma.site.findFirst({
