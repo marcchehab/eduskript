@@ -12,7 +12,9 @@
  * - the snap's owner;
  * - anyone, if the owner is a teacher (teacher snaps are broadcast content and
  *   may be shown on public pages, same as before);
- * - a teacher of any class the (student) owner is a member of.
+ * - a manager of a site that holds the owner's snaps for that page (site
+ *   scoping, bughunt #33 — was: any class teacher of the student, regardless
+ *   of site; org admins had no access).
  * One or two small indexed queries per image; responses are cached privately
  * in the browser (snaps are immutable — a new snap gets a new snapId).
  */
@@ -22,8 +24,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { downloadFromS3, isS3Configured } from '@/lib/s3'
+import { getManagedSiteIds } from '@/lib/site-access'
 
-const KEY_RE = /^snaps\/([^/]+)\/[^/]+\/[^/]+\.(png|jpe?g|webp|gif)$/
+const KEY_RE = /^snaps\/([^/]+)\/([^/]+)\/[^/]+\.(png|jpe?g|webp|gif)$/
 
 export async function GET(
   _request: NextRequest,
@@ -35,7 +38,7 @@ export async function GET(
   const key = parts.map(decodeURIComponent).join('/')
   const m = key.match(KEY_RE)
   if (!m) return new NextResponse('Not found', { status: 404 })
-  const [, ownerId, ext] = m
+  const [, ownerId, pageId, ext] = m
 
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
@@ -48,11 +51,14 @@ export async function GET(
     const viewerId = session?.user?.id
     if (!viewerId) return new NextResponse('Unauthorized', { status: 401 })
     if (viewerId !== ownerId) {
-      const membership = await prisma.classMembership.findFirst({
-        where: { studentId: ownerId, class: { teacherId: viewerId } },
-        select: { id: true },
-      })
-      if (!membership) return new NextResponse('Forbidden', { status: 403 })
+      const managed = await getManagedSiteIds(viewerId)
+      const held = managed.length
+        ? await prisma.userData.findFirst({
+            where: { userId: ownerId, adapter: 'snaps', itemId: pageId, siteId: { in: managed } },
+            select: { id: true },
+          })
+        : null
+      if (!held) return new NextResponse('Forbidden', { status: 403 })
     }
   }
 

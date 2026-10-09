@@ -345,6 +345,15 @@ export async function POST(request: NextRequest) {
                 // If snap was removed and has an S3 URL, delete from bucket
                 if (!newSnapIds.has(oldSnap.id) && oldSnap.imageUrl?.includes('s3.')) {
                   try {
+                    // The S3 key has no site: keep the object while any OTHER
+                    // snaps row (another site's copy) still references it
+                    // (bughunt #33).
+                    const stillUsed = await prisma.$queryRaw<{ n: number }[]>`
+                      SELECT 1 AS n FROM user_data
+                       WHERE user_id = ${userId} AND adapter = 'snaps' AND id <> ${existing.id}
+                         AND position(${oldSnap.imageUrl} in data::text) > 0
+                       LIMIT 1`
+                    if (stillUsed.length > 0) continue
                     await deleteSnapImage(oldSnap.imageUrl)
                   } catch (deleteError) {
                     console.error(`[user-data/sync] Failed to delete snap ${oldSnap.id} from S3:`, deleteError)
