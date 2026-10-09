@@ -33,8 +33,9 @@ BEGIN;
 -- Exam rows (bughunt #21) first follow the site of the ExamState that
 -- assigned the exam to the student (override row, else a class row of one of
 -- their classes), when that site places the skript.
--- Multi-placed skripts across an org site and an admin's personal site stay
--- ambiguous (bughunts #18/#20) — the pre-check in SITE-SCOPING.md lists them.
+-- Skripts placed on an org site AND an org admin's personal site: rows are
+-- duplicated onto both sites (owner decision, bughunts #18/#20) — see the
+-- duplication block below.
 -- ===========================================================================
 
 CREATE TEMP TABLE _skript_sites AS
@@ -164,6 +165,124 @@ UPDATE exam_audit_logs t SET site_id = COALESCE(pg_temp.site_scoping_pick_exam(p
 
 UPDATE exam_sessions t SET site_id = COALESCE(pg_temp.site_scoping_pick_exam(p.id, p."skriptId", t.user_id), '')
   FROM pages p WHERE p.id = t.page_id AND t.site_id = '';
+
+-- ---------------------------------------------------------------------------
+-- Owner decisions (bughunt #18/#20): when a skript is placed on BOTH an org
+-- site O and a personal site P owned by an owner/admin of O, the old code
+-- could not tell which route data came through, so pre-migration rows are
+-- DUPLICATED onto both sites (one row per site):
+--   #18 public-layer rows (user_data target_type = 'page') — any placement;
+--   #20 all student data (user_data, checkpoints, exam submissions/scores/
+--       audit log) — when O's layout references a collection owned by P
+--       (placement rule c).
+-- Copies get deterministic ids (md5(original id || ':' || site)) and are
+-- inserted only when the target site has no equivalent row, so re-running
+-- is a no-op. Only rows created before the site_scoping migration finished
+-- are duplicated (the re-backfill script must not copy live post-deploy data).
+-- ---------------------------------------------------------------------------
+
+CREATE TEMP TABLE _dup_cutoff AS
+  SELECT COALESCE(
+    (SELECT finished_at FROM _prisma_migrations WHERE migration_name LIKE '%\_site\_scoping' AND finished_at IS NOT NULL ORDER BY finished_at LIMIT 1),
+    now()
+  ) AS at;
+
+-- (skript, O, P, rule_c)
+CREATE TEMP TABLE _dup_pairs AS
+  SELECT DISTINCT so.skript_id, so.site_id AS org_site, sp.site_id AS personal_site,
+         EXISTS (
+           SELECT 1 FROM page_layout_items pli
+             JOIN page_layouts pl ON pl.id = pli.page_layout_id
+             JOIN collections c ON c.id = pli.content_id
+             JOIN collection_skripts cs ON cs."collectionId" = c.id
+            WHERE pli.type = 'collection' AND pl.site_id = so.site_id
+              AND c.site_id = sp.site_id AND cs."skriptId" = so.skript_id
+         ) AS rule_c
+    FROM _skript_sites so
+    JOIN sites o ON o.id = so.site_id AND o.organization_id IS NOT NULL
+    JOIN _skript_sites sp ON sp.skript_id = so.skript_id
+    JOIN sites p ON p.id = sp.site_id AND p.user_id IS NOT NULL
+   WHERE EXISTS (SELECT 1 FROM organization_members m
+                  WHERE m.organization_id = o.organization_id AND m.user_id = p.user_id
+                    AND m.role IN ('owner', 'admin'));
+
+-- Both directions: (from_site, to_site) per skript.
+CREATE TEMP TABLE _dup_moves AS
+  SELECT skript_id, org_site AS from_site, personal_site AS to_site, rule_c FROM _dup_pairs
+  UNION
+  SELECT skript_id, personal_site, org_site, rule_c FROM _dup_pairs;
+
+-- user_data → skript (pages, skript front pages, skript-id items).
+CREATE TEMP TABLE _ud_skript AS
+  SELECT ud.id, p."skriptId" AS skript_id FROM user_data ud JOIN pages p ON p.id = ud.item_id
+  UNION ALL
+  SELECT ud.id, fp.skript_id FROM user_data ud JOIN front_pages fp ON fp.id = ud.item_id WHERE fp.skript_id IS NOT NULL
+  UNION ALL
+  SELECT ud.id, sk.id FROM user_data ud JOIN skripts sk ON sk.id = ud.item_id;
+
+INSERT INTO user_data (id, user_id, adapter, item_id, data, version, created_at, updated_at, target_type, target_id, site_id)
+SELECT DISTINCT ON (ud.id, mv.to_site)
+       md5(ud.id || ':' || mv.to_site), ud.user_id, ud.adapter, ud.item_id, ud.data, ud.version,
+       ud.created_at, ud.updated_at, ud.target_type, ud.target_id, mv.to_site
+  FROM user_data ud
+  JOIN _ud_skript us ON us.id = ud.id
+  JOIN _dup_moves mv ON mv.skript_id = us.skript_id AND mv.from_site = ud.site_id
+ WHERE (ud.target_type = 'page' OR mv.rule_c)
+   AND ud.created_at <= (SELECT at FROM _dup_cutoff)
+   AND NOT EXISTS (
+     SELECT 1 FROM user_data x
+      WHERE x.user_id = ud.user_id AND x.site_id = mv.to_site AND x.adapter = ud.adapter
+        AND x.item_id = ud.item_id
+        AND x.target_type IS NOT DISTINCT FROM ud.target_type
+        AND x.target_id IS NOT DISTINCT FROM ud.target_id
+   );
+
+INSERT INTO user_data_checkpoints (id, user_id, page_id, component_id, kind, payload, label, created_at, site_id)
+SELECT DISTINCT ON (t.id, mv.to_site)
+       md5(t.id || ':' || mv.to_site), t.user_id, t.page_id, t.component_id, t.kind, t.payload, t.label, t.created_at, mv.to_site
+  FROM user_data_checkpoints t
+  JOIN pages p ON p.id = t.page_id
+  JOIN _dup_moves mv ON mv.skript_id = p."skriptId" AND mv.from_site = t.site_id AND mv.rule_c
+ WHERE t.created_at <= (SELECT at FROM _dup_cutoff)
+   AND NOT EXISTS (SELECT 1 FROM user_data_checkpoints x
+                    WHERE x.site_id = mv.to_site AND x.user_id = t.user_id AND x.page_id = t.page_id
+                      AND x.component_id = t.component_id AND x.kind = t.kind AND x.created_at = t.created_at);
+
+INSERT INTO exam_submissions (id, page_id, student_id, submitted_at, score, scored_by, scored_at, returned_at, source, grade_snapshot, site_id)
+SELECT DISTINCT ON (t.id, mv.to_site)
+       md5(t.id || ':' || mv.to_site), t.page_id, t.student_id, t.submitted_at, t.score, t.scored_by, t.scored_at,
+       t.returned_at, t.source, t.grade_snapshot, mv.to_site
+  FROM exam_submissions t
+  JOIN pages p ON p.id = t.page_id
+  JOIN _dup_moves mv ON mv.skript_id = p."skriptId" AND mv.from_site = t.site_id AND mv.rule_c
+ WHERE t.submitted_at <= (SELECT at FROM _dup_cutoff)
+ON CONFLICT (page_id, student_id, site_id) DO NOTHING;
+
+INSERT INTO component_scores (id, page_id, student_id, component_id, source, priority, earned, max, feedback, meta, created_by, created_at, updated_at, site_id)
+SELECT DISTINCT ON (t.id, mv.to_site)
+       md5(t.id || ':' || mv.to_site), t.page_id, t.student_id, t.component_id, t.source, t.priority, t.earned, t.max,
+       t.feedback, t.meta, t.created_by, t.created_at, t.updated_at, mv.to_site
+  FROM component_scores t
+  JOIN pages p ON p.id = t.page_id
+  JOIN _dup_moves mv ON mv.skript_id = p."skriptId" AND mv.from_site = t.site_id AND mv.rule_c
+ WHERE t.created_at <= (SELECT at FROM _dup_cutoff)
+ON CONFLICT (page_id, student_id, component_id, source, site_id) DO NOTHING;
+
+INSERT INTO exam_audit_logs (id, page_id, student_id, event, occurred_at, created_by, payload, score, site_id)
+SELECT DISTINCT ON (t.id, mv.to_site)
+       md5(t.id || ':' || mv.to_site), t.page_id, t.student_id, t.event, t.occurred_at, t.created_by, t.payload, t.score, mv.to_site
+  FROM exam_audit_logs t
+  JOIN pages p ON p.id = t.page_id
+  JOIN _dup_moves mv ON mv.skript_id = p."skriptId" AND mv.from_site = t.site_id AND mv.rule_c
+ WHERE t.occurred_at <= (SELECT at FROM _dup_cutoff)
+   AND NOT EXISTS (SELECT 1 FROM exam_audit_logs x
+                    WHERE x.site_id = mv.to_site AND x.page_id = t.page_id AND x.student_id = t.student_id
+                      AND x.event = t.event AND x.occurred_at = t.occurred_at);
+
+DROP TABLE _ud_skript;
+DROP TABLE _dup_moves;
+DROP TABLE _dup_pairs;
+DROP TABLE _dup_cutoff;
 
 DROP FUNCTION pg_temp.site_scoping_pick_exam(text, text, text);
 DROP FUNCTION pg_temp.site_scoping_pick(text, text);
