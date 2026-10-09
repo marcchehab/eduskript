@@ -165,12 +165,16 @@ export async function getCurrentReturnsForStudent(studentId: string): Promise<Ma
 /** Does ANY student on this page currently have a returned exam? Exam-level lock
  *  for AI rubric generation. */
 export async function examHasReturnedStudent(pageId: string): Promise<boolean> {
+  // Per (student, site): a take_back/reopen on site B must not mask an active
+  // return on site A (bughunt #28). The lock itself stays exam-wide on
+  // purpose: the rubric is shared page content, so editing it would re-score
+  // returned students on every site.
   const rows = await prisma.$queryRaw<{ ok: number }[]>(Prisma.sql`
     SELECT 1 AS ok FROM (
-      SELECT DISTINCT ON (student_id) event
+      SELECT DISTINCT ON (student_id, site_id) event
       FROM exam_audit_logs
       WHERE page_id = ${pageId} AND event IN ('return', 'take_back', 'reopened')
-      ORDER BY student_id, occurred_at DESC
+      ORDER BY student_id, site_id, occurred_at DESC
     ) t WHERE event = 'return' LIMIT 1
   `)
   return rows.length > 0

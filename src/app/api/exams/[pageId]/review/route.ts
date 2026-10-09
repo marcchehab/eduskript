@@ -17,7 +17,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { buildReviewScores, type ReviewScores } from '@/lib/scoring/review-payload'
-import { getExamScope, resolveStudentSite } from '@/lib/scoring/site-scope'
+import { getExamScope, isExamContentAuthor, resolveStudentSite } from '@/lib/scoring/site-scope'
 import { getCurrentReturn, examHasReturnedStudent } from '@/lib/scoring/return-state'
 
 export async function GET(
@@ -82,10 +82,13 @@ export async function GET(
       totalMax: scores.totalMax,
       returnedAt: ret?.returned ? ret.at : null,
       // Lock flags for the in-exam grading UI: per-student (this student returned?)
-      // and exam-level (any student returned → rubric locked). Only the teacher view
-      // needs the exam-level flag.
+      // and exam-level (any student returned → rubric locked). The exam-level
+      // flag spans all sites, so it is only shown to the exam's AUTHORS — the
+      // only ones who can edit the rubric (bughunt #28).
       returnedToStudent: ret?.returned ?? false,
-      examHasReturned: isSelf ? false : await examHasReturnedStudent(pageId),
+      examHasReturned: !isSelf && (await isExamContentAuthor(session.user.id, pageId))
+        ? await examHasReturnedStudent(pageId)
+        : false,
       components: scores.components.map((c) => ({
         ...c,
         answerPayload: payloadByComponent.get(c.componentId) ?? null,
