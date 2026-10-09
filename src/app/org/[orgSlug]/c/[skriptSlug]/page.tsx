@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
   try {
     const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { organization: { select: { id: true, name: true } } }
+      select: { id: true, organization: { select: { id: true, name: true } } }
     })
     const organization = orgSite?.organization ?? null
 
@@ -42,17 +42,13 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
       return { title: 'Organization Not Found' }
     }
 
-    const adminMembers = await prisma.organizationMember.findMany({
-      where: { organizationId: organization.id, role: { in: ['owner', 'admin'] } },
-      select: { userId: true }
-    })
-    const orgAdminIds = adminMembers.map(m => m.userId)
-
-    // Same-slug skripts can exist on an admin's own site; prefer the org's.
+    // Same resolution as the page below: org-owned collection first, then
+    // any skript PLACED on the org site (bughunt #39 / former gap 8).
     const skript =
       (await prisma.skript.findFirst({
         where: {
           slug: skriptSlug,
+          isPublished: true,
           collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } },
         },
         select: { title: true }
@@ -60,11 +56,10 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
       (await prisma.skript.findFirst({
         where: {
           slug: skriptSlug,
-          OR: [
-            { authors: { some: { userId: { in: orgAdminIds } } } },
-            { collectionSkripts: { some: { collection: { site: { userId: { in: orgAdminIds } } } } } }
-          ]
+          isPublished: true,
+          ...(await placedOnSiteWhere(orgSite!.id)),
         },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         select: { title: true }
       }))
 
@@ -140,6 +135,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
     (await prisma.skript.findFirst({
       where: {
         slug: skriptSlug,
+        isPublished: true,
         collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } },
       },
       include: skriptInclude,
@@ -147,6 +143,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
     (await prisma.skript.findFirst({
       where: {
         slug: skriptSlug,
+        isPublished: true, // same resolution as getOrgPublishedPage (bughunt #38)
         ...(await placedOnSiteWhere(orgSiteId)),
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],

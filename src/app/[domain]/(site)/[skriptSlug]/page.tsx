@@ -53,6 +53,7 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
     const skript = await prisma.skript.findFirst({
       where: {
         slug: skriptSlug,
+        isPublished: true,
         ...(await placedOnSiteWhere(teacherSite!.id)),
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -111,6 +112,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     const skript = await prisma.skript.findFirst({
       where: {
         slug: skriptSlug,
+        isPublished: true, // same resolution as getPublishedPage (bughunt #38)
         ...(await placedOnSiteWhere(siteId)),
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
