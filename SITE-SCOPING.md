@@ -11,7 +11,8 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
 2. `canManageSite`, `getManagedSiteIds`, `getOwnedSiteIds`.
 3. Placement: a skript is placed on a site when it is (a) a root item of the site's `PageLayout`, (b) in a collection owned by the site, or (c) in a collection the site's layout references (org layouts may reference an admin's personal collection).
    1. `placedOnSiteWhere(siteId)` (Prisma fragment for render queries), `isSkriptPlacedOnSite`, `getPlacementSiteIdsForSkript/Page`, `resolveItemTarget`, `isItemPlacedOnSite` (pages, skript front pages, skript ids → placement; a site front page → exactly its site; non-content ids such as `global` → any existing site).
-4. `canPlaceSkript` / `placeableSkriptIds`: read access (SkriptAuthor `author` or `viewer`, or a PageAuthor row on one of its pages) suffices to place a skript (rule 3).
+4. `canPlaceSkript` / `placeableSkriptIds`: read access to the skript (SkriptAuthor `author` or `viewer`) suffices to place it (rule 3). A PageAuthor share of one page does not (bughunt #29).
+5. `getSiteManagerIds` (public layer = rows written by the site's managers, #30), `getStudentClassIdsForSite` (live events only to the site owner's classes, #31).
 
 ## 2. What changed
 
@@ -19,8 +20,8 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
 2. **Rendering** (rule 4): `getPublishedPage(siteId, …)`, `getSkriptForPreview(siteId, …)`, `getOrgTeacherContentPage/Skript`, `getOrgPublishedPage`, `[domain]/(site)/[skriptSlug]`, org `/c/[skriptSlug]` all use `placedOnSiteWhere`. A skript renders only on sites that place it; the other slugs of the same teacher 404. Unplaced → 404, no auto-placement, data stays.
 3. **Public layers** are per (page, site): `getPublicLayers(pageId, siteId)`, `/api/user-data/public/[pageId]?siteId=`. Writing them (`targetType='page'`) needs `canManage`. ISR invalidation: tag `page:<id>` + the one affected site's path (`src/lib/site-revalidate.ts`).
 4. **User-data API**: `sync` requires `siteId` per item, rejects items not placed on that site (returned as `rejected`, the client keeps them unsynced), class/student broadcasts only on the caller's own personal site, SEB exam sessions pinned to `ExamSession.siteId`. `manifest`, `bulk-fetch`, `[adapter]/[itemId]` (GET/DELETE) require `siteId`. `manifest` lost its account-wide mode.
-5. **Client IndexedDB** (`src/lib/userdata/schema.ts`): Dexie version 2 adds table `siteUserData` keyed `[userId+siteId+pageId+componentId+targetType+targetId]`; the upgrade copies every v1 row with `siteId='__legacy__'` (unsynced flags kept) and never deletes the old `userData` table. History rows get `siteId` too.
-   1. `CurrentSiteProvider` sets the service's site **during render** (child editor effects run before provider effects, see remount-wipe memory note). Debounced saves capture their site.
+5. **Client IndexedDB** (`src/lib/userdata/schema.ts`): Dexie version 2 adds table `siteUserData` keyed `[userId+siteId+pageId+componentId+targetType+targetId]`; the upgrade copies every v1 row with `siteId='__legacy__'` (unsynced flags kept); regular rows stay in the old `userData` table as a safety copy, localOnly binaries are moved (#26). History rows get `siteId` too. Rows that tabs still on old code write into the v1 table afterwards are swept in on every start (`sweepLegacyTable`, #2); the server answers such old clients with 409 so they never mark them synced.
+   1. `CurrentSiteProvider` sets the service's site **during render** (child editor effects run before provider effects, see remount-wipe memory note). Debounced saves capture their site. The hooks (`useSyncedUserData`, `useUserData`) and the code editor additionally pass their own context site explicitly to every service call (#11/#24/#25); the bridge's reset on unmount is deferred and ref-counted.
    2. Legacy rows are *adopted* (moved in one transaction, never dropped) by the first real site that reads them — on `get`, on save, in the sync manifest pass, and for version history.
    3. `''` = no site context (dashboard preview) → local only, never synced. The sync engine queues only real sites, keys its queue by site, pushes unsynced rows of every site under their own `siteId`, reconciles a site's manifest when the user enters it.
 6. **Class toolbar** (rule 5/6): props `requireOwnerSlug`/`gateOnPageAuthor` replaced by `siteId`. Self-gates via `GET /api/sites/[siteId]/access` + `useSiteAccess`: personal-site owner (any of their sites) → classes as before; org owner/admin → no classes, Public/Off + site-wide answers; everyone else → nothing. `TeacherClassProvider` additionally forces `viewMode='my-view'` when the stored target isn't allowed on the current site (a class picked on site A can't broadcast on site B).
@@ -37,7 +38,7 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
 4. **Grading aggregates every managed site** (rule 8). `classId='all'` = teacher's class members + everyone who submitted on a scope site (this is how org owners/admins, who have no classes, see org submissions). Each row carries `siteId`.
 5. Student routes (`start-session`, `hand-in`, `my-grade`, `review`, `state` GET/stream, `check-run`, `seb-config`, `download-link`) take the site from the client and check placement. SEB sessions store `siteId`; `validateExamSession(…, siteId)` rejects another site (legacy sessions without site accepted). `seb-config` builds the start URL from the site in context. Backup files carry `siteId`.
 6. `ExamState` writes need the own personal site + class teacher; the upsert moves an assignment to the site it is set from. `resolveExamStateDetail(pageId, studentId, siteId)` only sees that site's rows.
-7. Grade key (`ExamGradeConfig`) and rubrics stay per page (content) but writing them needs managing a site that holds the exam (was: authorship).
+7. Grade key (`ExamGradeConfig`) and rubrics stay per page (content). WRITES need page authorship (rule 1, #1/#3); READS for grading are allowed for authors and managers of a placing site. Grading exposes `canEditContent`.
 8. My Exams lists per (page, site) with the site's URL.
 
 
@@ -68,7 +69,29 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
    UNION ALL SELECT 'exam_states', count(*) FROM exam_states
    UNION ALL SELECT 'exam_sessions', count(*) FROM exam_sessions;
    ```
-   Multi-placed skripts that hold data (expected: none on prod; any row here gets the deterministic pick described in the migration header):
+   Data that will NOT get a site (lands on `''`, invisible) — skript placed nowhere, or produced through a co-author's own non-placing slug (bughunt #9/#23). Review before migrating; place the skript first if the data should stay visible:
+   ```sql
+   WITH ss AS (
+     SELECT pli.content_id AS skript_id, pl.site_id FROM page_layout_items pli JOIN page_layouts pl ON pl.id = pli.page_layout_id WHERE pli.type = 'skript'
+     UNION SELECT cs."skriptId", c.site_id FROM collection_skripts cs JOIN collections c ON c.id = cs."collectionId"
+     UNION SELECT cs."skriptId", pl.site_id FROM page_layout_items pli JOIN page_layouts pl ON pl.id = pli.page_layout_id JOIN collection_skripts cs ON cs."collectionId" = pli.content_id WHERE pli.type = 'collection'
+   )
+   SELECT 'unplaced' AS why, p."skriptId", count(*) FROM user_data ud JOIN pages p ON p.id = ud.item_id
+    WHERE NOT EXISTS (SELECT 1 FROM ss WHERE ss.skript_id = p."skriptId") GROUP BY 2
+   UNION ALL
+   SELECT 'via co-author slug', p."skriptId", count(*) FROM user_data ud JOIN pages p ON p.id = ud.item_id
+    WHERE EXISTS (SELECT 1 FROM ss WHERE ss.skript_id = p."skriptId")
+      AND NOT EXISTS (SELECT 1 FROM ss JOIN sites s ON s.id = ss.site_id WHERE ss.skript_id = p."skriptId"
+                        AND (s.user_id = ud.user_id OR EXISTS (SELECT 1 FROM class_memberships m JOIN classes c ON c.id = m.class_id
+                                                               WHERE m.student_id = ud.user_id AND c.teacher_id = s.user_id)))
+      AND EXISTS (SELECT 1 FROM skript_authors sa WHERE sa."skriptId" = p."skriptId"
+                    AND (sa."userId" = ud.user_id OR EXISTS (SELECT 1 FROM class_memberships m JOIN classes c ON c.id = m.class_id
+                                                              WHERE m.student_id = ud.user_id AND c.teacher_id = sa."userId"))
+                    AND NOT EXISTS (SELECT 1 FROM ss JOIN sites s ON s.id = ss.site_id WHERE ss.skript_id = p."skriptId" AND s.user_id = sa."userId"))
+    GROUP BY 2
+   ORDER BY 1, 3 DESC;
+   ```
+   Multi-placed skripts that hold data (expected: none on prod; any row here gets the deterministic pick described in the migration header — see bughunt #18/#20 for the org-vs-personal case that needs a decision):
    ```sql
    WITH ss AS (
      SELECT pli.content_id AS skript_id, pl.site_id FROM page_layout_items pli JOIN page_layouts pl ON pl.id = pli.page_layout_id WHERE pli.type = 'skript'
@@ -81,6 +104,12 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
    FROM multi m;
    ```
 3. Deploy the branch; `prisma migrate deploy` applies `20261008222107_site_scoping` (DDL + the appended backfill). Prisma runs the file as one script — keep the backup until step 4 is verified.
+   - Rolling-deploy overlap (bughunt #10): the migration runs in the NEW container's start, while the old container still serves. In that window the old code's `componentScore` upserts (check-run, manual/AI score) fail (their unique index is gone) and its `user_data`/exam writes land with `site_id = ''`. Prefer a short maintenance window (stop the old container before the new one migrates); either way, run step 3a.
+   3a. After the new container serves, re-run the backfill for rows written in the overlap (idempotent, touches only `site_id = ''`):
+   ```bash
+   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/site-scoping-rebackfill.sql
+   ```
+   Any check-run/score a teacher or student triggered during the overlap must be redone (the old container's write failed).
 4. Post-checks:
    1. Same totals as step 2 (the migration only adds columns/updates).
    2. Distribution:
@@ -96,10 +125,10 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
       WHERE ud.site_id = '' GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 50;
       ```
    4. Smoke: one student answer page and one exam grading view per active teacher site.
-5. Clients: the new JS upgrades IndexedDB on first load (no user action). Old tabs keep running old code until reload; their sync calls without `siteId` are rejected per item (kept local, retried after reload) — nothing is lost.
-6. Rollback: restore the dump (`pg_restore --clean --if-exists -d "$DATABASE_URL" pre-site-scoping-*.dump`) and redeploy the previous image. Writes made after the deploy are lost by a restore; a client that already ran the Dexie v2 upgrade keeps working with the old code only after clearing site data (old code reads table `userData`, which still holds the pre-upgrade copy — newer edits live in `siteUserData`).
+5. Clients: the new JS upgrades IndexedDB on first load (no user action). Old tabs keep running old code until reload; their sync calls without `siteId` get 409 for the whole batch, so the old client keeps the data unsynced in its v1 table; after a reload the new code sweeps it into `siteUserData` and pushes it (#2) — nothing is lost.
+6. Rollback: restore the dump (`pg_restore --clean --if-exists -d "$DATABASE_URL" pre-site-scoping-*.dump`) and redeploy the previous image. Writes made after the deploy are lost by a restore. Do NOT tell users to clear site data (that would delete unsynced work, #22): old code reopens the v2 IndexedDB (Dexie retries with the installed version) and reads the old `userData` table, which still holds the pre-upgrade rows; edits made while on the new code live in `siteUserData` and are invisible to the old code until it is redeployed (they are not deleted).
 
-Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6 public-layer), eduadmin 17, marc 17, `(none)` 33 (15 public-layer rows of deleted/orphan pages, 8 `onboarding-quest/global`, rest orphans); exam_submissions 5 → teacher; exam_states 2 → teacher; checkpoints 54 (4 `(none)`). `mop7-skript` is placed on `marc` and `eduadmin` and has 32 rows → split by the owner/class heuristic.
+Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6 public-layer), eduadmin 17, marc 17, `(none)` 33 (15 public-layer rows of deleted/orphan pages, 8 `onboarding-quest/global`, rest orphans); exam_submissions 5 → teacher; exam_states 2 → teacher; checkpoints 54 (4 `(none)`). `mop7-skript` is placed on `marc` and `eduadmin` and has 32 rows → split by the owner/class heuristic. Re-verified after the bughunt migration changes (copy restored from the pre-migration dump and re-migrated): identical counts; the re-backfill script is a no-op on the result; a rolled-back scenario confirmed #9 (co-author's own row → `''`) and #21 (exam submission follows the ExamState's site).
 
 ## 6. Known gaps / risks
 
@@ -109,10 +138,11 @@ Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6
 4. Legacy client rows: adopted by the first site that reads them. Only differs from the server migration for skripts placed on several sites. Not verified in a real browser with a pre-upgrade IndexedDB (unit-tested with fake-indexeddb).
 5. Quizzes and other components do not re-render when the background manifest sync pulls server data into a FRESH browser after mount (pre-existing; the smoke test saw the record land in IndexedDB but the radio not checked until reload).
 6. "Global" per-user client rows (`__global__` python imports, `kara-progress` etc.) are now per site; server rows with non-content item ids stayed `site_id=''` and are not served to sites anymore (dev copy: only `onboarding-quest/global`, which the server still reads with `siteId=''`).
-7. ISR: page HTML of an un-placed skript disappears via `teacherContent`/`orgContent` tag invalidation from the layout/collection routes. Collection *removal* routes (`DELETE` of collection skripts, skript move) were not audited for invalidating the right site.
-8. Org-route `generateMetadata` (org `/c/[skriptSlug]`) still looks up titles by admin authorship — only affects the title of a page that 404s.
+7. ISR: page HTML of an un-placed skript disappears via `teacherContent`/`orgContent` tag invalidation from the layout/collection routes; skript move and skript/page edits now invalidate every placing site (#4/#13/#14). Collection DELETE routes were not audited.
+8. (fixed, #39) Org-route `generateMetadata`/OG image now resolve by placement.
 9. Site builder UI: not verified that viewer-permission skripts are offered in the picker (the API accepts them).
-10. Pre-existing, not changed: `/api/exams/[pageId]/start-session` is a GET that takes `userId` from the query string (only the site check was added). Worth a separate look.
+10. (fixed, #40) `start-session` now takes the user only from a valid one-time SEB token.
+12. Public layer cache: `getPublicLayers` filters by the site's current managers inside a forever-cache; a change of org admins shows only after the next public-layer write for that page.
 11. The rollback note above: after the Dexie v2 upgrade, old code reopens the DB (Dexie retries with the installed version) but reads the old `userData` table — edits made after the upgrade are invisible to old code until re-upgrade.
 
 
@@ -133,8 +163,9 @@ Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6
 
 1. The data migration SQL appended to `prisma/migrations/20261008222107_site_scoping/migration.sql` (placement rule + multi-placement tiebreak) and the prod steps in section 5.
 2. Client upgrade path: `src/lib/userdata/schema.ts` (Dexie v2), `userDataService.adoptLegacy`, and the render-time `setCurrentSite` in `current-site-context.tsx` — highest risk for student data.
-3. Exam scope semantics (`src/lib/scoring/site-scope.ts`): one site per student in grading, `classId='all'` including non-class submitters, grade key/rubric writes by site managers.
-4. Rule-3 placement: any readable skript (incl. page-share) may be placed; collection-add was previously unchecked and is now gated — check the site builder UX with a viewer skript.
+3. Exam scope semantics (`src/lib/scoring/site-scope.ts`): one site per student in grading, `classId='all'` including non-class submitters; grade key/rubric writes by authors only, reads by authors + placing-site managers.
+4. Rule-3 placement: any skript with a SkriptAuthor row (author/viewer) may be placed; collection-add was previously unchecked and is now gated — check the site builder UX with a viewer skript.
+5. Bughunt decisions needed: #18/#20 (see section 9).
 5. Decisions in section 4 (no FK on `site_id`, collection-owned = placed, per-site "global" client data) and gaps 1, 5, 10 in section 6.
 
 
