@@ -2,7 +2,7 @@ import 'server-only'
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { getPlacementSiteIdsForSkript } from '@/lib/site-access'
 import type { ResolvedPage } from './page-stable-link'
 
 /**
@@ -12,13 +12,19 @@ import type { ResolvedPage } from './page-stable-link'
  * map — the rewrite plugin then leaves their hrefs as `/p/{id}` and the
  * redirect route handles them (404 for unpublished, hides existence).
  *
- * URL shape: uses the first author's pageSlug as the domain segment, mirroring
- * the dashboard's "View public page" button (page-editor.tsx). Org URLs
- * (`/org/...`) are not constructed in V1; an admin-org skript will resolve
- * via its admin's personal pageSlug, which is fine for SEO since both routes
- * serve the same content.
+ * Site scoping (bughunt #7/#15): a page renders only on sites that PLACE its
+ * skript, so the URL is built for a placing site:
+ *   1. `preferSiteSlug` (the site the linking page is rendered on) if it
+ *      places the target — in-content links keep students on their site;
+ *   2. else a placing personal site of the skript's first author;
+ *   3. else the oldest placing site.
+ * Personal site → `/{slug}/{skript}/{page}`, org site → `/org/{slug}/c/{skript}/{page}`.
+ * Pages whose skript is placed nowhere are absent (the /p route 404s).
  */
-export async function resolveStableLinks(ids: string[]): Promise<Map<string, ResolvedPage>> {
+export async function resolveStableLinks(
+  ids: string[],
+  preferSiteSlug?: string | null,
+): Promise<Map<string, ResolvedPage>> {
   const map = new Map<string, ResolvedPage>()
   if (ids.length === 0) return map
 
@@ -34,28 +40,48 @@ export async function resolveStableLinks(ids: string[]): Promise<Map<string, Res
       title: true,
       skript: {
         select: {
+          id: true,
           slug: true,
           authors: {
             where: { permission: 'author' },
             orderBy: { createdAt: 'asc' },
             take: 1,
-            select: {
-              user: { select: { sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } } },
-            },
+            select: { userId: true },
           },
         },
       },
     },
   })
 
+  // One placement lookup per distinct skript (O(skripts), not O(links)).
+  const skriptIds = [...new Set(pages.map(p => p.skript.id))]
+  const placementBySkript = new Map<string, string[]>()
+  await Promise.all(skriptIds.map(async (sid) => {
+    placementBySkript.set(sid, await getPlacementSiteIdsForSkript(sid))
+  }))
+  const allSiteIds = [...new Set([...placementBySkript.values()].flat())]
+  const sites = allSiteIds.length
+    ? await prisma.site.findMany({
+        where: { id: { in: allSiteIds } },
+        select: { id: true, slug: true, userId: true, organizationId: true, createdAt: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      })
+    : []
+
   for (const page of pages) {
-    const author = page.skript.authors[0]
-    const domain = author?.user?.sites[0]?.slug
-    if (!domain) continue
+    const placed = new Set(placementBySkript.get(page.skript.id) ?? [])
+    const candidates = sites.filter(s => placed.has(s.id))
+    if (candidates.length === 0) continue
+    const authorId = page.skript.authors[0]?.userId
+    const site =
+      (preferSiteSlug ? candidates.find(s => s.slug === preferSiteSlug) : undefined) ??
+      (authorId ? candidates.find(s => s.userId === authorId) : undefined) ??
+      candidates[0]
+    const base = site.organizationId ? `/org/${site.slug}/c` : `/${site.slug}`
     map.set(page.id, {
       id: page.id,
       title: page.title,
-      url: `/${domain}/${page.skript.slug}/${page.slug}`,
+      url: `${base}/${page.skript.slug}/${page.slug}`,
     })
   }
 

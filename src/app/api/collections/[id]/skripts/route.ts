@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkCollectionPermissions } from '@/lib/permissions'
 import { canPlaceSkript } from '@/lib/site-access'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 import { revalidateTag } from 'next/cache'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 
@@ -129,6 +130,8 @@ export async function POST(
       revalidateTag(CACHE_TAGS.teacherContent(collection.site.slug), { expire: 0 })
       revalidateTag(CACHE_TAGS.orgContent(collection.site.slug), { expire: 0 })
     }
+    // Placement decides which site /p/{id} redirects to (bughunt #7/#15).
+    invalidateStableLinks()
 
     return NextResponse.json({
       success: true,

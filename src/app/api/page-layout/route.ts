@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { hydratePageLayoutItems } from '@/lib/page-layout'
 import { canPlaceSkript } from '@/lib/site-access'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /** Look up the user's primary Site id. A user can own multiple sites; page
@@ -169,6 +170,8 @@ export async function POST(request: NextRequest) {
       revalidateTag(CACHE_TAGS.user(site.slug), { expire: 0 })
     }
 
+    // Placement decides which site /p/{id} redirects to (bughunt #7/#15).
+    invalidateStableLinks()
     return NextResponse.json({ success: true, data: pageLayout })
   } catch (error) {
     console.error('Error saving page layout:', error)

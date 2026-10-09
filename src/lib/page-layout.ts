@@ -1,6 +1,7 @@
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from './prisma'
 import { CACHE_TAGS } from './cached-queries'
+import { invalidateStableLinks } from './page-stable-link.server'
 import { canEditSite, checkSkriptPermissions, type OrgRole } from './permissions'
 
 /**
@@ -45,6 +46,8 @@ export function revalidateSiteContent(siteSlug?: string | null): void {
   if (!siteSlug) return
   revalidateTag(CACHE_TAGS.teacherContent(siteSlug), { expire: 0 })
   revalidateTag(CACHE_TAGS.user(siteSlug), { expire: 0 })
+  // Placement decides which site /p/{id} stable links resolve to (bughunt #7).
+  invalidateStableLinks()
   revalidatePath('/dashboard')
 }
 

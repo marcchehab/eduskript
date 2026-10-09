@@ -59,7 +59,7 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerP
   //    safely bundled into client code paths (live editor preview, demo).
   const stableIds = extractStableLinkIds(content)
   const resolvedStableLinks = stableIds.length > 0
-    ? await resolveStableLinks(stableIds)
+    ? await resolveStableLinks(stableIds, ownerPageSlug ?? organizationSlug ?? null)
     : undefined
 
   // 4. Compile markdown (safe pipeline, no JS execution). When the document has

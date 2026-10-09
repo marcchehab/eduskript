@@ -5,6 +5,7 @@ import { requireOrgAdmin } from '@/lib/org-auth'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { hydratePageLayoutItems } from '@/lib/page-layout'
 import { canPlaceSkript } from '@/lib/site-access'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 
 interface RouteParams {
   params: Promise<{ orgId: string }>
@@ -169,6 +170,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       revalidateTag(CACHE_TAGS.orgContent(pageLayout.site.slug), { expire: 0 })
     }
 
+    // Placement decides which site /p/{id} redirects to (bughunt #7/#15).
+    invalidateStableLinks()
     return NextResponse.json({ success: true, data: pageLayout })
   } catch (error) {
     console.error('Error saving org page layout:', error)

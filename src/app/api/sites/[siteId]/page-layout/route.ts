@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { hydratePageLayoutItems } from '@/lib/page-layout'
 import { canPlaceSkript } from '@/lib/site-access'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 
 /** Resolve a specific site owned by the user. Unlike the personal
  *  /api/page-layout route (which picks the user's primary site), this route
@@ -176,6 +177,8 @@ export async function POST(
       revalidateTag(CACHE_TAGS.user(site.slug), { expire: 0 })
     }
 
+    // Placement decides which site /p/{id} redirects to (bughunt #7/#15).
+    invalidateStableLinks()
     return NextResponse.json({ success: true, data: pageLayout })
   } catch (error) {
     console.error('Error saving page layout:', error)
