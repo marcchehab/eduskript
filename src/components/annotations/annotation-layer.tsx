@@ -1010,16 +1010,19 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       clearStickyNotes()
     } else {
       try {
+        // Site scoping (bughunt #6): the public layer is per (page, site).
+        if (!currentSiteId) throw new Error('no site context')
         const currentRes = await fetch(
-          `/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page&targetId=${encodeURIComponent(pageId)}`,
+          `/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page&targetId=${encodeURIComponent(pageId)}&siteId=${encodeURIComponent(currentSiteId)}`,
         )
         const current = currentRes.ok ? await currentRes.json() : null
         const nextVersion = (current?.version ?? 0) + 1
-        await fetch('/api/user-data/sync', {
+        const res = await fetch('/api/user-data/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             items: [{
+              siteId: currentSiteId,
               adapter: 'sticky-notes',
               itemId: pageId,
               data: JSON.stringify({ notes: [] }),
@@ -1030,6 +1033,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
             }],
           }),
         })
+        const result = res.ok ? await res.json().catch(() => null) : null
+        if (!result || result.synced !== 1) throw new Error(`clear refused (${res.status})`)
       } catch (err) {
         log('sticky-notes page-broadcast clear failed', err)
       }
@@ -1037,6 +1042,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   }, [
     viewMode,
     pageId,
+    currentSiteId,
     updatePageBroadcastData,
     updateSpacersData,
     updateSnapsData,
