@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getCurrentTenant } from '@/lib/tenant'
 import { SITEMAP_TAG } from '@/lib/sitemap-cache'
+import { placedOnSiteWhere } from '@/lib/site-access'
 
 // Per-host sitemap. Both eduskript.org and informatikgarten.ch run the same
 // Next.js app, so URLs must be tagged with the request host or each tenant's
@@ -136,12 +137,17 @@ async function getOrgEntries(baseUrl: string, orgId: string): Promise<MetadataRo
   return entries
 }
 
-async function getTeacherEntries(baseUrl: string, userId: string): Promise<MetadataRoute.Sitemap> {
+// Site scoping (bughunt #19/#37): list what the host's SITE places, not what
+// its owner authors — unplaced skripts 404 there, viewer-placed ones render.
+async function getTeacherEntries(baseUrl: string, siteSlug: string | null): Promise<MetadataRoute.Sitemap> {
+  if (!siteSlug) return []
+  const site = await prisma.site.findUnique({ where: { slug: siteSlug }, select: { id: true } })
+  if (!site) return []
   const skripts = await prisma.skript.findMany({
     where: {
       isPublished: true,
       isUnlisted: false,
-      authors: { some: { userId, permission: 'author' } },
+      ...(await placedOnSiteWhere(site.id)),
     },
     select: {
       slug: true,
@@ -191,7 +197,7 @@ const getTenantEntries = (host: string, baseUrl: string) =>
           return await getOrgEntries(baseUrl, resolved.orgId)
         }
         if (resolved?.type === 'teacher') {
-          return await getTeacherEntries(baseUrl, resolved.userId)
+          return await getTeacherEntries(baseUrl, resolved.pageSlug)
         }
       } catch (err) {
         console.error('sitemap: failed to enumerate tenant content', err)
