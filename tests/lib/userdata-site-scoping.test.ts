@@ -1,6 +1,6 @@
 // Must be the first import: installs an in-memory IndexedDB before Dexie loads.
 import 'fake-indexeddb/auto'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
 import { UserDataDatabase, LEGACY_SITE_ID, db } from '@/lib/userdata/schema'
 import { userDataService } from '@/lib/userdata/userDataService'
@@ -179,5 +179,62 @@ describe('old-tab writes after the upgrade (bughunt #2)', () => {
     await db.siteUserData.put({ ...legacyRow({ componentId: 'x', updatedAt: 9 }), siteId: 'site-a' } as never)
     expect((await userDataService.get('page-1', 'x'))?.updatedAt).toBe(9)
     expect(await db.siteUserData.get(['u1', LEGACY_SITE_ID, 'page-1', 'x', '', ''])).toBeTruthy()
+  })
+})
+
+describe('explicit site beats the global (bughunt #11/#24/#25)', () => {
+  beforeEach(async () => {
+    await db.siteUserData.clear()
+    await userDataService.setCurrentUser('u1')
+  })
+
+  it('a save with an explicit site lands there even after the global was reset', async () => {
+    userDataService.setCurrentSite(null) // e.g. bridge reset during unmount
+    await userDataService.save('page-1', 'annotations', { strokes: 1 }, { immediate: true, siteId: 'site-a' })
+    expect(await db.siteUserData.get(['u1', 'site-a', 'page-1', 'annotations', '', ''])).toBeTruthy()
+    expect(await db.siteUserData.get(['u1', '', 'page-1', 'annotations', '', ''])).toBeUndefined()
+    expect((await userDataService.get('page-1', 'annotations', { siteId: 'site-a' }))?.data).toEqual({ strokes: 1 })
+  })
+})
+
+describe('never-synced legacy rows (bughunt #12)', () => {
+  beforeEach(async () => {
+    await db.siteUserData.clear()
+    await userDataService.setCurrentUser('u1')
+  })
+
+  it('getComponentsForPage adopts the page\'s legacy rows', async () => {
+    await db.siteUserData.put({ ...legacyRow({ componentId: 'code-editor-z' }), siteId: LEGACY_SITE_ID } as never)
+    userDataService.setCurrentSite('site-a')
+    expect(await userDataService.getComponentsForPage('page-1')).toEqual(['code-editor-z'])
+  })
+
+  it('initial sync adopts unsynced legacy rows the server says are placed on the site, and pushes them', async () => {
+    await db.siteUserData.bulkPut([
+      { ...legacyRow({ pageId: 'placed-page' }), siteId: LEGACY_SITE_ID },
+      { ...legacyRow({ pageId: 'other-page' }), siteId: LEGACY_SITE_ID },
+    ] as never)
+    const calls: string[] = []
+    const fetchMock = vi.fn(async (url: string, init?: { body?: string }) => {
+      calls.push(url)
+      if (url.startsWith('/api/user-data/manifest')) return new Response('[]', { status: 200 })
+      if (url.includes('/placed')) {
+        expect(JSON.parse(init!.body!).itemIds.sort()).toEqual(['other-page', 'placed-page'])
+        return new Response(JSON.stringify({ placed: ['placed-page'] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ ok: true, synced: 1, conflicts: [] }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      syncEngine.setSiteId('site-a')
+      syncEngine.setUser('u1')
+      await vi.waitFor(async () => {
+        expect(await db.siteUserData.get(['u1', 'site-a', 'placed-page', 'code-editor-a', '', ''])).toBeTruthy()
+      })
+      expect(await db.siteUserData.get(['u1', LEGACY_SITE_ID, 'other-page', 'code-editor-a', '', ''])).toBeTruthy()
+    } finally {
+      syncEngine.setUser(null)
+      vi.unstubAllGlobals()
+    }
   })
 })

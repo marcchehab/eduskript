@@ -421,6 +421,7 @@ export class SyncEngine {
       if (isSyncableSite(siteId)) {
         this.reconciledSites.add(siteId)
         await this.reconcileSite(siteId)
+        await this.adoptPlacedLegacy(siteId)
       }
 
       // Also push any unsynced local data not on server — for EVERY site the
@@ -453,6 +454,38 @@ export class SyncEngine {
     } catch (error) {
       console.error('[SyncEngine] Initial sync failed:', error)
       // Don't show error to user on initial sync failure
+    }
+  }
+
+  /**
+   * Bughunt #12: pre-site-scoping rows that never reached the server would
+   * otherwise wait until that exact component is read again. Ask the server
+   * which of their item ids this site places, adopt those rows into it
+   * (moved, never dropped) so the unsynced sweep below pushes them. Rows of
+   * items not placed here stay legacy for the site that places them.
+   */
+  private async adoptPlacedLegacy(siteId: string): Promise<void> {
+    if (!this.userId) return
+    const userId = this.userId
+    const legacy = await db.siteUserData
+      .filter((r) => r.userId === userId && r.siteId === LEGACY_SITE_ID && r.savedToRemote === false && !r.localOnly)
+      .toArray()
+    if (legacy.length === 0) return
+    const itemIds = [...new Set(legacy.map((r) => r.pageId))]
+    const placed = new Set<string>()
+    for (let i = 0; i < itemIds.length; i += 200) {
+      const res = await fetch(`/api/sites/${encodeURIComponent(siteId)}/placed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds: itemIds.slice(i, i + 200) }),
+      })
+      if (!res.ok) return
+      const json = (await res.json()) as { placed?: string[] }
+      for (const id of json.placed ?? []) placed.add(id)
+    }
+    for (const r of legacy) {
+      if (!placed.has(r.pageId)) continue
+      await userDataService.adoptLegacy(userId, siteId, r.pageId, r.componentId, r.targetType, r.targetId)
     }
   }
 

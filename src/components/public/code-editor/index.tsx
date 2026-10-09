@@ -79,6 +79,7 @@ import { KARA_MODULE_SOURCE, KARA_RUNNER } from '@/lib/kara/kara-module'
 import { KARA_COMPLETIONS } from '@/lib/kara/completions'
 import { karaAftermathInput, karaDataFiles, karaRunInput, karaStars, parseKaraLevel, type KaraTrace, type KaraWorld } from '@/lib/kara/world'
 import { withSite } from '@/lib/site-scope-client'
+import { useCurrentSite } from '@/contexts/current-site-context'
 
 /**
  * Hard wall-clock cap on a single Pyodide run from the Run / Check buttons.
@@ -360,6 +361,12 @@ export const CodeEditor = memo(function CodeEditor({
   toolbox,
   karaAssets,
 }: CodeEditorProps) {
+  // Site scoping: every direct user-data service call passes the site this
+  // editor renders on (constant for its lifetime) instead of relying on the
+  // global current site, which can be stale during unmount / discarded
+  // transition renders (bughunt #11/#24).
+  const { siteId: ctxSiteId } = useCurrentSite()
+  const siteIdRef = useRef(ctxSiteId ?? '')
   // An author's in-place voice-line edit (KaraVoiceEditor) replaces the block
   // locally right after saving, so briefing and panel show it without a reload.
   const [karaWorldEdited, setKaraWorldEdited] = useState<string | null>(null)
@@ -740,10 +747,10 @@ export const CodeEditor = memo(function CodeEditor({
     if (!isPython || !isDbReady) return
     const loadImports = async () => {
       if (skriptId) {
-        const record = await userDataService.get<GlobalImportsData>(skriptId, 'python-imports')
+        const record = await userDataService.get<GlobalImportsData>(skriptId, 'python-imports', { siteId: siteIdRef.current })
         if (record?.data) setSkriptImports(record.data)
       }
-      const globalRecord = await userDataService.get<GlobalImportsData>('__global__', 'python-imports')
+      const globalRecord = await userDataService.get<GlobalImportsData>('__global__', 'python-imports', { siteId: siteIdRef.current })
       if (globalRecord?.data) setGlobalImports(globalRecord.data)
     }
     loadImports()
@@ -774,13 +781,13 @@ export const CodeEditor = memo(function CodeEditor({
   const saveSkriptImports = useCallback((data: GlobalImportsData) => {
     setSkriptImports(data)
     if (skriptId) {
-      userDataService.save(skriptId, 'python-imports', data, { immediate: true, sourceId: editorInstanceId })
+      userDataService.save(skriptId, 'python-imports', data, { siteId: siteIdRef.current, immediate: true, sourceId: editorInstanceId })
     }
   }, [skriptId, editorInstanceId])
 
   const saveGlobalImports = useCallback((data: GlobalImportsData) => {
     setGlobalImports(data)
-    userDataService.save('__global__', 'python-imports', data, { immediate: true, sourceId: editorInstanceId })
+    userDataService.save('__global__', 'python-imports', data, { siteId: siteIdRef.current, immediate: true, sourceId: editorInstanceId })
   }, [editorInstanceId])
 
   // ====================================================================
@@ -816,13 +823,13 @@ export const CodeEditor = memo(function CodeEditor({
     if (!isPython || !isDbReady) return
 
     const loadBinaries = async () => {
-      const editorRec = await userDataService.get<BinaryFileData>(editorBinariesPageId, editorBinariesComponentId)
+      const editorRec = await userDataService.get<BinaryFileData>(editorBinariesPageId, editorBinariesComponentId, { siteId: siteIdRef.current })
       if (editorRec?.data) setEditorBinaries(editorRec.data)
       if (skriptId) {
-        const skriptRec = await userDataService.get<BinaryFileData>(skriptId, skriptBinariesComponentId)
+        const skriptRec = await userDataService.get<BinaryFileData>(skriptId, skriptBinariesComponentId, { siteId: siteIdRef.current })
         if (skriptRec?.data) setSkriptBinaries(skriptRec.data)
       }
-      const globalRec = await userDataService.get<BinaryFileData>('__global__', globalBinariesComponentId)
+      const globalRec = await userDataService.get<BinaryFileData>('__global__', globalBinariesComponentId, { siteId: siteIdRef.current })
       if (globalRec?.data) setGlobalBinaries(globalRec.data)
     }
     loadBinaries()
@@ -852,7 +859,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   const saveEditorBinaries = useCallback((data: BinaryFileData) => {
     setEditorBinaries(data)
-    userDataService.save(editorBinariesPageId, editorBinariesComponentId, data, {
+    userDataService.save(editorBinariesPageId, editorBinariesComponentId, data, { siteId: siteIdRef.current,
       immediate: true,
       sourceId: editorInstanceId,
       localOnly: true,
@@ -862,7 +869,7 @@ export const CodeEditor = memo(function CodeEditor({
   const saveSkriptBinaries = useCallback((data: BinaryFileData) => {
     setSkriptBinaries(data)
     if (skriptId) {
-      userDataService.save(skriptId, skriptBinariesComponentId, data, {
+      userDataService.save(skriptId, skriptBinariesComponentId, data, { siteId: siteIdRef.current,
         immediate: true,
         sourceId: editorInstanceId,
         localOnly: true,
@@ -872,7 +879,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   const saveGlobalBinaries = useCallback((data: BinaryFileData) => {
     setGlobalBinaries(data)
-    userDataService.save('__global__', globalBinariesComponentId, data, {
+    userDataService.save('__global__', globalBinariesComponentId, data, { siteId: siteIdRef.current,
       immediate: true,
       sourceId: editorInstanceId,
       localOnly: true,
@@ -1419,10 +1426,10 @@ export const CodeEditor = memo(function CodeEditor({
       // persist directly to IndexedDB
       if (scope === 'skript') {
         skriptImportsRef.current = { files: updatedFiles }
-        if (skriptId) userDataService.save(skriptId, 'python-imports', { files: updatedFiles }, { immediate: true, sourceId: editorInstanceId })
+        if (skriptId) userDataService.save(skriptId, 'python-imports', { files: updatedFiles }, { siteId: siteIdRef.current, immediate: true, sourceId: editorInstanceId })
       } else {
         globalImportsRef.current = { files: updatedFiles }
-        userDataService.save('__global__', 'python-imports', { files: updatedFiles }, { immediate: true, sourceId: editorInstanceId })
+        userDataService.save('__global__', 'python-imports', { files: updatedFiles }, { siteId: siteIdRef.current, immediate: true, sourceId: editorInstanceId })
       }
       return
     }
@@ -1451,7 +1458,7 @@ export const CodeEditor = memo(function CodeEditor({
     // Mirror the metadata-effect guard: never let a starter state overwrite a
     // restored real answer (both the local record and the exam server stream).
     if (restoredNonStarter.current && JSON.stringify(filesRef.current) === JSON.stringify(originalInitialFiles.current)) return
-    const savePromise = userDataService.save(pageId, componentId, data)
+    const savePromise = userDataService.save(pageId, componentId, data, { siteId: siteIdRef.current })
 
     // Exam crash-safety stream: push the just-saved record to the server via the
     // sync engine (the same debounced path useSyncedUserData/quiz answers use —
@@ -1465,7 +1472,7 @@ export const CodeEditor = memo(function CodeEditor({
         lastStreamedSigRef.current = sig
         void savePromise
           .then(async () => {
-            const record = await userDataService.get(pageId, componentId)
+            const record = await userDataService.get(pageId, componentId, { siteId: siteIdRef.current })
             if (record) {
               syncEngine.queueSync(componentId, pageId, sig, record.version, { immediate: false, siteId: record.siteId })
             }
@@ -5928,7 +5935,7 @@ export const CodeEditor = memo(function CodeEditor({
                       // then the main userData row. Orphan disappears from the
                       // list because detection runs against userData_history.
                       await userDataService.deleteAllVersions(pageId!, orphanId)
-                      await userDataService.delete(pageId!, orphanId)
+                      await userDataService.delete(pageId!, orphanId, { siteId: siteIdRef.current })
                       await refreshOrphans()
                     }}
                   />

@@ -86,6 +86,11 @@ export class UserDataService {
     return this.currentSiteId
   }
 
+  /** Explicit site if the caller passed one (even ''), else the global. */
+  private siteFor(siteId: string | null | undefined): string {
+    return siteId === undefined ? this.currentSiteId : (siteId ?? NO_SITE_ID)
+  }
+
   /**
    * Generate cache key for debounce timers and pub/sub (includes userId,
    * siteId + targeting)
@@ -173,6 +178,19 @@ export class UserDataService {
     })
   }
 
+  /** adoptLegacy for every legacy row of one page (all components/targets). */
+  public async adoptLegacyForPage(userId: string, siteId: string, pageId: string): Promise<number> {
+    if (!siteId || siteId === LEGACY_SITE_ID) return 0
+    const legacy = await db.siteUserData
+      .where('[userId+siteId+pageId]')
+      .equals([userId, LEGACY_SITE_ID, pageId])
+      .toArray()
+    for (const r of legacy) {
+      await this.adoptLegacy(userId, siteId, pageId, r.componentId, r.targetType, r.targetId)
+    }
+    return legacy.length
+  }
+
   /** Same as adoptLegacy for the local version history of one component. */
   private async adoptLegacyHistory(userId: string, siteId: string, pageId: string, componentId?: string): Promise<void> {
     if (!siteId || siteId === LEGACY_SITE_ID) return
@@ -195,6 +213,10 @@ export class UserDataService {
     options: {
       targetType?: 'class' | 'student' | 'page' | null
       targetId?: string | null
+      /** Explicit site (from the caller's CurrentSiteContext). Wins over the
+       *  global current site — bughunt #11/#24/#25: the global can be stale
+       *  during unmount or a discarded transition render. */
+      siteId?: string | null
     } = {}
   ): Promise<UserDataRecord<T> | null> {
     // Validate inputs to prevent IndexedDB DataError
@@ -204,7 +226,7 @@ export class UserDataService {
     }
 
     try {
-      const dbKey = this.getDbKey(pageId, componentId, options.targetType, options.targetId)
+      const dbKey = this.getDbKey(pageId, componentId, options.targetType, options.targetId, this.currentUserId, this.siteFor(options.siteId))
       if (!dbKey[1] || dbKey[1] === LEGACY_SITE_ID) {
         return ((await db.siteUserData.get(dbKey)) as UserDataRecord<T>) ?? null
       }
@@ -229,9 +251,10 @@ export class UserDataService {
       targetType?: 'class' | 'student' | 'page' | null
       targetId?: string | null
       id?: string // Caller's unique ID, so it can filter self-notifications
+      siteId?: string | null
     } = {}
   ): () => void {
-    const cacheKey = this.getCacheKey(pageId, componentId, options.targetType, options.targetId)
+    const cacheKey = this.getCacheKey(pageId, componentId, options.targetType, options.targetId, this.currentUserId, this.siteFor(options.siteId))
     if (!this.listeners.has(cacheKey)) {
       this.listeners.set(cacheKey, new Set())
     }
@@ -272,6 +295,8 @@ export class UserDataService {
       // Persists on the record so the flag survives reload. Once set, it sticks
       // unless an explicit save passes localOnly=false.
       localOnly?: boolean
+      /** Explicit site; wins over the global current site (see get()). */
+      siteId?: string | null
     } = {}
   ): Promise<void> {
     // Validate inputs to prevent IndexedDB DataError
@@ -281,7 +306,8 @@ export class UserDataService {
     }
 
     const { debounce = this.DEFAULT_DEBOUNCE, immediate = false, targetType, targetId, sourceId, localOnly } = options
-    const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
+    const siteForSave = this.siteFor(options.siteId)
+    const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId, this.currentUserId, siteForSave)
 
     // Capture the userId + siteId active right now; if the user changes
     // mid-debounce, setCurrentUser() awaits flush() and the replay below will
@@ -289,7 +315,7 @@ export class UserDataService {
     // switch (client navigation to another site): the pending save lands on
     // the site it was made on.
     const capturedUserId = this.currentUserId
-    const capturedSiteId = this.currentSiteId
+    const capturedSiteId = siteForSave
 
     // Clear existing timer if any
     const existing = this.saveTimers.get(cacheKey)
@@ -385,6 +411,7 @@ export class UserDataService {
     options: {
       targetType?: 'class' | 'student' | 'page' | null
       targetId?: string | null
+      siteId?: string | null
     } = {}
   ): Promise<void> {
     // Validate inputs to prevent IndexedDB DataError
@@ -395,7 +422,8 @@ export class UserDataService {
 
     try {
       const { targetType, targetId } = options
-      const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
+      const site = this.siteFor(options.siteId)
+      const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId, this.currentUserId, site)
 
       // Clear pending save timer if any
       const existing = this.saveTimers.get(cacheKey)
@@ -404,7 +432,7 @@ export class UserDataService {
         this.saveTimers.delete(cacheKey)
       }
 
-      const dbKey = this.getDbKey(pageId, componentId, targetType, targetId)
+      const dbKey = this.getDbKey(pageId, componentId, targetType, targetId, this.currentUserId, site)
       await db.siteUserData.delete(dbKey)
     } catch (error) {
       console.error('Failed to delete user data:', error)
@@ -432,6 +460,9 @@ export class UserDataService {
    */
   public async getComponentsForPage(pageId: string): Promise<string[]> {
     try {
+      // Bughunt #12: adopt this page's pre-site-scoping rows first, so callers
+      // that enumerate components (hand-in snapshots) see them too.
+      await this.adoptLegacyForPage(this.currentUserId, this.currentSiteId, pageId)
       const records = await db.siteUserData
         .where('[userId+siteId+pageId]')
         .equals([this.currentUserId, this.currentSiteId, pageId])

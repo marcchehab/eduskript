@@ -21,6 +21,7 @@ import { userDataService } from './userDataService'
 import { recordDeletions, removedCollectionIds } from './adapters'
 import { runOneTimeMigrationV2ToV3, migrateAnonymousIfNeeded, sweepLegacyTable } from './migrations'
 import { createLogger } from '@/lib/logger'
+import { useCurrentSite } from '@/contexts/current-site-context'
 
 const log = createLogger('userdata:provider')
 
@@ -234,6 +235,9 @@ export function useSyncedUserData<T>(
   isSynced: boolean
 } {
   const { isAuthenticated, isDbReady } = useUserDataContext()
+  // Site scoping: explicit site from this component's CurrentSiteContext for
+  // every service call (bughunt #11/#24/#25), not the global current site.
+  const siteId = useCurrentSite().siteId ?? ''
   const [data, setData] = useState<T | null>(initialData)
   const [isLoading, setIsLoading] = useState(true)
   const [isSynced, setIsSynced] = useState(true)
@@ -280,7 +284,7 @@ export function useSyncedUserData<T>(
         setIsLoading(true)
 
         // Always try to load from local IndexedDB first (includes targeting in key)
-        const localRecord = await userDataService.get<T>(pageId, componentId, { targetType, targetId })
+        const localRecord = await userDataService.get<T>(pageId, componentId, { targetType, targetId, siteId })
 
         // For broadcast mode (class/student/page), also check server and compare versions
         // This ensures we get the newest data regardless of which device saved it
@@ -288,7 +292,6 @@ export function useSyncedUserData<T>(
         if (isBroadcastMode) {
           try {
             // Site scoping: broadcasts are per site, like everything else.
-            const siteId = userDataService.getCurrentSite()
             const response = await fetch(
               `/api/user-data/${encodeURIComponent(componentId)}/${encodeURIComponent(pageId)}?targetType=${targetType}&targetId=${targetId}&siteId=${encodeURIComponent(siteId)}`
             )
@@ -305,6 +308,7 @@ export function useSyncedUserData<T>(
                   // Update local cache with server data if server is newer
                   if (serverVersion > localVersion) {
                     await userDataService.save(pageId, componentId, serverData.data, {
+                      siteId,
                       immediate: true,
                       targetType,
                       targetId
@@ -368,7 +372,7 @@ export function useSyncedUserData<T>(
     return () => {
       mounted = false
     }
-  }, [pageId, componentId, targetType, targetId, isBroadcastMode, isDbReady]) // Re-run when targeting changes or DB becomes ready
+  }, [pageId, componentId, targetType, targetId, isBroadcastMode, isDbReady, siteId]) // Re-run when targeting changes or DB becomes ready
 
   const updateData = useCallback(
     async (newData: T, updateOptions: UpdateDataOptions = {}) => {
@@ -412,6 +416,7 @@ export function useSyncedUserData<T>(
 
         // Save to IndexedDB (with targeting in key)
         await userDataService.save(pageId, componentId, newData, {
+          siteId,
           immediate: shouldSyncImmediately,
           targetType: effectiveTargetType ?? null,
           targetId: effectiveTargetId ?? null,
@@ -421,7 +426,9 @@ export function useSyncedUserData<T>(
         // Queue for cloud sync if authenticated, unless this record is local-only.
         // Local-only records (student-uploaded binaries) must never be pushed.
         if (isAuthenticated && !localOnly) {
+          // Same explicit site as the save (bughunt #25), not the global.
           const record = await userDataService.get(pageId, componentId, {
+            siteId,
             targetType: effectiveTargetType,
             targetId: effectiveTargetId
           })
@@ -450,7 +457,7 @@ export function useSyncedUserData<T>(
       }
     },
     // Note: isBroadcastMode is derived from targetType && targetId, so not needed in deps
-    [pageId, componentId, isAuthenticated, targetType, targetId, localOnly]
+    [pageId, componentId, isAuthenticated, targetType, targetId, localOnly, siteId]
   )
 
   return {

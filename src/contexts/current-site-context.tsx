@@ -80,17 +80,39 @@ export function ReportCurrentPageId({ pageId }: { pageId: string }) {
 /** Feeds the resolved siteId into the sync engine singleton — a plain
  *  imported module, not itself context-aware, so this is the one place
  *  that bridges React state into it. On unmount the user-data service drops
- *  back to "no site" so a later non-site route (dashboard) can't write into
- *  this site's records. */
+ *  back to "no site" (deferred, see mountedBridges) so a later non-site route
+ *  (dashboard) can't write into this site's records. */
+// How many bridges per site are mounted. The reset to "no site" on unmount
+// is deferred to a macrotask and skipped while another provider for the same
+// site is mounted (same-site route change remounts the provider): unmount
+// cleanups of the leaving tree (annotation-layer's final save) run AFTER
+// this bridge's cleanup and must still see the site (bughunt #11). Hooks pass
+// the site explicitly anyway (provider.tsx / hooks.ts); this guards the
+// remaining direct service callers.
+const mountedBridges = new Map<string, number>()
+
 function SyncEngineSiteBridge({ siteId }: { siteId: string | null }) {
   useEffect(() => {
+    const key = siteId ?? ''
+    mountedBridges.set(key, (mountedBridges.get(key) ?? 0) + 1)
     syncEngine.setSiteId(siteId)
     userDataService.setCurrentSite(siteId)
     return () => {
-      syncEngine.setSiteId(null)
-      if (userDataService.getCurrentSite() === (siteId ?? '')) userDataService.setCurrentSite(null)
+      mountedBridges.set(key, (mountedBridges.get(key) ?? 1) - 1)
+      setTimeout(() => {
+        if ((mountedBridges.get(key) ?? 0) > 0) return
+        if (userDataService.getCurrentSite() !== key) return
+        syncEngine.setSiteId(null)
+        userDataService.setCurrentSite(null)
+      }, 0)
     }
   }, [siteId])
+  // Re-assert the site after every commit of this (visible) tree: a render of
+  // another site's provider that React discarded or suspended may have set
+  // the global during render (bughunt #24).
+  useEffect(() => {
+    if (userDataService.getCurrentSite() !== (siteId ?? '')) userDataService.setCurrentSite(siteId)
+  })
   return null
 }
 

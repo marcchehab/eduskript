@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { userDataService } from './userDataService'
 import { useUserDataContext } from './provider'
+import { useCurrentSite } from '@/contexts/current-site-context'
 import type { UseUserDataResult, SaveOptions, VersionSummary, CreateVersionOptions, UserDataVersion } from './types'
 
 /**
@@ -32,6 +33,9 @@ export function useUserData<T>(
   initialData: T | null = null
 ): UseUserDataResult<T> {
   const { isDbReady } = useUserDataContext()
+  // Site scoping: the site this component renders on, passed explicitly to
+  // every service call (bughunt #11/#24) — constant for a mounted component.
+  const siteId = useCurrentSite().siteId ?? ''
   const [data, setData] = useState<T | null>(initialData)
   const [isLoading, setIsLoading] = useState(true)
   const [isSynced, setIsSynced] = useState(true)
@@ -50,7 +54,7 @@ export function useUserData<T>(
     const loadData = async () => {
       try {
         setIsLoading(true)
-        const record = await userDataService.get<T>(pageId, componentId)
+        const record = await userDataService.get<T>(pageId, componentId, { siteId })
 
         if (isMountedRef.current) {
           if (record) {
@@ -80,7 +84,7 @@ export function useUserData<T>(
     return () => {
       isMountedRef.current = false
     }
-  }, [pageId, componentId, initialData, isDbReady])
+  }, [pageId, componentId, initialData, isDbReady, siteId])
 
   /**
    * Update user data with optional debouncing
@@ -93,7 +97,7 @@ export function useUserData<T>(
         setIsSynced(false)
 
         // Save to IndexedDB (debounced by default)
-        await userDataService.save(pageId, componentId, newData, options)
+        await userDataService.save(pageId, componentId, newData, { ...options, siteId })
 
         if (isMountedRef.current) {
           setLastUpdated(Date.now())
@@ -104,7 +108,7 @@ export function useUserData<T>(
         throw error
       }
     },
-    [pageId, componentId]
+    [pageId, componentId, siteId]
   )
 
   /**
@@ -112,7 +116,7 @@ export function useUserData<T>(
    */
   const deleteData = useCallback(async () => {
     try {
-      await userDataService.delete(pageId, componentId)
+      await userDataService.delete(pageId, componentId, { siteId })
 
       if (isMountedRef.current) {
         setData(initialData)
@@ -123,7 +127,7 @@ export function useUserData<T>(
       console.error('Failed to delete user data:', error)
       throw error
     }
-  }, [pageId, componentId, initialData])
+  }, [pageId, componentId, initialData, siteId])
 
   return {
     data,
