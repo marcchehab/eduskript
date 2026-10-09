@@ -68,6 +68,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       select: {
         teacherId: true,
         isImplicit: true,
+        implicitPageId: true,
       },
     })
 
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 })
     }
 
-    const denied = await checkClassSiteRead(session.user.id, classRecord, siteId)
+    const denied = await checkClassSiteRead(session.user.id, classRecord, siteId, pageId)
     if (denied) return denied
 
     // Get all members of the class

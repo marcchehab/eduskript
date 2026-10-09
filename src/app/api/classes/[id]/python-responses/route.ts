@@ -45,13 +45,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const siteId = searchParams.get('siteId')
     const classRecord = await prisma.class.findUnique({
       where: { id: classId },
-      select: { teacherId: true, isImplicit: true }
+      select: { teacherId: true, isImplicit: true, implicitPageId: true }
     })
 
     if (!classRecord) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 })
     }
-    const denied = await checkClassSiteRead(session.user.id, classRecord, siteId)
+    const denied = await checkClassSiteRead(session.user.id, classRecord, siteId, pageId)
     if (denied) return denied
 
     // All class members

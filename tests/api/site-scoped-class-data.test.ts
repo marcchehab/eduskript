@@ -78,7 +78,7 @@ beforeEach(() => {
     where.id === 'class-a'
       ? { teacherId: 'teacher-a', isImplicit: false }
       : where.id === 'survey-class'
-        ? { teacherId: null, isImplicit: true }
+        ? { teacherId: null, isImplicit: true, implicitPageId: 'page-1' }
         : null,
   )
   p.classMembership.findMany.mockResolvedValue([
@@ -89,7 +89,7 @@ beforeEach(() => {
     identityConsent: false,
   })
   p.userData.findMany.mockResolvedValue([])
-  // page-1 lives in skript-1, placed on site-a only (root layout item).
+  // page-1 lives in skript-1, placed on site-a and the org site (root items).
   p.page.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
     where.id === 'page-1'
       ? { skriptId: 'skript-1', content: '<survey><Question id="q1"></Question></survey>', implicitSurveyClass: { id: 'survey-class', memberships: [] } }
@@ -97,7 +97,7 @@ beforeEach(() => {
   )
   p.collectionSkript.count.mockResolvedValue(0)
   p.pageLayout.findUnique.mockImplementation(async ({ where }: { where: { siteId: string } }) =>
-    where.siteId === 'site-a' ? { items: [{ type: 'skript', contentId: 'skript-1' }] } : { items: [] },
+    where.siteId === 'site-a' || where.siteId === 'site-org' ? { items: [{ type: 'skript', contentId: 'skript-1' }] } : { items: [] },
   )
   p.$transaction.mockImplementation(async (ops: unknown[]) => Promise.all(ops))
   p.userDataCheckpoint.create.mockImplementation(async (args: { data: unknown }) => ({ id: 'cp-1', ...(args.data as object) }))
@@ -143,6 +143,15 @@ describe('class responses are isolated per site', () => {
     )
     expect(res.status).toBe(200)
     expect(p.userData.findMany.mock.calls[0][0].where.siteId).toBe('site-a')
+  })
+
+  it('implicit survey class is bound to its own page (bughunt #35)', async () => {
+    asUser('admin-1')
+    const res = await quizResponses(
+      req('/api/classes/survey-class/quiz-responses?pageId=other-page&componentId=quiz-q1&siteId=site-org'),
+      { params: Promise.resolve({ id: 'survey-class' }) },
+    )
+    expect(res.status).toBe(403)
   })
 
   it('implicit survey class: org admin may read the org site, plain member may not', async () => {

@@ -6,17 +6,20 @@
  * must manage it, and every user_data / checkpoint row is filtered by it.
  *   - Regular class: caller is the class teacher AND owns the (personal) site.
  *     Classes don't exist on org sites, so org admins never pass here.
- *   - Implicit survey class (Class.isImplicit): caller manages the site
- *     (personal owner or org owner/admin). Page authorship grants nothing.
+ *   - Implicit survey class (Class.isImplicit): the class must belong to the
+ *     requested page (implicitPageId === pageId), that page must be placed on
+ *     the site, and the caller manages the site (personal owner or org
+ *     owner/admin) — bughunt #35. Page authorship grants nothing.
  * No superadmin bypass anywhere.
  */
 
 import { NextResponse } from 'next/server'
-import { getSiteAccess } from '@/lib/site-access'
+import { getSiteAccess, isItemPlacedOnSite } from '@/lib/site-access'
 
 export interface ClassAuthRecord {
   teacherId: string | null
   isImplicit: boolean
+  implicitPageId?: string | null
 }
 
 /** null when allowed; otherwise the error response to return. */
@@ -24,13 +27,17 @@ export async function checkClassSiteRead(
   userId: string,
   classRecord: ClassAuthRecord,
   siteId: string | null | undefined,
+  pageId: string,
 ): Promise<NextResponse | null> {
   if (!siteId) {
     return NextResponse.json({ error: 'Missing required parameter: siteId' }, { status: 400 })
   }
   const access = await getSiteAccess(userId, siteId)
   const allowed = classRecord.isImplicit
-    ? !!access?.canManage
+    ? !!access?.canManage &&
+      !!classRecord.implicitPageId &&
+      classRecord.implicitPageId === pageId &&
+      (await isItemPlacedOnSite(pageId, siteId))
     : classRecord.teacherId === userId && !!access?.isOwner
   if (!allowed) {
     return NextResponse.json(
