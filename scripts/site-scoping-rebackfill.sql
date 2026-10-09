@@ -1,65 +1,11 @@
-/*
-  Warnings:
-
-  - A unique constraint covering the columns `[page_id,student_id,component_id,source,site_id]` on the table `component_scores` will be added. If there are existing duplicate values, this will fail.
-  - A unique constraint covering the columns `[page_id,student_id,site_id]` on the table `exam_submissions` will be added. If there are existing duplicate values, this will fail.
-  - A unique constraint covering the columns `[user_id,site_id,adapter,item_id,target_type,target_id]` on the table `user_data` will be added. If there are existing duplicate values, this will fail.
-
-*/
--- DropIndex
-DROP INDEX "component_scores_page_id_student_id_component_id_source_key";
-
--- DropIndex
-DROP INDEX "exam_submissions_page_id_student_id_key";
-
--- DropIndex
-DROP INDEX "user_data_user_id_adapter_item_id_target_type_target_id_key";
-
--- AlterTable
-ALTER TABLE "component_scores" ADD COLUMN     "site_id" TEXT NOT NULL DEFAULT '';
-
--- AlterTable
-ALTER TABLE "exam_audit_logs" ADD COLUMN     "site_id" TEXT NOT NULL DEFAULT '';
-
--- AlterTable
-ALTER TABLE "exam_sessions" ADD COLUMN     "site_id" TEXT NOT NULL DEFAULT '';
-
--- AlterTable
-ALTER TABLE "exam_states" ADD COLUMN     "site_id" TEXT NOT NULL DEFAULT '';
-
--- AlterTable
-ALTER TABLE "exam_submissions" ADD COLUMN     "site_id" TEXT NOT NULL DEFAULT '';
-
--- AlterTable
-ALTER TABLE "user_data" ADD COLUMN     "site_id" TEXT NOT NULL DEFAULT '';
-
--- AlterTable
-ALTER TABLE "user_data_checkpoints" ADD COLUMN     "site_id" TEXT NOT NULL DEFAULT '';
-
--- CreateIndex
-CREATE INDEX "component_scores_page_id_site_id_idx" ON "component_scores"("page_id", "site_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "component_scores_page_id_student_id_component_id_source_sit_key" ON "component_scores"("page_id", "student_id", "component_id", "source", "site_id");
-
--- CreateIndex
-CREATE INDEX "exam_audit_logs_page_id_site_id_student_id_occurred_at_idx" ON "exam_audit_logs"("page_id", "site_id", "student_id", "occurred_at");
-
--- CreateIndex
-CREATE INDEX "exam_submissions_site_id_idx" ON "exam_submissions"("site_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "exam_submissions_page_id_student_id_site_id_key" ON "exam_submissions"("page_id", "student_id", "site_id");
-
--- CreateIndex
-CREATE INDEX "user_data_site_id_item_id_idx" ON "user_data"("site_id", "item_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "user_data_user_id_site_id_adapter_item_id_target_type_targe_key" ON "user_data"("user_id", "site_id", "adapter", "item_id", "target_type", "target_id");
-
--- CreateIndex
-CREATE INDEX "user_data_checkpoints_site_id_page_id_idx" ON "user_data_checkpoints"("site_id", "page_id");
-
+-- Post-deploy re-run of the site-scoping backfill (bughunt #10).
+-- Rows written by the OLD container during the rolling deploy have
+-- site_id = ''. This assigns them exactly like the migration did and touches
+-- only rows with site_id = '' (idempotent). Run once after the new container
+-- is serving:
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/site-scoping-rebackfill.sql
+-- Keep in sync with prisma/migrations/20261008222107_site_scoping/migration.sql.
+BEGIN;
 -- ===========================================================================
 -- Data migration (appended by hand to the generated migration, see
 -- SITE-SCOPING.md): assign every existing presentation row the site its
@@ -222,3 +168,5 @@ UPDATE exam_sessions t SET site_id = COALESCE(pg_temp.site_scoping_pick_exam(p.i
 DROP FUNCTION pg_temp.site_scoping_pick_exam(text, text, text);
 DROP FUNCTION pg_temp.site_scoping_pick(text, text);
 DROP TABLE _skript_sites;
+
+COMMIT;
