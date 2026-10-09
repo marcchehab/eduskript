@@ -63,8 +63,10 @@ describe('Dexie v1 → v2 upgrade (site scoping)', () => {
     expect(unsynced.data).toEqual({ files: [{ name: 'main.py', content: 'print(42)' }] })
     expect(rows.find(r => r.componentId === 'annotations')!.localOnly).toBe(true)
 
-    // Old table untouched (safety copy).
-    expect(await v2.userData.count()).toBe(3)
+    // Old table keeps the regular rows (safety copy); the localOnly binary
+    // row was MOVED, not doubled (bughunt #26).
+    expect(await v2.userData.count()).toBe(2)
+    expect((await v2.userData.toArray()).some(r => r.localOnly)).toBe(false)
     // History rows are stamped legacy, not dropped.
     const hist = await v2.userData_history.toArray()
     expect(hist).toHaveLength(1)

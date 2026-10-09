@@ -10,8 +10,12 @@
  * SITE it was produced on (src/lib/site-access.ts). Dexie can't change a
  * table's primary key in place, so version 2 adds a NEW table `siteUserData`
  * whose key includes `siteId`, and the upgrade copies every existing
- * `userData` row into it with `siteId = LEGACY_SITE_ID` — nothing is deleted:
- * the old `userData` table stays declared and untouched as a fallback copy.
+ * `userData` row into it with `siteId = LEGACY_SITE_ID`. Synced/regular rows
+ * stay in the old `userData` table too (fallback copy; tabs still on old code
+ * keep writing there — see sweepLegacyTable). localOnly rows (binaries) are
+ * MOVED instead, to avoid doubling their storage (bughunt #26). If the copy
+ * fails (e.g. quota), the versionchange transaction aborts and v1 is left
+ * exactly as it was; the service then logs errors instead of saving.
  * Legacy rows are adopted by the first site that reads them (see
  * userDataService.adoptLegacy), which mirrors the server data migration
  * (each row → the one site its skript is placed on).
@@ -84,6 +88,11 @@ export class UserDataDatabase extends Dexie {
         // pushed once a site adopts it.
         await target.put({ ...r, siteId: LEGACY_SITE_ID })
       }
+      // Bughunt #26: localOnly records (student-uploaded binaries — the big
+      // ones) are MOVED, not copied, so the upgrade doesn't double their
+      // storage. They never sync, so the old table's copy would only be a
+      // duplicate; the move happens in this same versionchange transaction.
+      await tx.table('userData').filter((r: LegacyUserDataRecord) => !!r.localOnly).delete()
       await tx.table('userData_history').toCollection().modify((v: UserDataVersion) => {
         if (!v.siteId) v.siteId = LEGACY_SITE_ID
       })
