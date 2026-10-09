@@ -91,7 +91,27 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
     GROUP BY 2
    ORDER BY 1, 3 DESC;
    ```
-   Multi-placed skripts that hold data (expected: none on prod; any row here gets the deterministic pick described in the migration header — see bughunt #18/#20 for the org-vs-personal case that needs a decision):
+   Rows that will be DUPLICATED onto an org site and an org admin's personal site (owner decision, bughunt #18/#20): public-layer rows for any such double placement, all student data when the org layout references the admin's collection (rule c). Expected small; the post-check totals grow by exactly these counts:
+   ```sql
+   WITH ss AS (
+     SELECT pli.content_id AS skript_id, pl.site_id FROM page_layout_items pli JOIN page_layouts pl ON pl.id = pli.page_layout_id WHERE pli.type = 'skript'
+     UNION SELECT cs."skriptId", c.site_id FROM collection_skripts cs JOIN collections c ON c.id = cs."collectionId"
+     UNION SELECT cs."skriptId", pl.site_id FROM page_layout_items pli JOIN page_layouts pl ON pl.id = pli.page_layout_id JOIN collection_skripts cs ON cs."collectionId" = pli.content_id WHERE pli.type = 'collection'
+   ), pairs AS (
+     SELECT DISTINCT so.skript_id, so.site_id AS org_site, sp.site_id AS personal_site,
+       EXISTS (SELECT 1 FROM page_layout_items pli JOIN page_layouts pl ON pl.id = pli.page_layout_id
+                 JOIN collections c ON c.id = pli.content_id JOIN collection_skripts cs ON cs."collectionId" = c.id
+                WHERE pli.type = 'collection' AND pl.site_id = so.site_id AND c.site_id = sp.site_id AND cs."skriptId" = so.skript_id) AS rule_c
+       FROM ss so JOIN sites o ON o.id = so.site_id AND o.organization_id IS NOT NULL
+       JOIN ss sp ON sp.skript_id = so.skript_id JOIN sites p ON p.id = sp.site_id AND p.user_id IS NOT NULL
+      WHERE EXISTS (SELECT 1 FROM organization_members m WHERE m.organization_id = o.organization_id AND m.user_id = p.user_id AND m.role IN ('owner','admin'))
+   )
+   SELECT pr.skript_id, pr.rule_c,
+     (SELECT count(*) FROM user_data ud JOIN pages pg ON pg.id = ud.item_id WHERE pg."skriptId" = pr.skript_id AND (ud.target_type = 'page' OR pr.rule_c)) AS user_data_copies,
+     (SELECT count(*) FROM exam_submissions e JOIN pages pg ON pg.id = e.page_id WHERE pg."skriptId" = pr.skript_id AND pr.rule_c) AS submission_copies
+   FROM pairs pr;
+   ```
+   Multi-placed skripts that hold data (expected: none on prod; rows here get the deterministic pick described in the migration header, plus the duplication above where it applies):
    ```sql
    WITH ss AS (
      SELECT pli.content_id AS skript_id, pl.site_id FROM page_layout_items pli JOIN page_layouts pl ON pl.id = pli.page_layout_id WHERE pli.type = 'skript'
@@ -111,7 +131,7 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
    ```
    Any check-run/score a teacher or student triggered during the overlap must be redone (the old container's write failed).
 4. Post-checks:
-   1. Same totals as step 2 (the migration only adds columns/updates).
+   1. Same totals as step 2, plus exactly the duplicate counts from the #18/#20 pre-check (the migration only adds columns, updates, and inserts those copies).
    2. Distribution:
       ```sql
       SELECT 'user_data' t, COALESCE(s.slug, '(none)') site, count(*) FROM user_data x LEFT JOIN sites s ON s.id = x.site_id GROUP BY 2
@@ -128,7 +148,7 @@ Branch `site-scoping`. Implements Marc's model of 2026-10-09: content belongs to
 5. Clients: the new JS upgrades IndexedDB on first load (no user action). Old tabs keep running old code until reload; their sync calls without `siteId` get 409 for the whole batch, so the old client keeps the data unsynced in its v1 table; after a reload the new code sweeps it into `siteUserData` and pushes it (#2) — nothing is lost.
 6. Rollback: restore the dump (`pg_restore --clean --if-exists -d "$DATABASE_URL" pre-site-scoping-*.dump`) and redeploy the previous image. Writes made after the deploy are lost by a restore. Do NOT tell users to clear site data (that would delete unsynced work, #22): old code reopens the v2 IndexedDB (Dexie retries with the installed version) and reads the old `userData` table, which still holds the pre-upgrade rows; edits made while on the new code live in `siteUserData` and are invisible to the old code until it is redeployed (they are not deleted).
 
-Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6 public-layer), eduadmin 17, marc 17, `(none)` 33 (15 public-layer rows of deleted/orphan pages, 8 `onboarding-quest/global`, rest orphans); exam_submissions 5 → teacher; exam_states 2 → teacher; checkpoints 54 (4 `(none)`). `mop7-skript` is placed on `marc` and `eduadmin` and has 32 rows → split by the owner/class heuristic. Re-verified after the bughunt migration changes (copy restored from the pre-migration dump and re-migrated): identical counts; the re-backfill script is a no-op on the result; a rolled-back scenario confirmed #9 (co-author's own row → `''`) and #21 (exam submission follows the ExamState's site).
+Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6 public-layer), eduadmin 17, marc 17, `(none)` 33 (15 public-layer rows of deleted/orphan pages, 8 `onboarding-quest/global`, rest orphans); exam_submissions 5 → teacher; exam_states 2 → teacher; checkpoints 54 (4 `(none)`). `mop7-skript` is placed on `marc` and `eduadmin` and has 32 rows → split by the owner/class heuristic. Re-verified after the bughunt migration changes (copy restored from the pre-migration dump and re-migrated): identical counts; the re-backfill script is a no-op on the result; a rolled-back scenario confirmed #9 (co-author's own row → `''`) and #21 (exam submission follows the ExamState's site). After the #18/#20 duplication (e436a00e): restore + re-migrate again gave the same totals (user_data 104, checkpoints 58, submissions 5 — the dev copy has no org + admin-personal double placement), and a rolled-back scenario (rule-c skript + a double-root skript) produced 2 copies per student-data row for rule c, public-layer-only copies otherwise, and identical counts on a second run (idempotent).
 
 ## 6. Known gaps / risks
 
@@ -165,13 +185,13 @@ Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6
 2. Client upgrade path: `src/lib/userdata/schema.ts` (Dexie v2), `userDataService.adoptLegacy`, and the render-time `setCurrentSite` in `current-site-context.tsx` — highest risk for student data.
 3. Exam scope semantics (`src/lib/scoring/site-scope.ts`): one site per student in grading, `classId='all'` including non-class submitters; grade key/rubric writes by authors only, reads by authors + placing-site managers.
 4. Rule-3 placement: any skript with a SkriptAuthor row (author/viewer) may be placed; collection-add was previously unchecked and is now gated — check the site builder UX with a viewer skript.
-5. Bughunt decisions needed: #18/#20 (see section 9).
+5. The #18/#20 duplication block in the migration (rows copied onto org site + admin personal site).
 5. Decisions in section 4 (no FK on `site_id`, collection-owned = placed, per-site "global" client data) and gaps 1, 5, 10 in section 6.
 
 
 ## 9. Bughunt (Schwarm, 2026-10-09)
 
-5 Finder (Modell, Migration, Client, Berechtigungen, Rendering), je ein adversarialer Prüfer. 46 Befunde, 45 bestätigt (Schweregrad nach Prüfer), 1 widerlegt. Stand 2026-10-09: 43 gefixt, 2 brauchen eine Entscheidung (#18, #20) — siehe Status je Befund.
+5 Finder (Modell, Migration, Client, Berechtigungen, Rendering), je ein adversarialer Prüfer. 46 Befunde, 45 bestätigt (Schweregrad nach Prüfer), 1 widerlegt. Stand 2026-10-09: alle 45 gefixt (#18/#20 nach Entscheid des Owners: Duplikat auf beide Sites) — siehe Status je Befund.
 
 ### Bestätigt
 
@@ -228,13 +248,13 @@ Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6
    - **Status: fixed in fe2912df**
 18. **[low] Migration assigns org-site public-layer rows to the admin's personal site when the skript is placed on both** — `prisma/migrations/20261008222107_site_scoping/migration.sql:104` (Regel 2, model)
    - Prüfer: Confirmed in the code. site_scoping_pick ranks `s.user_id = p_user_id` as 0, and org sites have user_id NULL so they fall to rank 2. The user_data UPDATE does not distinguish targetType='page' rows. The scenario is narrow: SITE-SCOPING.md:71 expects no multi-placed skripts with data on prod and provides a check query. Severity lowered.
-   - **Status: not fixed: owner decision — when a skript is placed on BOTH an org site and an org admin's personal site, which site should pre-migration public-layer rows get (org or personal)? The pre-check query lists the affected skripts; prod is expected to have none.**
+   - **Status: fixed in e436a00e (owner decision: duplicate onto both sites)**
 19. **[low] Teacher sitemap still lists authored skripts, not placed ones** — `src/app/sitemap.ts:144` (Regel 4, model)
    - Prüfer: Confirmed. sitemap.ts:139-145 getTeacherEntries lists every published skript the user authors under that host, with no placement check. Under rule 4 unplaced ones 404, and skripts placed through viewer access are left out.
    - **Status: fixed in b3fe5fda**
 20. **[low] Org setups using rule (c): all org-route data moves to the admin's personal site** — `prisma/migrations/20261008222107_site_scoping/migration.sql:104` (Regel 6, migration)
    - Prüfer: The mechanics are right. Rule (b) at lines 86-88 places the skript on the collection's own (personal) site, and rule (c) at lines 90-94 also places it on the org site. Tier 0 then picks the admin's personal site. Tier 1 requires `s.user_id IS NOT NULL`, which an org site never satisfies, so class members also go to the personal site. Lowered to low: these skripts are multi-placed, so the step-2 pre-check query does list them before the migration runs (the doc expects none on prod). The finding's
-   - **Status: not fixed: owner decision — for org layouts that reference an admin's personal collection (placement rule c), should pre-migration student data go to the org site or the admin's personal site? The old code did not record which route was used; the pre-check lists these (multi-placed) skripts.**
+   - **Status: fixed in e436a00e (owner decision: duplicate onto both sites)**
 21. **[low] Tier 1 can split one student's exam data from that class's exam assignment** — `prisma/migrations/20261008222107_site_scoping/migration.sql:105` (Regel 8, migration)
    - Prüfer: Confirmed from code. exam_states use tier 0 on c.teacher_id (line 150). exam_submissions, component_scores, audit logs and sessions (lines 137-147) use tier 1 on the student, picking the oldest site among any class teachers who placed the skript. A student in classes of two teachers who both placed the skript can land on a different site than the ExamState. This only happens with multi-placed skripts, which the pre-check lists, hence low.
    - **Status: fixed in 90a6964f**
