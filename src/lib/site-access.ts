@@ -99,6 +99,27 @@ export async function getManagedSiteIds(userId: string): Promise<string[]> {
   return sites.map(s => s.id)
 }
 
+/**
+ * The users who manage a site (personal owner, or org owner/admins). Public
+ * layer readers only show rows written by them (bughunt #30): a row on the
+ * site written by anyone else (e.g. assigned there by the data migration) is
+ * not part of the site's public layer.
+ */
+export async function getSiteManagerIds(siteId: string): Promise<string[]> {
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: {
+      userId: true,
+      organization: { select: { members: { where: { role: { in: MANAGER_ROLES } }, select: { userId: true } } } },
+    },
+  })
+  if (!site) return []
+  return [
+    ...(site.userId ? [site.userId] : []),
+    ...(site.organization?.members.map(m => m.userId) ?? []),
+  ]
+}
+
 /** Personal sites `userId` owns (class-toolbar sites). */
 export async function getOwnedSiteIds(userId: string): Promise<string[]> {
   const sites = await prisma.site.findMany({ where: { userId }, select: { id: true } })

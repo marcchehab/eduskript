@@ -21,6 +21,7 @@
 import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { getSiteManagerIds } from '@/lib/site-access'
 import type { PublicAnnotation, PublicSnap } from '@/components/public/annotation-wrapper'
 import type { StickyNote, StickyNotesData } from '@/components/annotations/sticky-notes-layer'
 
@@ -38,17 +39,24 @@ export const EMPTY_PUBLIC_LAYERS: PublicLayers = {
 }
 
 async function fetchPublicLayers(pageId: string, siteId: string): Promise<PublicLayers> {
+  // Only rows written by the site's managers are its public layer (bughunt
+  // #30). Manager changes are rare; a change shows after the next public
+  // layer write (tag) — documented limitation of the cache.
+  const managerIds = await getSiteManagerIds(siteId)
+  if (managerIds.length === 0) return EMPTY_PUBLIC_LAYERS
+  const userId = { in: managerIds }
   const [publicAnnotations, publicSnaps, stickyRecord] = await Promise.all([
     prisma.userData.findMany({
-      where: { adapter: 'annotations', itemId: pageId, targetType: 'page', siteId },
+      where: { adapter: 'annotations', itemId: pageId, targetType: 'page', siteId, userId },
       select: { data: true, userId: true, user: { select: { name: true } } },
     }),
     prisma.userData.findMany({
-      where: { adapter: 'snaps', itemId: pageId, targetType: 'page', siteId },
+      where: { adapter: 'snaps', itemId: pageId, targetType: 'page', siteId, userId },
       select: { data: true, userId: true, user: { select: { name: true } } },
     }),
     prisma.userData.findFirst({
-      where: { adapter: 'sticky-notes', itemId: pageId, targetType: 'page', siteId },
+      where: { adapter: 'sticky-notes', itemId: pageId, targetType: 'page', siteId, userId },
+      orderBy: { createdAt: 'asc' },
       select: { data: true },
     }),
   ])

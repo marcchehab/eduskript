@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getSiteManagerIds } from '@/lib/site-access'
 
 interface RouteParams {
   params: Promise<{
@@ -38,13 +39,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // caller's own row wins (a site manager editing their public layer must
     // continue from THEIR row, not a co-manager's); else the site's first row.
     if (targetType === 'page') {
+      // Only a real site has a public layer: '' (unplaced/orphaned rows) never
+      // does (bughunt #34). Only rows written by the site's managers count
+      // (bughunt #30).
+      const managerIds = siteId ? await getSiteManagerIds(siteId) : []
       const session = await getServerSession(authOptions)
-      const where = { adapter, itemId: decodedItemId, targetType: 'page', siteId }
-      const item =
-        (session?.user?.id
-          ? await prisma.userData.findFirst({ where: { ...where, userId: session.user.id } })
-          : null) ??
-        await prisma.userData.findFirst({ where, orderBy: { createdAt: 'asc' } })
+      const where = { adapter, itemId: decodedItemId, targetType: 'page', siteId, userId: { in: managerIds } }
+      const item = managerIds.length === 0
+        ? null
+        : (session?.user?.id && managerIds.includes(session.user.id)
+            ? await prisma.userData.findFirst({ where: { ...where, userId: session.user.id } })
+            : null) ??
+          await prisma.userData.findFirst({ where, orderBy: { createdAt: 'asc' } })
 
       if (!item) {
         return NextResponse.json({
@@ -128,13 +134,17 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'siteId is required' }, { status: 400 })
     }
 
-    // Delete the caller's item on that site if it exists
+    // Delete the caller's PERSONAL item on that site if it exists. Targeted
+    // rows (public layer, class/student broadcasts) are not deletable here:
+    // they are ISR-cached / pushed via SSE and go through /api/user-data/sync
+    // (bughunt #45).
     await prisma.userData.deleteMany({
       where: {
         userId,
         siteId,
         adapter,
         itemId: decodedItemId,
+        targetType: null,
       },
     })
 
