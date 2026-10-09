@@ -94,15 +94,17 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     : undefined
 
   if (sebToken && isSEBRequest(headersList)) {
-    authenticatedUserId = await validateExamToken(sebToken, page.id)
+    // Validate WITHOUT consuming: start-session consumes the token itself and
+    // derives the user from it. The user id is never passed in the URL
+    // (bughunt #40: start-session used to trust a userId query param).
+    authenticatedUserId = await validateExamToken(sebToken, page.id, false)
     if (authenticatedUserId) {
       authenticatedViaToken = true
       // Server Components can't set cookies, so hand off to the start-session
       // API which sets the exam_session cookie and redirects back here
       // without seb_token.
       const startSessionUrl = `/api/exams/${page.id}/start-session?` +
-        `userId=${encodeURIComponent(authenticatedUserId)}&` +
-        `skriptId=${encodeURIComponent(skript.id)}&` +
+        `token=${encodeURIComponent(sebToken)}&` +
         `siteId=${encodeURIComponent(siteId)}&` +
         `returnUrl=${encodeURIComponent(currentUrl)}`
       redirect(startSessionUrl)
