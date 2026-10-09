@@ -334,3 +334,13 @@ Dev-copy verification (`eduskript_sitescope`, 104 user_data rows): teacher 37 (6
 ### Widerlegt
 
 - Backfill holds ACCESS EXCLUSIVE locks and calls an unindexed per-row function inside a 240s deploy timeout — Speculative. Locks are held only for the migration's runtime. _skript_sites has one row per placement (small), so each per-row call scans a small table. There is no evidence that prod row counts would push the runtime anywhere near 240s. The P3009 outcome needs the timeout to actually be exceeded, a
+
+## 10. Probelauf mit Prod-Daten (2026-10-09)
+
+Dump von prod (2026-10-09 09:55, `~/eduskript-backups/eduskript-prod-20261009.dump`) in lokales Postgres 18 (`eduskript-pg18-migtest`, :5441, DB `eduskript_migtest`) restauriert, `prisma migrate deploy` ausgeführt (Laufzeit ca. 2.5 s).
+
+1. Summen vorher → nachher: user_data 22347 → 22424 (+77 Kopien #18/#20, wie vom Pre-Check vorhergesagt), exam_submissions 192 → 193 (+1, vorhergesagt), exam_audit_logs 464 → 466, user_data_checkpoints 22840 → 22887 (+47 Kopien, der Pre-Check zählt Checkpoints nicht), component_scores/exam_states/exam_sessions unverändert.
+2. Mehrfach platziert mit Daten (anders als früher angenommen): `programmieren-1` (informatikgarten + ron, 256 Zeilen) → alle auf informatikgarten. `beispiele`, `getting-started`, `erste-schritte` ebenfalls mehrfach platziert.
+3. Ohne Site (`''`): 217 user_data-Zeilen = 157 gelöschte Seiten (14 Nutzer), 12 `global`, 48 auf existierenden Seiten (3 Nutzer): sonstiges 26, erste-schritte 10 (Co-Autor-Slug), demo-welcome-* 8, test 4. Checkpoints ohne Site: 35.
+4. `scripts/site-scoping-rebackfill.sql` danach: keine Änderung (idempotent).
+5. Nicht getestet: App gegen diese DB starten und durchklicken.
