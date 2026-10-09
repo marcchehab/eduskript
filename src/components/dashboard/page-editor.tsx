@@ -109,7 +109,7 @@ interface PageEditorProps {
   /** Skript is on some site's page (directly or via a collection); see edit/page.tsx. */
   placed: boolean
   /** Site the skript is shown on (placement, else its collection's site); null if neither. */
-  site: { id: string; slug: string; organizationId: string | null } | null
+  site: { id: string; slug: string; organizationId: string | null; ownedByViewer?: boolean } | null
   /** Latest PageVersion number the initial content corresponds to (stale-save guard). */
   baseVersion: number
   /** Front-page mode: edit the skript's front page in this editor (see
@@ -372,6 +372,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // truth — see lib/exam-state). One request per class; teachers have few.
   const loadExamStates = useCallback(async () => {
     if (pageType !== 'exam' || teacherClasses.length === 0) return
+    // Exam assignments live on the viewer's OWN placing site (bughunt #8);
+    // without one there is nothing to show or set here.
+    if (!site?.ownedByViewer) return
     const entries = await Promise.all(
       teacherClasses.map(async (cls): Promise<[string, ExamLifecycleState]> => {
         try {
@@ -396,6 +399,10 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // control entry. Optimistic, reverts on failure.
   const handleExamStateChange = async (classId: string, state: ExamLifecycleState) => {
     const prev = examStates[classId] ?? 'hidden'
+    if (!site?.ownedByViewer) {
+      console.error('Exam state: this skript is not placed on one of your sites')
+      return
+    }
     setExamStates(s => ({ ...s, [classId]: state }))
     try {
       const r = await fetch(`/api/exams/${page.id}/state`, {

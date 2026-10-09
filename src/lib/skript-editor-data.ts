@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { getPlacementSiteIdsForSkript } from '@/lib/site-access'
 import { checkSkriptPermissions } from '@/lib/permissions'
 
 /**
@@ -67,18 +68,32 @@ export async function loadSkriptForEditor(skriptSlug: string, userId: string, is
         ...(collectionIds.length ? [{ type: 'collection', contentId: { in: collectionIds } }] : []),
       ],
     },
-    select: { pageLayout: { select: { site: { select: SITE_SELECT } } } },
+    select: { id: true },
   })
 
-  // The site this skript is shown on: where it's placed, else the site of its
-  // collection. Drives the editor's back link and public URLs, which used to
-  // assume the user's primary site (wrong for second sites and co-authors).
-  // If a skript is placed on several sites, the first placement wins.
+  // The site this skript is shown on, deterministically (bughunt #8): among
+  // the sites that PLACE it (src/lib/site-access.ts), the viewer's own site
+  // first, then the oldest. Falls back to its collection's site. Drives the
+  // editor's back link, public URLs and the exam assign/state controls —
+  // those need `ownedByViewer` (classes only exist on the viewer's own
+  // personal site; another teacher's placement must never be targeted).
+  const placingIds = await getPlacementSiteIdsForSkript(skript.id)
+  const placingSites = placingIds.length
+    ? await prisma.site.findMany({
+        where: { id: { in: placingIds } },
+        select: { ...SITE_SELECT, userId: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      })
+    : []
   const collectionSiteId = skript.collectionSkripts[0]?.collection?.siteId
-  const site = placement?.pageLayout.site
+  const chosen = placingSites.find((s) => s.userId === userId)
+    ?? placingSites[0]
     ?? (collectionSiteId
-      ? await prisma.site.findUnique({ where: { id: collectionSiteId }, select: SITE_SELECT })
+      ? await prisma.site.findUnique({ where: { id: collectionSiteId }, select: { ...SITE_SELECT, userId: true } })
       : null)
+  const site = chosen
+    ? { id: chosen.id, slug: chosen.slug, organizationId: chosen.organizationId, ownedByViewer: chosen.userId === userId }
+    : null
 
   return { skript, permissions, placed: !!placement, site }
 }
