@@ -22,7 +22,7 @@
  * anonymous re-key keeps each record's siteId.
  */
 
-import { db, LEGACY_SITE_ID } from './schema'
+import { db, LEGACY_SITE_ID, LEGACY_SWEEP_KEY } from './schema'
 import type { UserDataRecord, UserDataVersion, VersionBlob } from './types'
 
 const MIGRATED_V3_FLAG = 'eduskript-userdata-migrated-v3'
@@ -132,6 +132,48 @@ export async function runOneTimeMigrationV2ToV3(): Promise<void> {
     if (v2) {
       try { v2.close() } catch { /* ignore */ }
     }
+  }
+}
+
+/**
+ * Bughunt #2: a tab still running pre-site-scoping code keeps writing to the
+ * v1 `userData` table (Dexie reopens the v2 DB for it), which the new code
+ * never reads. On every start, copy v1 rows newer than the watermark into
+ * siteUserData as LEGACY rows; adoptLegacy then moves them into the site
+ * that reads them (newer-than-site-row wins). Never deletes anything.
+ * Skips entirely when the watermark is missing (localStorage unavailable at
+ * upgrade time) — better than re-copying already adopted rows.
+ */
+export async function sweepLegacyTable(): Promise<number> {
+  if (typeof window === 'undefined') return 0
+  let mark: number
+  try {
+    const raw = window.localStorage.getItem(LEGACY_SWEEP_KEY)
+    if (raw === null) return 0
+    mark = Number(raw) || 0
+  } catch {
+    return 0
+  }
+  try {
+    const rows = await db.userData.where('updatedAt').above(mark).toArray()
+    if (rows.length === 0) return 0
+    let newest = mark
+    await db.transaction('rw', db.siteUserData, async () => {
+      for (const r of rows) {
+        newest = Math.max(newest, r.updatedAt)
+        const key: [string, string, string, string, string, string] = [r.userId, LEGACY_SITE_ID, r.pageId, r.componentId, r.targetType, r.targetId]
+        const prev = await db.siteUserData.get(key)
+        if (prev && prev.updatedAt >= r.updatedAt) continue
+        // Unsynced: the server refused the old client's push (409 since
+        // site scoping), so the local copy is the only one.
+        await db.siteUserData.put({ ...r, siteId: LEGACY_SITE_ID, savedToRemote: false } as UserDataRecord)
+      }
+    })
+    window.localStorage.setItem(LEGACY_SWEEP_KEY, String(newest))
+    return rows.length
+  } catch (error) {
+    console.error('[userdata:migrations] legacy sweep failed:', error)
+    return 0
   }
 }
 

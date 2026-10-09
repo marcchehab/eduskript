@@ -115,3 +115,13 @@ describe('POST /api/user-data/sync — site scoping', () => {
     expect((await res.json()).synced).toBe(1)
   })
 })
+
+describe('POST /api/user-data/sync — pre-site-scoping clients (bughunt #2)', () => {
+  it('a batch with an item lacking siteId gets 409 and writes nothing (old client keeps data unsynced)', async () => {
+    session.mockResolvedValue({ user: { id: 'student-1', accountType: 'student' } })
+    const legacyItem = { adapter: 'quiz-q1', itemId: 'page-1', data: '{}', version: 1, updatedAt: 1 }
+    const res = await POST(req([item(), legacyItem]))
+    expect(res.status).toBe(409)
+    expect(p.userData.create).not.toHaveBeenCalled()
+  })
+})

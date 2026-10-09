@@ -161,6 +161,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request: items must be an array' }, { status: 400 })
     }
 
+    // Bughunt #2: a tab still running pre-site-scoping code sends items
+    // without siteId and marks the whole batch synced on ANY 2xx. Refuse the
+    // whole request with a non-2xx so it keeps the data unsynced locally (the
+    // new code sweeps it in after a reload). New clients always send siteId.
+    if (rawItems.some(item => !item || typeof item.siteId !== 'string')) {
+      return NextResponse.json(
+        { error: 'Outdated client: please reload the page.', code: 'SITE_SCOPING_RELOAD' },
+        { status: 409 }
+      )
+    }
+
     // ---- Site scoping: validate every item's site before anything else ----
     // Per-request memo: a batch usually carries many adapters of one page.
     const rejected: RejectedItem[] = []

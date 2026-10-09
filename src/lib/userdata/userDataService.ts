@@ -142,14 +142,34 @@ export class UserDataService {
     const siteKey: SiteUserDataKey = [userId, siteId, pageId, componentId, targetType, targetId]
     const legacyKey: SiteUserDataKey = [userId, LEGACY_SITE_ID, pageId, componentId, targetType, targetId]
     return db.transaction('rw', db.siteUserData, async () => {
-      const existing = await db.siteUserData.get(siteKey)
-      if (existing) return existing as UserDataRecord<T>
-      const legacy = await db.siteUserData.get(legacyKey)
-      if (!legacy) return null
-      const adopted: UserDataRecord<T> = { ...(legacy as UserDataRecord<T>), siteId }
-      await db.siteUserData.put(adopted)
-      await db.siteUserData.delete(legacyKey)
-      return adopted
+      const [existing, legacy] = await Promise.all([
+        db.siteUserData.get(siteKey),
+        db.siteUserData.get(legacyKey),
+      ])
+      if (!legacy) return (existing as UserDataRecord<T>) ?? null
+      if (!existing) {
+        const adopted: UserDataRecord<T> = { ...(legacy as UserDataRecord<T>), siteId }
+        await db.siteUserData.put(adopted)
+        await db.siteUserData.delete(legacyKey)
+        return adopted
+      }
+      // Both exist: a legacy row NEWER than the site row was written by a tab
+      // still running pre-site-scoping code (swept in by sweepLegacyTable,
+      // bughunt #2). It wins, stays unsynced, and gets a version above both so
+      // the next push isn't a stale-version conflict. An OLDER legacy row is
+      // left alone — it may belong to another site that hasn't read it yet.
+      if (legacy.updatedAt > existing.updatedAt) {
+        const merged: UserDataRecord<T> = {
+          ...(legacy as UserDataRecord<T>),
+          siteId,
+          version: Math.max(existing.version, legacy.version) + 1,
+          savedToRemote: false,
+        }
+        await db.siteUserData.put(merged)
+        await db.siteUserData.delete(legacyKey)
+        return merged
+      }
+      return existing as UserDataRecord<T>
     })
   }
 
@@ -185,9 +205,10 @@ export class UserDataService {
 
     try {
       const dbKey = this.getDbKey(pageId, componentId, options.targetType, options.targetId)
-      const record = await db.siteUserData.get(dbKey)
-      if (record) return record as UserDataRecord<T>
-      // No record for this site yet — adopt a pre-site-scoping one if present.
+      if (!dbKey[1] || dbKey[1] === LEGACY_SITE_ID) {
+        return ((await db.siteUserData.get(dbKey)) as UserDataRecord<T>) ?? null
+      }
+      // Site record, adopting/merging a pre-site-scoping one if present.
       return await this.adoptLegacy<T>(dbKey[0], dbKey[1], pageId, componentId, dbKey[4], dbKey[5])
     } catch (error) {
       console.error('Failed to retrieve user data:', error)
@@ -313,8 +334,9 @@ export class UserDataService {
       // time — not the current ones, which may have changed since debounce
       // started. Adopts a legacy record first so its version/createdAt/
       // deletion list carry over instead of being shadowed.
-      const existing = await db.siteUserData.get([userId, siteId, pageId, componentId, targetType ?? '', targetId ?? ''])
-        ?? await this.adoptLegacy(userId, siteId, pageId, componentId, targetType ?? '', targetId ?? '')
+      const existing = (siteId && siteId !== LEGACY_SITE_ID)
+        ? await this.adoptLegacy(userId, siteId, pageId, componentId, targetType ?? '', targetId ?? '')
+        : await db.siteUserData.get([userId, siteId, pageId, componentId, targetType ?? '', targetId ?? ''])
       const now = Date.now()
 
       // Preserve existing localOnly flag unless caller explicitly overrides.

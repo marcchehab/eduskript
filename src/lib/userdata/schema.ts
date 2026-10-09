@@ -28,6 +28,10 @@ const DB_NAME = 'EduskriptUserData_v3'
  *  to the server; adopted into a real site on first read under that site. */
 export const LEGACY_SITE_ID = '__legacy__'
 
+/** localStorage key: newest `userData` (v1 table) updatedAt already copied
+ *  into siteUserData. Set by the v2 upgrade; read by sweepLegacyTable. */
+export const LEGACY_SWEEP_KEY = 'eduskript-userdata-legacy-sweep-at'
+
 /** siteId for writes outside any site context (dashboard preview, auth
  *  pages). Kept local: the sync engine never pushes these. */
 export const NO_SITE_ID = ''
@@ -71,6 +75,10 @@ export class UserDataDatabase extends Dexie {
     }).upgrade(async (tx) => {
       const legacy = await tx.table('userData').toArray() as LegacyUserDataRecord[]
       const target = tx.table('siteUserData')
+      // Watermark for sweepLegacyTable: rows written to the v1 table later
+      // (by tabs still running old code) are copied over on the next start.
+      const newest = legacy.reduce((m, r) => Math.max(m, r.updatedAt || 0), 0)
+      try { globalThis.localStorage?.setItem(LEGACY_SWEEP_KEY, String(newest)) } catch { /* sweep then skips */ }
       for (const r of legacy) {
         // savedToRemote is preserved: an unsynced row stays unsynced and is
         // pushed once a site adopts it.

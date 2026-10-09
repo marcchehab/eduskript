@@ -19,7 +19,7 @@ import { useSession } from 'next-auth/react'
 import { syncEngine, type SyncStatus } from './sync-engine'
 import { userDataService } from './userDataService'
 import { recordDeletions, removedCollectionIds } from './adapters'
-import { runOneTimeMigrationV2ToV3, migrateAnonymousIfNeeded } from './migrations'
+import { runOneTimeMigrationV2ToV3, migrateAnonymousIfNeeded, sweepLegacyTable } from './migrations'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('userdata:provider')
@@ -97,6 +97,10 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
 
         // 1. v2 → v3 schema migration (idempotent; gated by localStorage flag).
         await runOneTimeMigrationV2ToV3()
+
+        // 1b. Copy rows written by tabs still on pre-site-scoping code
+        // (v1 table) into the site-scoped table as legacy (bughunt #2).
+        await sweepLegacyTable()
 
         // 2. anonymous → real userId re-key. Gated on IndexedDB state, not
         // localStorage — first-render with a cached NextAuth session would

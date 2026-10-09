@@ -135,3 +135,49 @@ describe('syncEngine site gating', () => {
     expect(syncEngine.getStatus().pending).toBe(before)
   })
 })
+
+describe('old-tab writes after the upgrade (bughunt #2)', () => {
+  beforeEach(async () => {
+    await db.siteUserData.clear()
+    await db.userData.clear()
+    await userDataService.setCurrentUser('u1')
+    userDataService.setCurrentSite(null)
+    localStorage.removeItem('eduskript-userdata-legacy-sweep-at')
+  })
+
+  it('sweepLegacyTable copies v1 rows newer than the watermark as unsynced legacy rows', async () => {
+    const { sweepLegacyTable } = await import('@/lib/userdata/migrations')
+    localStorage.setItem('eduskript-userdata-legacy-sweep-at', '1000')
+    await db.userData.bulkPut([
+      legacyRow({ updatedAt: 500 }) as never, // already copied by the upgrade
+      legacyRow({ componentId: 'quiz-new', updatedAt: 2000, savedToRemote: true }) as never, // old tab wrote + "synced"
+    ])
+    expect(await sweepLegacyTable()).toBe(1)
+    const rows = await db.siteUserData.toArray()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ componentId: 'quiz-new', siteId: LEGACY_SITE_ID, savedToRemote: false })
+    expect(localStorage.getItem('eduskript-userdata-legacy-sweep-at')).toBe('2000')
+    expect(await db.userData.count()).toBe(2) // v1 table untouched
+  })
+
+  it('without a watermark the sweep does nothing (no double copy)', async () => {
+    const { sweepLegacyTable } = await import('@/lib/userdata/migrations')
+    await db.userData.put(legacyRow({ updatedAt: 5000 }) as never)
+    expect(await sweepLegacyTable()).toBe(0)
+    expect(await db.siteUserData.count()).toBe(0)
+  })
+
+  it('a legacy row newer than the site row wins and stays unsynced; an older one is left alone', async () => {
+    await db.siteUserData.put({ ...legacyRow({ updatedAt: 100, version: 5, savedToRemote: true, data: { v: 'site' } }), siteId: 'site-a' } as never)
+    await db.siteUserData.put({ ...legacyRow({ updatedAt: 200, version: 2, data: { v: 'old-tab' } }), siteId: LEGACY_SITE_ID } as never)
+    userDataService.setCurrentSite('site-a')
+    const rec = await userDataService.get('page-1', 'code-editor-a')
+    expect(rec).toMatchObject({ siteId: 'site-a', data: { v: 'old-tab' }, version: 6, savedToRemote: false })
+    expect(await db.siteUserData.get(['u1', LEGACY_SITE_ID, 'page-1', 'code-editor-a', '', ''])).toBeUndefined()
+
+    await db.siteUserData.put({ ...legacyRow({ componentId: 'x', updatedAt: 1 }), siteId: LEGACY_SITE_ID } as never)
+    await db.siteUserData.put({ ...legacyRow({ componentId: 'x', updatedAt: 9 }), siteId: 'site-a' } as never)
+    expect((await userDataService.get('page-1', 'x'))?.updatedAt).toBe(9)
+    expect(await db.siteUserData.get(['u1', LEGACY_SITE_ID, 'page-1', 'x', '', ''])).toBeTruthy()
+  })
+})
