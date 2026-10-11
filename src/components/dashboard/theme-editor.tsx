@@ -104,6 +104,7 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
   const [applyTargets, setApplyTargets] = useState<string[]>([])
   const [copyFrom, setCopyFrom] = useState('')
   const isDirty = !sameSettings(settings, saved)
+  const cssTooLong = settings.customCss.length > CUSTOM_CSS_MAX_LENGTH
 
   const update = (patch: Partial<ThemeSettingsInput>) => setSettings(prev => ({ ...prev, ...patch }))
 
@@ -265,8 +266,9 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
             <p className="text-xs text-muted-foreground">
               Added to every public page of this site. For student privacy nothing may load from
               outside Eduskript: <code>@import</code> is removed, and <code>url()</code> only works for
-              files from skripts on this site (by file name, e.g. <code>url(background.png)</code>, resolved
-              when you save), Eduskript file URLs and <code>data:</code> images/fonts.
+              files from skripts on this site (by file name, e.g.{' '}
+              <code>#paper {'{'} background-image: url(paper.png) {'}'}</code>, resolved when you save),
+              Eduskript file URLs and <code>data:</code> images/fonts (PNG, JPEG, GIF, WebP, AVIF).
             </p>
             <Textarea
               id="customCss"
@@ -274,10 +276,14 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
               onChange={(e) => update({ customCss: e.target.value })}
               placeholder={'.prose-theme h1 {\n  color: #1d4ed8;\n}'}
               rows={12}
-              maxLength={CUSTOM_CSS_MAX_LENGTH}
               spellCheck={false}
-              className="font-mono text-xs"
+              aria-invalid={cssTooLong}
+              className={cn('font-mono text-xs', cssTooLong && 'border-destructive')}
             />
+            <div className={cn('text-xs text-right tabular-nums', cssTooLong ? 'text-destructive font-medium' : 'text-muted-foreground')}>
+              {settings.customCss.length.toLocaleString('en')} / {CUSTOM_CSS_MAX_LENGTH.toLocaleString('en')} characters
+              {cssTooLong && ' — too long, shorten it to save'}
+            </div>
             {removed.length > 0 && (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
                 <div className="font-medium mb-1">Removed when saving:</div>
@@ -294,7 +300,7 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
           </section>
 
           <div className="flex items-center gap-3 border-t pt-6">
-            <Button onClick={handleSave} disabled={!isDirty || saving} className="gap-2">
+            <Button onClick={handleSave} disabled={!isDirty || saving || cssTooLong} className="gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Save
             </Button>

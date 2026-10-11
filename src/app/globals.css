@@ -543,6 +543,9 @@
 .prose-theme .katex-display {
   text-align: center;
   width: 100%;
+  /* Long formulas scroll horizontally instead of being clipped. */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* Remove top margin from first content element to align canvas properly */
@@ -689,10 +692,16 @@ article.prose-theme > div > :first-child {
   cursor: pointer;
 }
 
-/* Ensure h1 uses heading color */
-.prose-theme h1,
+/* h1 uses the heading color; everything inside it (heading link, inline
+   code, colored spans) follows the h1's color. The h1 itself is NOT
+   !important so site custom CSS (`.prose-theme h1 { color: … }`, theme
+   editor) can recolor titles; the children still inherit whatever it is. */
+.prose-theme h1 {
+  color: hsl(var(--prose-headings));
+  transition: color 0.15s ease;
+}
 .prose-theme h1 * {
-  color: hsl(var(--prose-headings)) !important;
+  color: inherit !important;
   transition: color 0.15s ease;
 }
 
@@ -2040,11 +2049,37 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   font-weight: var(--theme-body-weight);
 }
 
-[data-typography] .prose-theme p,
-[data-typography] .prose-theme li {
-  /* No fallback on purpose (see header): undefined → inherited. */
+/* On the container, not on p/li: paragraphs inherit it, and nested
+   alignment (<center>, :::center → .es-align-*, banners) overrides it like
+   any inherited value. No fallback on purpose (see header): undefined →
+   inherited, i.e. Fancy keeps whatever it had. */
+[data-typography] .prose-theme {
   text-align: var(--theme-text-align);
   hyphens: var(--theme-hyphens);
+}
+/* No automatic hyphenation in headings (LaTeX sets it on the container).
+   Known limitation: a multi-line h2–h6 inherits LaTeX's justify. */
+[data-typography] .prose-theme :is(h2, h3, h4, h5, h6) {
+  hyphens: manual;
+}
+/* Sober's left-aligned title still follows an explicit alignment block
+   (Fancy/LaTeX keep their centered title as before). */
+[data-typography="sober"] .prose-theme :is(.es-align-left, .es-align-center, .es-align-right) h1 {
+  text-align: inherit;
+}
+
+/* Heading text sits inside a.heading-link; `.prose-theme a` (link
+   weight) would otherwise override the heading weight (LaTeX/Sober headings
+   rendered 400/500 instead of bold). */
+[data-typography] .prose-theme :is(h1, h2, h3, h4, h5, h6) a.heading-link {
+  font-weight: inherit;
+}
+
+/* Justified text on a phone-width column leaves wide gaps. */
+@media (max-width: 500px) {
+  [data-typography="latex"] {
+    --theme-text-align: left;
+  }
 }
 
 [data-typography] .prose-theme h1,
@@ -2136,7 +2171,7 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   text-align: var(--theme-h1-align, center);
   font-size: calc(var(--theme-h1-size, 5) * var(--theme-heading-base, 19px) * var(--user-font-scale, 1));
   margin: var(--theme-h1-margin, 3rem 0 2.5rem 0);
-  color: hsl(var(--prose-headings)) !important;
+  color: hsl(var(--prose-headings));
   /* Normalize font rendering across browsers (Safari renders wider than Firefox) */
   letter-spacing: var(--theme-h1-tracking, -0.02em) !important;
   word-spacing: 0 !important;
