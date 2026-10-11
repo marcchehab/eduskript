@@ -585,7 +585,7 @@ article.prose-theme > div > :first-child {
    wider screens are untouched (fixed 1280px paper keeps annotation geometry). */
 @media (max-width: 639px) {
   .reflow-mode .prose-theme h1 {
-    font-size: min(var(--theme-h1-size, 5em), 18vw);
+    font-size: min(calc(var(--theme-h1-size, 5) * var(--theme-heading-base, 19px) * var(--user-font-scale, 1)), 18vw);
     hyphens: auto;
     hyphenate-limit-chars: 12 4 4;
   }
@@ -1901,7 +1901,11 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
  *     variables and line-height (selector [data-typography][data-body-font]
  *     is more specific than the style blocks).
  * Each body font carries its own size/weight/line-height, tuned to its
- * x-height. Heading sizes are em-based, so they scale with that size.
+ * x-height. Headings do NOT follow the body size: they are sized from the
+ * style's own --theme-heading-base (× unitless --theme-hN-size factors) and
+ * scaled only by the reader's A-/A+ choice via --user-font-scale
+ * (= chosen size / theme body size, set by FontSizeControls; 1 by default).
+ * See the "Scale headings" block below.
  * Rules below consume the variables;
  * every var() has a fallback equal to the original ("Fancy") value, so
  * .prose-theme outside a themed wrapper (dashboard editor preview, AI chat,
@@ -1921,16 +1925,17 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --theme-line-height: 1.7;
   --theme-heading-font: var(--font-heading), sans-serif;
   --theme-heading-weight: 700;
-  --theme-h1-size: 5em;
+  --theme-heading-base: 19px;
+  --theme-h1-size: 5;
   --theme-h1-weight: 700;
   --theme-h1-align: center;
   --theme-h1-margin: 3rem 0 2.5rem 0;
   --theme-h1-tracking: -0.02em;
-  --theme-h2-size: 3em;
+  --theme-h2-size: 3;
   --theme-h2-margin-top: 8rem;
   --theme-h2-indent: 0.75rem;
   --theme-h2-marker-display: block;
-  --theme-h3-size: 1.5em;
+  --theme-h3-size: 1.5;
   --theme-title-shadow-display: block;
   --theme-link-weight: 500;
   /* --theme-h2-marker-bg: unset → rainbow fallback in the h2::before rule */
@@ -1955,17 +1960,18 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --theme-hyphens: manual;
   --theme-heading-font: var(--font-inter), system-ui, sans-serif;
   --theme-heading-weight: 650;
-  --theme-h1-size: 2.25em;
+  --theme-heading-base: 17px;
+  --theme-h1-size: 2.25;
   --theme-h1-weight: 700;
   --theme-h1-align: left;
   --theme-h1-margin: 0 0 1.5rem;
   --theme-h1-tracking: -0.02em;
-  --theme-h2-size: 1.5em;
+  --theme-h2-size: 1.5;
   --theme-h2-margin-top: 3.5rem;
   --theme-h2-indent: 0.75rem;
   --theme-h2-marker-display: block;
   --theme-h2-marker-bg: hsl(var(--primary));
-  --theme-h3-size: 1.2em;
+  --theme-h3-size: 1.2;
   --theme-title-shadow-display: none;
   --theme-link-weight: 500;
 }
@@ -1982,17 +1988,18 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --theme-hyphens: auto;
   --theme-heading-font: var(--font-latex-body), serif;
   --theme-heading-weight: 700;
-  --theme-h1-size: 2.1em;
+  --theme-heading-base: 19px;
+  --theme-h1-size: 2.1;
   --theme-h1-weight: 400;
   --theme-h1-align: center;
   --theme-h1-margin: 0.5rem 0 2.75rem;
   --theme-h1-tracking: 0;
-  --theme-h2-size: 1.45em;
+  --theme-h2-size: 1.45;
   --theme-h2-margin-top: 2.75rem;
   --theme-h2-indent: 0;
   --theme-h2-marker-display: none;
   --theme-h2-marker-bg: none;
-  --theme-h3-size: 1.2em;
+  --theme-h3-size: 1.2;
   --theme-title-shadow-display: none;
   --theme-link-weight: 400;
 }
@@ -2094,37 +2101,40 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   font-weight: unset;
 }
 
-/* Scale headings proportionally using em units
- * em is relative to parent font size (which is --user-font-size on .prose-theme)
- * This works consistently across all browsers including Safari on iPad.
+/* Scale headings: factor × the heading style's own base size × the reader's
+ * A-/A+ scale. Not em-based on purpose: the body font's size (19–22px,
+ * per font) must not change heading sizes. Fallbacks (5/3/1.5 × 19px × 1)
+ * equal the old em values at the default 19px.
+ * Known difference from em: a heading inside a container with its own
+ * font-size no longer scales with that container.
  */
 .prose-theme h2 {
-  font-size: var(--theme-h2-size, 3em);
+  font-size: calc(var(--theme-h2-size, 3) * var(--theme-heading-base, 19px) * var(--user-font-scale, 1));
 }
 
 .prose-theme h3 {
-  font-size: var(--theme-h3-size, 1.5em);
+  font-size: calc(var(--theme-h3-size, 1.5) * var(--theme-heading-base, 19px) * var(--user-font-scale, 1));
 }
 
 .prose-theme h4 {
-  font-size: 1.25em;
+  font-size: calc(1.25 * var(--theme-heading-base, 19px) * var(--user-font-scale, 1));
 }
 
 .prose-theme h5 {
-  font-size: 1.125em;
+  font-size: calc(1.125 * var(--theme-heading-base, 19px) * var(--user-font-scale, 1));
 }
 
 .prose-theme h6 {
-  font-size: 1em;
+  font-size: calc(var(--theme-heading-base, 19px) * var(--user-font-scale, 1));
 }
 
 /* Title h1 - larger, centered page title
- * 5em = 5x base size gives ~70px at min (14px) and ~140px at max (28px)
+ * Fancy: 5 × 19px = 95px; the reader's A-/A+ scales it via --user-font-scale.
  */
 .prose-theme h1 {
   position: relative;
   text-align: var(--theme-h1-align, center);
-  font-size: var(--theme-h1-size, 5em);
+  font-size: calc(var(--theme-h1-size, 5) * var(--theme-heading-base, 19px) * var(--user-font-scale, 1));
   margin: var(--theme-h1-margin, 3rem 0 2.5rem 0);
   color: hsl(var(--prose-headings)) !important;
   /* Normalize font rendering across browsers (Safari renders wider than Firefox) */

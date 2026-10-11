@@ -32,10 +32,12 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
   const [mounted, setMounted] = useState(false)
 
   // Apply font size to the document
-  // All heading sizes are calculated as multiples of --user-font-size in CSS,
-  // so we only need to set this one variable for consistent cross-device rendering.
+  // Body text uses --user-font-size directly. Headings are sized from the
+  // heading style's own base (globals.css, "Scale headings"), so they get
+  // the reader's choice as a unitless ratio to the theme's body size.
   const applyFontSize = (size: number) => {
     document.documentElement.style.setProperty('--user-font-size', `${size}px`)
+    document.documentElement.style.setProperty('--user-font-scale', String(size / readThemeDefaults().size))
 
     // Force Safari/iPad to recalculate styles by directly setting font-size on prose containers
     // Safari sometimes doesn't propagate CSS variable changes to em-based child sizes
