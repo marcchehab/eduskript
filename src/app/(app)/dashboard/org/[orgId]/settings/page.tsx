@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { Building2, X, Wand2 } from 'lucide-react'
+import { Building2, X, Wand2, Palette } from 'lucide-react'
 import { OrgIcon } from '@/components/org-icon'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -63,7 +63,6 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
     logoUrl: '',
     requireEmailDomain: '',
     allowTeacherCustomDomains: false,
-    sidebarBehavior: 'contextual' as string,
     aiSystemPrompt: '',
   })
   const [uploadingIcon, setUploadingIcon] = useState(false)
@@ -134,7 +133,6 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           logoUrl: data.organization.logoUrl || '',
           requireEmailDomain: data.organization.requireEmailDomain || '',
           allowTeacherCustomDomains: data.organization.allowTeacherCustomDomains || false,
-          sidebarBehavior: data.organization.sidebarBehavior || 'contextual',
           aiSystemPrompt: data.organization.aiSystemPrompt || '',
         })
       } catch (err) {
@@ -172,7 +170,6 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           logoUrl: formData.logoUrl || null,
           requireEmailDomain: formData.requireEmailDomain || null,
           allowTeacherCustomDomains: formData.allowTeacherCustomDomains,
-          sidebarBehavior: formData.sidebarBehavior,
           aiSystemPrompt: formData.aiSystemPrompt || null,
         }),
       })
@@ -558,45 +555,19 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
             </div>
           </div>
 
+          {/* Sidebar navigation moved to the theme editor (with preset,
+              reading progress and custom CSS): /dashboard/org/[orgId]/theme. */}
           <div className="border-t pt-6">
-            <h3 className="text-lg font-medium mb-4">Navigation</h3>
-            <div className="space-y-3">
-              <Label>Sidebar Navigation Behavior</Label>
-              <div className="space-y-2">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="sidebarBehavior"
-                    value="contextual"
-                    checked={formData.sidebarBehavior === 'contextual'}
-                    onChange={(e) => setFormData({ ...formData, sidebarBehavior: e.target.value })}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="font-medium">Contextual</div>
-                    <p className="text-xs text-muted-foreground">
-                      Show only the current collection in the sidebar when viewing content.
-                    </p>
-                  </div>
-                </label>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="sidebarBehavior"
-                    value="full"
-                    checked={formData.sidebarBehavior === 'full'}
-                    onChange={(e) => setFormData({ ...formData, sidebarBehavior: e.target.value })}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="font-medium">Full Navigation</div>
-                    <p className="text-xs text-muted-foreground">
-                      Always show all collections in the sidebar.
-                    </p>
-                  </div>
-                </label>
-              </div>
-            </div>
+            <h3 className="text-lg font-medium mb-4">Theme &amp; navigation</h3>
+            <p className="text-sm text-muted-foreground mb-3">
+              Typography, sidebar navigation, reading progress bar and custom CSS.
+            </p>
+            <Link href={`/dashboard/org/${orgId}/theme`}>
+              <Button type="button" variant="outline" className="gap-2">
+                <Palette className="w-4 h-4" />
+                Open theme editor
+              </Button>
+            </Link>
           </div>
 
           <div className="border-t pt-6">

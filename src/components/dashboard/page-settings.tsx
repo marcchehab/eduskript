@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2 } from 'lucide-react'
+import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2, Palette } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { InlineMarkdown } from '@/components/ui/inline-markdown'
@@ -27,10 +27,6 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   const dialog = useAlertDialog()
   // Query suffix (GET) and body field (writes) that pin requests to `siteId`.
   const siteQuery = siteId ? `?siteId=${encodeURIComponent(siteId)}` : ''
-  const [sidebarBehavior, setSidebarBehavior] = useState<string>('full')
-  const [typographyPreference, setTypographyPreference] = useState<string>('modern')
-  const [loading, setLoading] = useState(false)
-  const [typographyLoading, setTypographyLoading] = useState(false)
   const [pageInfoLoading, setPageInfoLoading] = useState(false)
   const [pageSlug, setPageSlug] = useState(session?.user?.pageSlug || '')
   const [pageName, setPageName] = useState(session?.user?.pageName || '')
@@ -81,23 +77,11 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const [sidebarResponse, typographyResponse, orgAdminResponse, aiPromptResponse, profileResponse] = await Promise.all([
-          fetch(`/api/user/sidebar-preference${siteQuery}`),
-          fetch(`/api/user/typography-preference${siteQuery}`),
+        const [orgAdminResponse, aiPromptResponse, profileResponse] = await Promise.all([
           fetch('/api/user/is-org-admin'),
           fetch(`/api/user/ai-prompt${siteQuery}`),
           fetch(`/api/user/profile${siteQuery}`),
         ])
-
-        if (sidebarResponse.ok) {
-          const data = await sidebarResponse.json()
-          setSidebarBehavior(data.sidebarBehavior || 'full')
-        }
-
-        if (typographyResponse.ok) {
-          const data = await typographyResponse.json()
-          setTypographyPreference(data.typographyPreference || 'modern')
-        }
 
         if (orgAdminResponse.ok) {
           const data = await orgAdminResponse.json()
@@ -197,58 +181,6 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
       controller.abort()
     }
   }, [pageSlug, originalPageSlug, checkSlugAvailability, minSlugLength])
-
-  const handleSidebarBehaviorChange = async (value: string) => {
-    setSidebarBehavior(value)
-    setLoading(true)
-
-    try {
-      const response = await fetch('/api/user/sidebar-preference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sidebarBehavior: value, siteId }),
-      })
-
-      if (response.ok) {
-        // Success - preference updated
-      } else {
-        // Revert on error
-        const data = await response.json()
-        setSidebarBehavior(data.sidebarBehavior || 'full')
-      }
-    } catch (error) {
-      console.error('Failed to update preference:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleTypographyChange = async (value: string) => {
-    setTypographyPreference(value)
-    setTypographyLoading(true)
-
-    try {
-      const response = await fetch('/api/user/typography-preference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ typographyPreference: value, siteId }),
-      })
-
-      if (response.ok) {
-        // Update session to reflect new preference
-        await update()
-        // Refresh to apply new fonts
-        router.refresh()
-      } else {
-        const data = await response.json()
-        setTypographyPreference(data.typographyPreference || 'modern')
-      }
-    } catch (error) {
-      console.error('Failed to update typography preference:', error)
-    } finally {
-      setTypographyLoading(false)
-    }
-  }
 
   const handlePageInfoUpdate = async () => {
     setPageInfoLoading(true)
@@ -924,158 +856,24 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
             to a single site) — they live on the Account settings page
             (/dashboard/settings), not here. */}
 
-        {/* Sidebar Behavior Section */}
-        <div className="space-y-4 border-t pt-6">
-          <Label className="text-sm font-medium">Sidebar Navigation Behavior</Label>
-          
-          <div className="space-y-3">
-            <div className="flex items-start space-x-3">
-              <input
-                type="radio"
-                id="full"
-                name="sidebarBehavior"
-                value="full"
-                checked={sidebarBehavior === 'full'}
-                onChange={(e) => handleSidebarBehaviorChange(e.target.value)}
-                disabled={loading}
-                className="mt-1"
-              />
-              <div className="space-y-1">
-                <Label htmlFor="full" className="font-normal cursor-pointer">
-                  Full Navigation
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Always show all collections in the sidebar, regardless of current page.
-                  This allows quick navigation between all your content.
-                </p>
-              </div>
+        {/* Theme: preset, navigation, reading progress and custom CSS moved
+            to the per-site theme editor (/dashboard/site/[siteId]/theme). */}
+        {siteId && (
+          <div className="space-y-4 border-t pt-6">
+            <div>
+              <Label className="text-sm font-medium">Theme &amp; navigation</Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                Typography, sidebar navigation, reading progress bar and custom CSS.
+              </p>
             </div>
-
-            <div className="flex items-start space-x-3">
-              <input
-                type="radio"
-                id="contextual"
-                name="sidebarBehavior"
-                value="contextual"
-                checked={sidebarBehavior === 'contextual'}
-                onChange={(e) => handleSidebarBehaviorChange(e.target.value)}
-                disabled={loading}
-                className="mt-1"
-              />
-              <div className="space-y-1">
-                <Label htmlFor="contextual" className="font-normal cursor-pointer">
-                  Contextual Navigation
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  When viewing content inside a collection, only show that collection in the sidebar.
-                  This provides a focused reading experience.
-                </p>
-              </div>
-            </div>
+            <Link href={`/dashboard/site/${siteId}/theme`}>
+              <Button variant="outline" className="gap-2">
+                <Palette className="w-4 h-4" />
+                Open theme editor
+              </Button>
+            </Link>
           </div>
-          
-          {loading && (
-            <div className="text-sm text-muted-foreground">
-              Updating preference...
-            </div>
-          )}
-        </div>
-
-        {/* Typography Section */}
-        <div className="space-y-4 border-t pt-6">
-          <div>
-            <Label className="text-sm font-medium">Typography Style</Label>
-            <p className="text-sm text-muted-foreground mt-1">
-              Choose the font style for your public pages
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {/* Modern Option */}
-            <div className="flex items-start space-x-3">
-              <input
-                type="radio"
-                id="modern"
-                name="typographyPreference"
-                value="modern"
-                checked={typographyPreference === 'modern'}
-                onChange={(e) => handleTypographyChange(e.target.value)}
-                disabled={typographyLoading}
-                className="mt-1"
-              />
-              <div className="space-y-2 flex-1">
-                <Label htmlFor="modern" className="font-normal cursor-pointer">
-                  Modern (Roboto Slab)
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Clean and contemporary style, great for technical content
-                </p>
-                {/* Modern Preview */}
-                <div className="border rounded-md p-4 bg-background" style={{
-                  fontFamily: 'var(--font-modern-body)',
-                  fontWeight: 300
-                }}>
-                  <h3 style={{
-                    fontFamily: 'var(--font-heading)',
-                    fontWeight: 700,
-                    fontSize: '1.25rem',
-                    marginBottom: '0.5rem'
-                  }}>
-                    Sample Heading
-                  </h3>
-                  <p style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
-                    The quick brown fox jumps over the lazy dog. This is how your content will look with the modern typography style.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Classic Option */}
-            <div className="flex items-start space-x-3">
-              <input
-                type="radio"
-                id="classic"
-                name="typographyPreference"
-                value="classic"
-                checked={typographyPreference === 'classic'}
-                onChange={(e) => handleTypographyChange(e.target.value)}
-                disabled={typographyLoading}
-                className="mt-1"
-              />
-              <div className="space-y-2 flex-1">
-                <Label htmlFor="classic" className="font-normal cursor-pointer">
-                  Classic (EB Garamond)
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Elegant and traditional style, ideal for humanities and literature
-                </p>
-                {/* Classic Preview */}
-                <div className="border rounded-md p-4 bg-background" style={{
-                  fontFamily: 'var(--font-classic-body)',
-                  fontWeight: 400
-                }}>
-                  <h3 style={{
-                    fontFamily: 'var(--font-heading)',
-                    fontWeight: 700,
-                    fontSize: '1.25rem',
-                    marginBottom: '0.5rem'
-                  }}>
-                    Sample Heading
-                  </h3>
-                  <p style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
-                    The quick brown fox jumps over the lazy dog. This is how your content will look with the classic typography style.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {typographyLoading && (
-            <div className="text-sm text-muted-foreground">
-              Updating typography...
-            </div>
-          )}
-        </div>
+        )}
 
         {/* AI Assistants Section */}
         <div className="space-y-4 border-t pt-6">

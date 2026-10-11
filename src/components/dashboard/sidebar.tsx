@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen, UserCog } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen, UserCog, Palette } from 'lucide-react'
 import { NotebookCog } from '@/components/icons/settings-icons'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from './theme-toggle'
@@ -18,6 +18,7 @@ const SIDEBAR_COLLAPSED_KEY = 'eduskript:dashboard-sidebar-collapsed'
 const siteNavItems = [
   { name: 'Site Builder', suffix: '/site-builder', icon: BookOpen },
   { name: 'Settings', suffix: '/settings', icon: NotebookCog },
+  { name: 'Theme', suffix: '/theme', icon: Palette },
 ]
 
 // Account-level items — user-wide, not tied to a single site.
@@ -41,6 +42,7 @@ const studentNavigation = [
 const orgNavigationItems = [
   { name: 'Site Builder', suffix: '/site-builder', icon: BookOpen },
   { name: 'Settings', suffix: '/settings', icon: Settings },
+  { name: 'Theme', suffix: '/theme', icon: Palette },
   { name: 'Members', suffix: '/members', icon: Users },
   { name: 'Domains', suffix: '/domains', icon: Globe },
 ]
