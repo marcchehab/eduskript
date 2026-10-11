@@ -42,8 +42,8 @@ const PRESETS: Array<{ value: ThemePreset; label: string; description: string }>
   { value: 'latex', label: 'LaTeX', description: 'Libertinus serif, justified text, like a LaTeX article.' },
 ]
 
-/** Logical width of the preview page: wide enough for the desktop sidebar (≥1344px). */
-const PREVIEW_WIDTH = 1400
+/** Logical width of the preview page: desktop sidebar (≥1344px) plus the fixed-width paper. */
+const PREVIEW_WIDTH = 1680
 
 function sameSettings(a: ThemeSettingsInput, b: ThemeSettingsInput) {
   return a.preset === b.preset &&
@@ -58,11 +58,11 @@ function PresetSample({ preset }: { preset: ThemePreset }) {
     <div className="pointer-events-none h-28 overflow-hidden rounded-md border border-border bg-card" aria-hidden>
       <div data-typography={preset} style={{ width: 640, transform: 'scale(0.36)', transformOrigin: 'top left' }}>
         <div className="prose-theme px-10 pt-2">
-          <h1>Photosynthesis</h1>
-          <h2>Light reactions</h2>
+          <h1>Cells</h1>
+          <h2>Membranes</h2>
           <p>
-            Plants convert light into chemical energy. The light-dependent reactions take place in
-            the thylakoid membranes of the chloroplasts.
+            Every cell is enclosed by a membrane that controls what enters and leaves it. The
+            membrane is made of a double layer of lipids.
           </p>
         </div>
       </div>
