@@ -7,7 +7,7 @@ As a teacher, you get a **public webpage** just like eduskript.org. On it, you p
 
 To get started, login and/or **<span class="es-color-red">click your profile button</span>** to get to the Dashboard.
 
-![](frontpage.excalidraw.light.svg)
+<excali src="frontpage" lightonly />
 
 ## The Site Builder
 
@@ -15,10 +15,10 @@ To get started, login and/or **<span class="es-color-red">click your profile but
 
 **<span class="es-color-green">"View Public Page" (green)</span>** takes you to your public page. Clicking the **<span class="es-color-violet">skript name opens the editor, where you edit its content (violet)</span>**.
 
-![](pagebuilder.excalidraw.light.svg)
+<excali src="sitebuilder" lightonly />
 
 ## The Page Editor
 
 At the top you can edit **<span class="es-color-red">aspects of the whole skript (red)</span>**. Under **<span class="es-color-violet">Pages you find all pages (violet)</span>** of this skript, which you edit with a click **<span class="es-color-blue">in the page editor below (blue)</span>**. When you save changes, the **<span class="es-color-orange">eye icon takes you straight to your public page (orange)</span>**.
 
-![](page-editor.excalidraw.light.svg)
+<excali src="page-editor" lightonly />
