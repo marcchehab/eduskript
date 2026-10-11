@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canManageSite } from '@/lib/site-access'
+import { CUSTOM_CSS_MAX_LENGTH } from '@/lib/settings'
 import {
   parseThemeSettings,
   sanitizeCustomCssForSite,
@@ -40,6 +41,14 @@ export async function PUT(
     }
 
     const { css, removed } = await sanitizeCustomCssForSite(siteId, parsed.settings.customCss)
+    // Sanitizing can lengthen the CSS (quoted url(), `<` → `\3c `), so the
+    // cap is checked again on what would be stored.
+    if (css.trim().length > CUSTOM_CSS_MAX_LENGTH) {
+      return NextResponse.json(
+        { error: `Custom CSS is too long after sanitizing (max ${CUSTOM_CSS_MAX_LENGTH.toLocaleString('en')} characters)` },
+        { status: 400 },
+      )
+    }
     const settings = { ...parsed.settings, customCss: css.trim() }
     await writeSiteTheme(siteId, settings)
 

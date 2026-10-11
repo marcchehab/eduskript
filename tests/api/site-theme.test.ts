@@ -10,6 +10,8 @@ const PREFIX = 'https://files.test/teacher/files/'
 const mocks = vi.hoisted(() => ({
   prisma: {
     site: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    skript: { findMany: vi.fn() },
+    $executeRaw: vi.fn(),
     organizationMember: { findUnique: vi.fn(), findMany: vi.fn() },
     pageLayout: { findUnique: vi.fn() },
     file: { findMany: vi.fn() },
@@ -46,6 +48,14 @@ const req = (url: string, method: string, body: unknown) =>
   new Request(url, { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
 const params = (siteId: string) => ({ params: Promise.resolve({ siteId }) })
 
+// patchSiteExtraSettings issues one tagged-template $executeRaw per site:
+// values = [keysToRemove, jsonToSet, siteId].
+const patches = () => p.$executeRaw.mock.calls.map((c: unknown[]) => ({
+  id: c[3] as string,
+  remove: c[1] as string[],
+  set: JSON.parse(c[2] as string) as Record<string, unknown>,
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
   session.mockResolvedValue({ user: { id: 'teacher-1' } })
@@ -57,6 +67,8 @@ beforeEach(() => {
   p.pageLayout.findUnique.mockResolvedValue(null)
   p.file.findMany.mockResolvedValue([])
   p.site.update.mockResolvedValue({})
+  p.skript.findMany.mockResolvedValue([{ slug: 'sk', pages: [{ slug: 'pg' }] }])
+  p.$executeRaw.mockResolvedValue(1)
 })
 
 describe('POST /api/sites/[siteId]/theme/apply', () => {
@@ -67,8 +79,9 @@ describe('POST /api/sites/[siteId]/theme/apply', () => {
     const updated = p.site.update.mock.calls.map(c => c[0])
     expect(updated.map(u => u.where.id)).toEqual(['B', 'ORG'])
     expect(updated[0].data).toMatchObject({ typographyPreference: 'sober', sidebarBehavior: 'contextual' })
-    // Theme keys copied, unrelated extraSettings of the target kept.
-    expect(updated[0].data.extraSettings).toEqual({ titleStyle: 'icon', hideReadingProgress: true, bodyFont: 'garamond', customCss: '.x{color:red}' })
+    // Theme keys copied as an atomic jsonb merge; unrelated keys untouched.
+    expect(patches()[0]).toEqual({ id: 'B', remove: [], set: { hideReadingProgress: true, bodyFont: 'garamond', customCss: '.x{color:red}' } })
+    expect(updated[0].data.extraSettings).toBeUndefined()
   })
 
   it('rejects the whole request when any target is not managed by the caller', async () => {
@@ -106,13 +119,14 @@ describe('PUT /api/sites/[siteId]/theme', () => {
     const { data } = p.site.update.mock.calls[0][0]
     expect(data).toMatchObject({ typographyPreference: 'latex', sidebarBehavior: 'full' })
     // bodyFont null = style default → key removed.
-    expect(data.extraSettings).toEqual({ titleStyle: 'logo', hideReadingProgress: true })
+    expect(patches()[0]).toEqual({ id: 'A', remove: ['bodyFont', 'customCss'], set: { hideReadingProgress: true } })
   })
 
   it('stores a body font independently of the heading style; rejects unknown fonts', async () => {
     const res = await saveTheme(req('http://localhost/x', 'PUT', { ...valid, preset: 'modern', bodyFont: 'inter' }), params('B'))
     expect(res.status).toBe(200)
-    expect(p.site.update.mock.calls[0][0].data).toMatchObject({ typographyPreference: 'modern', extraSettings: { bodyFont: 'inter' } })
+    expect(p.site.update.mock.calls[0][0].data).toMatchObject({ typographyPreference: 'modern' })
+    expect(patches()[0].set).toEqual({ hideReadingProgress: true, bodyFont: 'inter' })
     expect((await saveTheme(req('http://localhost/x', 'PUT', { ...valid, bodyFont: 'papyrus' }), params('B'))).status).toBe(400)
     expect(p.site.update).toHaveBeenCalledTimes(1)
   })
@@ -123,12 +137,12 @@ describe('PUT /api/sites/[siteId]/theme', () => {
     const res = await saveTheme(req('http://localhost/api/sites/A/theme', 'PUT', { ...valid, showReadingProgress: true, customCss: css }), params('A'))
     expect(res.status).toBe(200)
     const body = await res.json()
-    const stored = p.site.update.mock.calls[0][0].data.extraSettings.customCss
+    const stored = patches()[0].set.customCss
     expect(stored).toBe(`.a{background:url("${PREFIX}abc.png")}\n.b{background:none}`)
     expect(stored).not.toContain('evil.com')
     expect(body.removed.map((r: { kind: string }) => r.kind)).toEqual(['import', 'url'])
     // hideReadingProgress removed when the bar is on again.
-    expect(p.site.update.mock.calls[0][0].data.extraSettings.hideReadingProgress).toBeUndefined()
+    expect(patches()[0].remove).toContain('hideReadingProgress')
   })
 
   it('403 for a site the caller does not manage; 400 for an unknown preset', async () => {
@@ -141,5 +155,19 @@ describe('PUT /api/sites/[siteId]/theme', () => {
     const res = await saveTheme(req('http://localhost/x', 'PUT', valid), params('ORG'))
     expect(res.status).toBe(200)
     expect(p.site.update.mock.calls[0][0].where.id).toBe('ORG')
+  })
+
+  it('org save busts every placed org skript/page path literally', async () => {
+    const { revalidatePath } = await import('next/cache')
+    await saveTheme(req('http://localhost/x', 'PUT', valid), params('ORG'))
+    const paths = (revalidatePath as unknown as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0])
+    expect(paths).toEqual(expect.arrayContaining(['/org/org', '/org/org/c/sk', '/org/org/c/sk/pg']))
+  })
+
+  it('rejects CSS that is still over the cap after sanitizing', async () => {
+    const css = '.a::after{content:"<"}'.repeat(2200) // 48,400 chars in, ~57,000 after `<` → `\\3c `
+    const res = await saveTheme(req('http://localhost/x', 'PUT', { ...valid, customCss: css }), params('A'))
+    expect(res.status).toBe(400)
+    expect(p.$executeRaw).not.toHaveBeenCalled()
   })
 })

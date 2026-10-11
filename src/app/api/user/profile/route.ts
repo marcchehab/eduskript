@@ -13,6 +13,7 @@ import { CACHE_TAGS } from '@/lib/cached-queries'
 import { readExtraSettings, mergeExtraSettings } from '@/lib/settings'
 import { syncTeacherProductList } from '@/lib/teacher-list'
 import { z } from 'zod'
+import { patchSiteExtraSettings } from '@/lib/settings.server'
 
 // Base schema for non-admin users
 const updateProfileSchema = z.object({
@@ -236,12 +237,9 @@ export async function PATCH(request: NextRequest) {
       let newSlug = targetSite?.slug ?? null
 
       if ('titleStyle' in body || 'logoUrl' in body || 'directoryListing' in body || 'metaDescription' in body) {
-        const current = primarySiteId
-          ? await prisma.site.findUnique({ where: { id: primarySiteId }, select: { extraSettings: true } })
-          : null
-        // Only touch the keys the client sent — mergeExtraSettings deletes on
-        // undefined, so unconditionally passing all keys would wipe the rest.
-        siteUpdate.extraSettings = mergeExtraSettings(current?.extraSettings, {
+        // Only touch the keys the client sent — undefined deletes a key, so
+        // unconditionally passing all keys would wipe the rest.
+        const extraChanges = {
           ...('titleStyle' in body || 'logoUrl' in body
             ? {
                 titleStyle: validatedData.titleStyle || undefined,
@@ -254,7 +252,16 @@ export async function PATCH(request: NextRequest) {
           ...('metaDescription' in body
             ? { metaDescription: validatedData.metaDescription?.trim() || undefined }
             : {}),
-        })
+        }
+        if (primarySiteId) {
+          // Existing site: atomic jsonb merge (src/lib/settings.server.ts), so
+          // a parallel theme-editor save can't be overwritten by a stale read.
+          // Runs before the site update below, whose select reads it back.
+          await patchSiteExtraSettings(primarySiteId, extraChanges)
+        } else {
+          // Site created on demand below: nothing to race with.
+          siteUpdate.extraSettings = mergeExtraSettings({}, extraChanges)
+        }
       }
 
       // Write the Site row if there's a slug change or any site-field change to

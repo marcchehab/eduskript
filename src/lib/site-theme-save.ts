@@ -12,7 +12,6 @@ import {
   THEME_PRESETS,
   BODY_FONTS,
   CUSTOM_CSS_MAX_LENGTH,
-  mergeExtraSettings,
   type ThemePreset,
   type BodyFont,
 } from './settings'
@@ -21,6 +20,7 @@ import { customCssOptions } from './site-theme'
 import { placedOnSiteWhere } from './site-access'
 import { getS3Key } from './file-storage'
 import { getTeacherFileUrl } from './s3'
+import { patchSiteExtraSettings } from './settings.server'
 
 /** Everything the theme editor saves. */
 export interface ThemeSettingsInput {
@@ -95,21 +95,22 @@ export async function sanitizeCustomCssForSite(
 
 /** Persist already-validated, already-sanitized settings on one site. */
 export async function writeSiteTheme(siteId: string, settings: ThemeSettingsInput) {
-  const row = await prisma.site.findUnique({ where: { id: siteId }, select: { extraSettings: true } })
-  if (!row) throw new Error('Site not found')
   const css = settings.customCss.trim()
+  // Columns via Prisma (throws when the site doesn't exist), the jsonb keys
+  // via an atomic merge so a parallel page-settings save can't drop them
+  // (src/lib/settings.server.ts).
   await prisma.site.update({
     where: { id: siteId },
     data: {
       typographyPreference: settings.preset,
       sidebarBehavior: settings.sidebarBehavior,
-      extraSettings: mergeExtraSettings(row.extraSettings, {
-        // Only the opt-out is stored; `undefined` deletes the key.
-        hideReadingProgress: settings.showReadingProgress ? undefined : true,
-        bodyFont: settings.bodyFont ?? undefined,
-        customCss: css ? css : undefined,
-      }) as object,
     },
+  })
+  await patchSiteExtraSettings(siteId, {
+    // Only the opt-out is stored; `undefined` deletes the key.
+    hideReadingProgress: settings.showReadingProgress ? undefined : true,
+    bodyFont: settings.bodyFont ?? undefined,
+    customCss: css ? css : undefined,
   })
   await revalidateSitePresentation(siteId)
 }
@@ -129,11 +130,25 @@ export async function revalidateSitePresentation(siteId: string) {
   if (!site) return
 
   if (site.organizationId) {
-    // org/[orgSlug]/** — 'layout' revalidates every page below it, including
-    // org/[orgSlug]/c/* which read the org Site via plain prisma calls.
     revalidatePath(`/org/${site.slug}`, 'layout')
+    revalidatePath(`/org/${site.slug}`)
     revalidateTag(CACHE_TAGS.organization(site.slug), { expire: 0 })
     revalidateTag(CACHE_TAGS.orgContent(site.slug), { expire: 0 })
+    // org/[orgSlug]/c/[skriptSlug](/[pageSlug]) read the org Site via plain
+    // prisma calls (no cache tag), and a literal-path 'layout' revalidation
+    // does not reach those dynamic segments — bust each placed skript/page
+    // path explicitly (same approach as /api/organizations/[orgId] PATCH).
+    // One query; O(skripts + pages) revalidatePath calls.
+    const skripts = await prisma.skript.findMany({
+      where: await placedOnSiteWhere(siteId),
+      select: { slug: true, pages: { select: { slug: true } } },
+    })
+    for (const skript of skripts) {
+      revalidatePath(`/org/${site.slug}/c/${skript.slug}`)
+      for (const page of skript.pages) {
+        revalidatePath(`/org/${site.slug}/c/${skript.slug}/${page.slug}`)
+      }
+    }
     return
   }
 
@@ -149,6 +164,9 @@ export async function revalidateSitePresentation(siteId: string) {
     for (const { organization } of memberships) {
       if (organization.site?.slug) {
         revalidatePath(`/org/${organization.site.slug}/${site.slug}`, 'layout')
+        // Literal page path too: the teacher front page there reads the Site
+        // via a plain prisma call (no tag).
+        revalidatePath(`/org/${organization.site.slug}/${site.slug}`)
       }
     }
   }

@@ -15,8 +15,9 @@
 
 import { BrevoClient } from '@getbrevo/brevo'
 import { prisma } from '@/lib/prisma'
-import { readExtraSettings, mergeExtraSettings } from '@/lib/settings'
+import { readExtraSettings } from '@/lib/settings'
 import { createLogger } from '@/lib/logger'
+import { patchSiteExtraSettings } from './settings.server'
 
 const log = createLogger('newsletter')
 
@@ -63,10 +64,7 @@ export async function getOrCreateSiteList(siteId: string): Promise<number | null
       return null
     }
 
-    await prisma.site.update({
-      where: { id: siteId },
-      data: { extraSettings: mergeExtraSettings(site.extraSettings, { newsletterListId: listId }) },
-    })
+    await patchSiteExtraSettings(siteId, { newsletterListId: listId })
 
     log.info(`Provisioned newsletter list ${listId} for site ${site.slug}`)
     return listId

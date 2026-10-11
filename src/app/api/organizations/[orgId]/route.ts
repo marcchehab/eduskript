@@ -3,7 +3,8 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { requireOrgAdmin, requireOrgMember } from '@/lib/org-auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
-import { readExtraSettings, mergeExtraSettings } from '@/lib/settings'
+import { readExtraSettings } from '@/lib/settings'
+import { patchSiteExtraSettings } from '@/lib/settings.server'
 
 // GET /api/organizations/[orgId] - Get organization details
 export async function GET(
@@ -178,10 +179,11 @@ export async function PATCH(
     if (titleStyle !== undefined || logoUrl !== undefined || metaDescription !== undefined) {
       const currentSite = await prisma.site.findUnique({
         where: { organizationId: orgId },
-        select: { extraSettings: true },
+        select: { id: true },
       })
-      // Only the keys the client sent — mergeExtraSettings deletes on undefined.
-      siteUpdate.extraSettings = mergeExtraSettings(currentSite?.extraSettings, {
+      // Only the keys the client sent — undefined deletes a key. Atomic jsonb
+      // merge (src/lib/settings.server.ts), not read-modify-write.
+      if (currentSite) await patchSiteExtraSettings(currentSite.id, {
         ...(titleStyle !== undefined || logoUrl !== undefined
           ? { titleStyle: titleStyle || undefined, logoUrl: logoUrl || undefined }
           : {}),

@@ -14,7 +14,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveOwnedSite } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
-import { readExtraSettings, mergeExtraSettings, DEFAULT_SUPPORTER_MESSAGE } from '@/lib/settings'
+import { readExtraSettings, DEFAULT_SUPPORTER_MESSAGE } from '@/lib/settings'
+import { patchSiteExtraSettings } from '@/lib/settings.server'
 
 export async function GET(request: Request) {
   try {
@@ -67,21 +68,12 @@ export async function POST(request: Request) {
     }
     if (!site) throw new Error('No site found for user')
 
-    const row = await prisma.site.findUnique({
-      where: { id: site.id },
-      select: { extraSettings: true },
-    })
-
     const trimmed = message?.trim().slice(0, 60)
-    await prisma.site.update({
-      where: { id: site.id },
-      data: {
-        extraSettings: mergeExtraSettings(row?.extraSettings, {
-          // undefined deletes the key = back to default
-          supporterBadgeHidden: hidden === true ? true : undefined,
-          supporterBadgeMessage: trimmed || undefined,
-        }),
-      },
+    // Atomic jsonb merge (src/lib/settings.server.ts); undefined deletes the
+    // key = back to default.
+    await patchSiteExtraSettings(site.id, {
+      supporterBadgeHidden: hidden === true ? true : undefined,
+      supporterBadgeMessage: trimmed || undefined,
     })
 
     // Same staleness trap as sidebar-preference: the public sidebar reads
