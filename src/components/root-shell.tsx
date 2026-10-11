@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter, Roboto_Slab, EB_Garamond, Barlow_Condensed } from 'next/font/google'
+import { Inter, Roboto_Slab, EB_Garamond, Barlow_Condensed, Libertinus_Serif } from 'next/font/google'
 import '@/app/globals.css'
 import { Providers } from '@/components/providers'
 import { GitInfo } from '@/components/GitInfo'
@@ -13,8 +13,11 @@ import { ChunkErrorRecovery } from '@/components/chunk-error-recovery'
 // no headers()/cookies(), so ISR is unaffected. Navigating between routes
 // of different root layouts is a full page load (Next.js route-group rule).
 
+// --font-inter: also the body/heading font of the "sober" theme preset
+// (globals.css, Theme presets). Not --font-sans, which is Tailwind's own.
 const inter = Inter({
   subsets: ['latin'],
+  variable: '--font-inter',
 })
 
 // Modern typography (informatikgarten style)
@@ -31,6 +34,17 @@ const classicBody = EB_Garamond({
   weight: ['400', '500', '600'], // 600 = bold/strong (already loaded)
   variable: '--font-classic-body',
   preload: false, // Only used when user selects "classic" typography
+})
+
+// LaTeX theme preset body + headings (Libertinus = LaTeX's libertinus
+// package). Self-hosted by next/font like the others: no request leaves
+// Eduskript. Loaded only when a page uses it.
+const latexBody = Libertinus_Serif({
+  subsets: ['latin', 'latin-ext'],
+  weight: ['400', '600', '700'],
+  style: ['normal', 'italic'],
+  variable: '--font-latex-body',
+  preload: false,
 })
 
 // Shared heading font for both styles
@@ -132,7 +146,7 @@ export function RootShell({
         />
       </head>
       <body
-        className={`${inter.className} ${modernBody.variable} ${classicBody.variable} ${headingFont.variable} antialiased`}
+        className={`${inter.className} ${inter.variable} ${modernBody.variable} ${latexBody.variable} ${classicBody.variable} ${headingFont.variable} antialiased`}
         suppressHydrationWarning
       >
         <Providers>

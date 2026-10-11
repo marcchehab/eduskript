@@ -565,15 +565,12 @@ article.prose-theme > div > :first-child {
   font-family: var(--font-heading), sans-serif;
 }
 
+/* Size, alignment, margin and tracking of the title h1 live in the "Title h1"
+   rule further down (theme variables, see "Theme presets"). */
 .prose-theme h1 {
   position: relative;
-  text-align: center;
-  /* 5em = 5x the parent font size (which is --user-font-size) */
-  font-size: 5em;
-  margin: 3rem 0 2.5rem 0;
   z-index: 0;
   /* Normalize font rendering across browsers */
-  letter-spacing: -0.02em !important;
   word-spacing: 0 !important;
   font-kerning: normal !important;
   text-rendering: geometricPrecision !important;
@@ -588,7 +585,7 @@ article.prose-theme > div > :first-child {
    wider screens are untouched (fixed 1280px paper keeps annotation geometry). */
 @media (max-width: 639px) {
   .reflow-mode .prose-theme h1 {
-    font-size: min(5em, 18vw);
+    font-size: min(var(--theme-h1-size, 5em), 18vw);
     hyphens: auto;
     hyphenate-limit-chars: 12 4 4;
   }
@@ -597,8 +594,8 @@ article.prose-theme > div > :first-child {
 .prose-theme h2 {
   @apply mb-4;
   position: relative;
-  margin-top: 8rem;
-  padding-left: 0.75rem;
+  margin-top: var(--theme-h2-margin-top, 8rem);
+  padding-left: var(--theme-h2-indent, 0.75rem);
 }
 
 .prose-theme h2::before {
@@ -610,7 +607,8 @@ article.prose-theme > div > :first-child {
   width: 3px;
   height: 1.15cap;
   border-radius: 2px;
-  background: linear-gradient(
+  display: var(--theme-h2-marker-display, block);
+  background: var(--theme-h2-marker-bg, linear-gradient(
     to bottom,
     #ff0000,
     #ff8000,
@@ -625,7 +623,7 @@ article.prose-theme > div > :first-child {
     #ffff00,
     #ff8000,
     #ff0000
-  );
+  ));
   background-size: 100% 1300%;
   animation: h2-rainbow-shift 180s linear infinite;
 }
@@ -887,6 +885,7 @@ article.prose-theme > div > :first-child {
 
 .prose-theme a {
   @apply text-primary underline font-medium hover:opacity-80;
+  font-weight: var(--theme-link-weight, 500);
 }
 
 /* Strong/bold text styling moved to rainbow highlight section at end of file */
@@ -1891,45 +1890,128 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   background-color: var(--callout-question-accent) !important;
 }
 
-/* ===== Typography Styles ===== */
-/* Modern typography (Roboto Slab + Barlow Condensed) */
-[data-typography="modern"] .prose-theme,
-[data-typography="modern"] .prose-theme p,
-[data-typography="modern"] .prose-theme li,
-[data-typography="modern"] .prose-theme td,
-[data-typography="modern"] .prose-theme blockquote {
-  font-family: var(--font-modern-body), serif;
-  font-weight: 300;
+/* ===== Theme presets ===== */
+/* One per Site.typographyPreference value, set as data-typography on the
+ * public layout wrapper (src/components/public/layout.tsx,
+ * src/components/exam/exam-layout.tsx). Rules below consume the variables;
+ * every var() has a fallback equal to the original ("Fancy") value, so
+ * .prose-theme outside a themed wrapper (dashboard editor preview, AI chat,
+ * slides, …) renders exactly as before. Design: design/themes/proposal.md.
+ *
+ * --theme-text-align / --theme-hyphens are deliberately left undefined for
+ * Fancy: an undefined var() without fallback makes the declaration
+ * "unset", i.e. inherited — the same as having no rule (setting `left`
+ * would override centered containers). */
+
+/* Fancy (stored "modern", default) = the original look. */
+[data-typography="modern"],
+[data-typography="classic"] {
+  --theme-body-font: var(--font-modern-body), serif;
+  --theme-body-weight: 300;
+  --theme-body-size: 19px;
+  --theme-line-height: 1.7;
+  --theme-heading-font: var(--font-heading), sans-serif;
+  --theme-heading-weight: 700;
+  --theme-h1-size: 5em;
+  --theme-h1-weight: 700;
+  --theme-h1-align: center;
+  --theme-h1-margin: 3rem 0 2.5rem 0;
+  --theme-h1-tracking: -0.02em;
+  --theme-h2-size: 3em;
+  --theme-h2-margin-top: 8rem;
+  --theme-h2-indent: 0.75rem;
+  --theme-h2-marker-display: block;
+  --theme-h3-size: 1.5em;
+  --theme-title-shadow-display: block;
+  --theme-link-weight: 500;
+  /* --theme-h2-marker-bg: unset → rainbow fallback in the h2::before rule */
 }
 
-[data-typography="modern"] .prose-theme h1,
-[data-typography="modern"] .prose-theme h2,
-[data-typography="modern"] .prose-theme h3,
-[data-typography="modern"] .prose-theme h4,
-[data-typography="modern"] .prose-theme h5,
-[data-typography="modern"] .prose-theme h6 {
-  font-family: var(--font-heading), sans-serif;
-  font-weight: 700;
+/* Fancy (Garamond) (stored "classic"): Fancy with an EB Garamond body. */
+[data-typography="classic"] {
+  --theme-body-font: var(--font-classic-body), serif;
+  --theme-body-weight: 400;
 }
 
-/* Classic typography (EB Garamond + Barlow Condensed) */
-[data-typography="classic"] .prose-theme,
-[data-typography="classic"] .prose-theme p,
-[data-typography="classic"] .prose-theme li,
-[data-typography="classic"] .prose-theme td,
-[data-typography="classic"] .prose-theme blockquote {
-  font-family: var(--font-classic-body), serif;
-  font-weight: 400;
+/* Sober: the app's sans (Inter), modest sizes, a static accent bar on h2. */
+[data-typography="sober"] {
+  --theme-body-font: var(--font-inter), system-ui, sans-serif;
+  --theme-body-weight: 400;
+  --theme-body-size: 17px;
+  --theme-line-height: 1.65;
+  --theme-text-align: left;
+  --theme-hyphens: manual;
+  --theme-heading-font: var(--font-inter), system-ui, sans-serif;
+  --theme-heading-weight: 650;
+  --theme-h1-size: 2.25em;
+  --theme-h1-weight: 700;
+  --theme-h1-align: left;
+  --theme-h1-margin: 0 0 1.5rem;
+  --theme-h1-tracking: -0.02em;
+  --theme-h2-size: 1.5em;
+  --theme-h2-margin-top: 3.5rem;
+  --theme-h2-indent: 0.75rem;
+  --theme-h2-marker-display: block;
+  --theme-h2-marker-bg: hsl(var(--primary));
+  --theme-h3-size: 1.2em;
+  --theme-title-shadow-display: none;
+  --theme-link-weight: 500;
 }
 
-[data-typography="classic"] .prose-theme h1,
-[data-typography="classic"] .prose-theme h2,
-[data-typography="classic"] .prose-theme h3,
-[data-typography="classic"] .prose-theme h4,
-[data-typography="classic"] .prose-theme h5,
-[data-typography="classic"] .prose-theme h6 {
-  font-family: var(--font-heading), sans-serif;
-  font-weight: 700;
+/* LaTeX: Libertinus Serif, justified + hyphenated (uses <html lang>),
+ * article-class heading scale, no decoration. */
+[data-typography="latex"] {
+  --theme-body-font: var(--font-latex-body), serif;
+  --theme-body-weight: 400;
+  --theme-body-size: 19px;
+  --theme-line-height: 1.55;
+  --theme-text-align: justify;
+  --theme-hyphens: auto;
+  --theme-heading-font: var(--font-latex-body), serif;
+  --theme-heading-weight: 700;
+  --theme-h1-size: 2.1em;
+  --theme-h1-weight: 400;
+  --theme-h1-align: center;
+  --theme-h1-margin: 0.5rem 0 2.75rem;
+  --theme-h1-tracking: 0;
+  --theme-h2-size: 1.45em;
+  --theme-h2-margin-top: 2.75rem;
+  --theme-h2-indent: 0;
+  --theme-h2-marker-display: none;
+  --theme-h2-marker-bg: none;
+  --theme-h3-size: 1.2em;
+  --theme-title-shadow-display: none;
+  --theme-link-weight: 400;
+}
+
+[data-typography] .prose-theme,
+[data-typography] .prose-theme p,
+[data-typography] .prose-theme li,
+[data-typography] .prose-theme td,
+[data-typography] .prose-theme blockquote {
+  font-family: var(--theme-body-font);
+  font-weight: var(--theme-body-weight);
+}
+
+[data-typography] .prose-theme p,
+[data-typography] .prose-theme li {
+  /* No fallback on purpose (see header): undefined → inherited. */
+  text-align: var(--theme-text-align);
+  hyphens: var(--theme-hyphens);
+}
+
+[data-typography] .prose-theme h1,
+[data-typography] .prose-theme h2,
+[data-typography] .prose-theme h3,
+[data-typography] .prose-theme h4,
+[data-typography] .prose-theme h5,
+[data-typography] .prose-theme h6 {
+  font-family: var(--theme-heading-font);
+  font-weight: var(--theme-heading-weight);
+}
+
+[data-typography] .prose-theme h1 {
+  font-weight: var(--theme-h1-weight, var(--theme-heading-weight));
 }
 
 /* User-controlled font size
@@ -1937,21 +2019,19 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
  * across devices regardless of browser root font size.
  * Headings are calculated as multiples of --user-font-size.
  */
-:root {
-  --user-font-size: 19px; /* Default ~14pt */
-}
-
+/* No :root default for --user-font-size: it is only set when a reader
+ * picks a size (FontSizeControls), and then wins over the preset's size. */
 .prose-theme {
-  font-size: var(--user-font-size, 19px);
+  font-size: var(--user-font-size, var(--theme-body-size, 19px));
 }
 
 .prose-theme p,
 .prose-theme li,
 .prose-theme td,
 .prose-theme blockquote {
-  font-size: var(--user-font-size, 19px);
+  font-size: var(--user-font-size, var(--theme-body-size, 19px));
   /* Fixed line-height ratio - browsers may round differently with unitless values */
-  line-height: 1.7;
+  line-height: var(--theme-line-height, 1.7);
 }
 
 /* Prevent ALL prose font styles from leaking into opt-out containers (e.g. mermaid diagrams).
@@ -1978,17 +2058,12 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
  * em is relative to parent font size (which is --user-font-size on .prose-theme)
  * This works consistently across all browsers including Safari on iPad.
  */
-.prose-theme h1 {
-  /* Main content h1 - overridden below for title h1 */
-  font-size: 2.25em;
-}
-
 .prose-theme h2 {
-  font-size: 3em;
+  font-size: var(--theme-h2-size, 3em);
 }
 
 .prose-theme h3 {
-  font-size: 1.5em;
+  font-size: var(--theme-h3-size, 1.5em);
 }
 
 .prose-theme h4 {
@@ -2008,12 +2083,12 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
  */
 .prose-theme h1 {
   position: relative;
-  text-align: center;
-  font-size: 5em;
-  margin: 3rem 0 2.5rem 0;
+  text-align: var(--theme-h1-align, center);
+  font-size: var(--theme-h1-size, 5em);
+  margin: var(--theme-h1-margin, 3rem 0 2.5rem 0);
   color: hsl(var(--prose-headings)) !important;
   /* Normalize font rendering across browsers (Safari renders wider than Firefox) */
-  letter-spacing: -0.02em !important;
+  letter-spacing: var(--theme-h1-tracking, -0.02em) !important;
   word-spacing: 0 !important;
   font-kerning: normal !important;
   -webkit-font-smoothing: antialiased;
@@ -2021,8 +2096,10 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   text-rendering: geometricPrecision !important;
 }
 
-/* Rainbow gradient shadow effect - apply to h1 with color-title class */
+/* Rainbow gradient shadow effect - apply to h1 with color-title class.
+ * Presets turn it off via --theme-title-shadow-display: none. */
 .prose-theme h1.color-title::before {
+  display: var(--theme-title-shadow-display, block);
   content: attr(data-heading-text);
   position: absolute;
   right: 2px;
@@ -2096,7 +2173,9 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
  * at the same top and wraps around the float identically. Offset via transform. */
 .prose-theme h1.color-title-js .color-title-shadow {
   position: relative;
-  display: block;
+  /* none (Sober/LaTeX): no box, so ColorTitleHeading's inline negative
+     margin has no effect either; the duplicated DOM stays but is invisible. */
+  display: var(--theme-title-shadow-display, block);
   transform: translate(2px, 2px);
   z-index: 0;
   background-image: linear-gradient(to right,

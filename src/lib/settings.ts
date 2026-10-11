@@ -55,7 +55,37 @@ export interface SiteExtraSettings {
    * back to the plain-text pageDescription. Capped at 300 chars.
    */
   metaDescription?: string
+
+  /**
+   * Hide the chapter reading-progress bar at the top of public pages. Absent
+   * = shown; only the opt-out is stored (same pattern as directoryOptOut).
+   */
+  hideReadingProgress?: boolean
+
+  /**
+   * Free-form CSS the site manager adds to the site's public pages (theme
+   * editor). Stored ALREADY sanitized (src/lib/custom-css.ts) and sanitized
+   * again at render; capped at CUSTOM_CSS_MAX_LENGTH.
+   */
+  customCss?: string
 }
+
+/**
+ * Theme presets, stored in the existing Site.typographyPreference column
+ * (no migration): 'modern' = Fancy (the original look, default), 'classic' =
+ * Fancy with EB Garamond body, 'sober' and 'latex'. The CSS for each lives in
+ * globals.css under [data-typography="…"]. See design/themes/proposal.md.
+ */
+export const THEME_PRESETS = ['modern', 'classic', 'sober', 'latex'] as const
+export type ThemePreset = (typeof THEME_PRESETS)[number]
+
+/** Unknown/missing values fall back to 'modern' (the column default). */
+export function parseThemePreset(value: unknown): ThemePreset {
+  return (THEME_PRESETS as readonly unknown[]).includes(value) ? (value as ThemePreset) : 'modern'
+}
+
+/** Upper bound for Site.extraSettings.customCss, in characters. */
+export const CUSTOM_CSS_MAX_LENGTH = 50_000
 
 /** Shown on the public badge when the supporter has not set a custom message. */
 export const DEFAULT_SUPPORTER_MESSAGE = 'I support 🇨🇭open-source'
@@ -96,6 +126,12 @@ export function readExtraSettings(source: { extraSettings?: unknown } | unknown)
   }
   if (typeof bag.metaDescription === 'string' && bag.metaDescription.trim()) {
     out.metaDescription = bag.metaDescription.trim().slice(0, 300)
+  }
+  if (bag.hideReadingProgress === true) out.hideReadingProgress = true
+  // Not re-sanitized here (pure module, no URL allowlist); renderers go
+  // through readSiteTheme() in src/lib/site-theme.ts, which does.
+  if (typeof bag.customCss === 'string' && bag.customCss.trim()) {
+    out.customCss = bag.customCss.slice(0, CUSTOM_CSS_MAX_LENGTH)
   }
 
   return out

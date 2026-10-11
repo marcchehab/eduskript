@@ -6,8 +6,22 @@ import { ZoomPill } from '@/components/ui/zoom-pill'
 const FONT_SIZE_KEY = 'eduskript-font-size'
 const MIN_SIZE = 14
 const MAX_SIZE = 28
-const DEFAULT_SIZE = 19  // ~14pt
+const DEFAULT_SIZE = 19  // ~14pt; the Fancy preset's size, used until mounted
 const STEP = 2
+
+/**
+ * The site theme's body size and line-height factor (globals.css, Theme
+ * presets: --theme-body-size / --theme-line-height), read from the rendered
+ * .prose-theme. Falls back to 19px / 1.7 outside a themed page.
+ */
+function readThemeDefaults(): { size: number; lineHeight: number } {
+  const el = document.querySelector('.prose-theme')
+  if (!el) return { size: DEFAULT_SIZE, lineHeight: 1.7 }
+  const style = getComputedStyle(el)
+  const size = parseFloat(style.getPropertyValue('--theme-body-size')) || DEFAULT_SIZE
+  const lineHeight = parseFloat(style.getPropertyValue('--theme-line-height')) || 1.7
+  return { size, lineHeight }
+}
 
 interface FontSizeControlsProps {
   orientation?: 'horizontal' | 'vertical'
@@ -31,7 +45,7 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
     })
 
     // Force consistent line-height on paragraphs (browsers round 1.7 differently)
-    const lineHeight = Math.round(size * 1.7)
+    const lineHeight = Math.round(size * readThemeDefaults().lineHeight)
     const textElements = document.querySelectorAll('.prose-theme p, .prose-theme li')
     textElements.forEach((el) => {
       (el as HTMLElement).style.lineHeight = `${lineHeight}px`
@@ -56,14 +70,16 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
   useEffect(() => {
     if (!mounted) return
 
+    // A reader's saved size (absolute px) overrides every preset. Without
+    // one, start the +/- steps from the preset's own size (17px for Sober).
     const saved = localStorage.getItem(FONT_SIZE_KEY)
-    if (saved) {
-      const size = parseInt(saved, 10)
-      if (size >= MIN_SIZE && size <= MAX_SIZE) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setFontSize(size)
-        applyFontSize(size)
-      }
+    const size = saved ? parseInt(saved, 10) : NaN
+    if (size >= MIN_SIZE && size <= MAX_SIZE) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFontSize(size)
+      applyFontSize(size)
+    } else {
+      setFontSize(readThemeDefaults().size)
     }
   }, [mounted])
 
