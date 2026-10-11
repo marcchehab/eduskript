@@ -2,13 +2,32 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('@/lib/s3', () => ({ getTeacherFilesUrlPrefix: () => 'https://files.test/t/files/' }))
 
-import { parseThemePreset, readExtraSettings, mergeExtraSettings } from '@/lib/settings'
+import { parseThemePreset, parseBodyFont, defaultBodyFont, readExtraSettings, mergeExtraSettings } from '@/lib/settings'
 import { readSiteTheme, DEFAULT_SITE_THEME } from '@/lib/site-theme'
 
 describe('parseThemePreset', () => {
   it('accepts the four presets and falls back to modern', () => {
     for (const v of ['modern', 'classic', 'sober', 'latex']) expect(parseThemePreset(v)).toBe(v)
     for (const v of [null, undefined, '', 'neon', 3]) expect(parseThemePreset(v)).toBe('modern')
+  })
+})
+
+describe('parseBodyFont / defaultBodyFont', () => {
+  it('accepts the four fonts; unknown → null (style default)', () => {
+    for (const v of ['roboto-slab', 'garamond', 'inter', 'libertinus']) expect(parseBodyFont(v)).toBe(v)
+    for (const v of [null, undefined, '', 'comic-sans', 1]) expect(parseBodyFont(v)).toBeNull()
+  })
+
+  it('maps each heading style (incl. legacy classic) to its default font', () => {
+    expect(defaultBodyFont('modern')).toBe('roboto-slab')
+    expect(defaultBodyFont('classic')).toBe('garamond')
+    expect(defaultBodyFont('sober')).toBe('inter')
+    expect(defaultBodyFont('latex')).toBe('libertinus')
+  })
+
+  it('drops an unknown stored bodyFont', () => {
+    expect(readExtraSettings({ bodyFont: 'papyrus' })).toEqual({})
+    expect(readExtraSettings({ bodyFont: 'inter' })).toEqual({ bodyFont: 'inter' })
   })
 })
 
@@ -36,6 +55,7 @@ describe('readSiteTheme', () => {
       extraSettings: { hideReadingProgress: true, customCss: '@import "https://x.com/a.css"; .a{background:url(https://x.com/b.png)} </style>' },
     })
     expect(theme.preset).toBe('latex')
+    expect(theme.bodyFont).toBeNull()
     expect(theme.showReadingProgress).toBe(false)
     expect(theme.customCss).not.toContain('x.com')
     expect(theme.customCss).not.toContain('<')

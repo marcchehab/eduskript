@@ -3,7 +3,8 @@
  *
  * Stored on the Site (presentation belongs to the site, see
  * src/lib/site-access.ts):
- *   - preset            → Site.typographyPreference (column, see settings.ts)
+ *   - preset            → Site.typographyPreference (heading style; column)
+ *   - body font         → Site.extraSettings.bodyFont (null = style default)
  *   - navigation        → Site.sidebarBehavior (column; not part of SiteTheme
  *                          because every route already reads it separately)
  *   - reading progress  → Site.extraSettings.hideReadingProgress (opt-out)
@@ -14,12 +15,14 @@
  * saved via /api/sites/[siteId]/theme.
  */
 
-import { readExtraSettings, parseThemePreset, type ThemePreset } from './settings'
+import { readExtraSettings, parseThemePreset, type ThemePreset, type BodyFont } from './settings'
 import { sanitizeCustomCss, type CustomCssOptions } from './custom-css'
 import { getTeacherFilesUrlPrefix } from './s3'
 
 export interface SiteTheme {
   preset: ThemePreset
+  /** null = the heading style's default font (no data-body-font attribute). */
+  bodyFont: BodyFont | null
   showReadingProgress: boolean
   /** Sanitized; '' when none. Safe to put inside a <style> element. */
   customCss: string
@@ -27,6 +30,7 @@ export interface SiteTheme {
 
 export const DEFAULT_SITE_THEME: SiteTheme = {
   preset: 'modern',
+  bodyFont: null,
   showReadingProgress: true,
   customCss: '',
 }
@@ -52,6 +56,7 @@ export function readSiteTheme(
   const extra = readExtraSettings(site)
   return {
     preset: parseThemePreset(site.typographyPreference),
+    bodyFont: extra.bodyFont ?? null,
     showReadingProgress: !extra.hideReadingProgress,
     customCss: extra.customCss ? sanitizeCustomCss(extra.customCss, customCssOptions()).css : '',
   }

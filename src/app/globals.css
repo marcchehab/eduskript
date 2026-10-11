@@ -1891,9 +1891,18 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 }
 
 /* ===== Theme presets ===== */
-/* One per Site.typographyPreference value, set as data-typography on the
- * public layout wrapper (src/components/public/layout.tsx,
- * src/components/exam/exam-layout.tsx). Rules below consume the variables;
+/* Two independent per-site choices, both set on the public layout wrapper
+ * (src/components/public/layout.tsx, src/components/exam/exam-layout.tsx):
+ *   - heading style: data-typography = Site.typographyPreference
+ *     (modern = Fancy, sober, latex; legacy classic = Fancy + Garamond).
+ *     Sets heading/decoration variables AND a default body font.
+ *   - body font: data-body-font = Site.extraSettings.bodyFont, absent when
+ *     the site uses the style's default. Overrides only the --theme-body-*
+ *     variables and line-height (selector [data-typography][data-body-font]
+ *     is more specific than the style blocks).
+ * Each body font carries its own size/weight/line-height, tuned to its
+ * x-height. Heading sizes are em-based, so they scale with that size.
+ * Rules below consume the variables;
  * every var() has a fallback equal to the original ("Fancy") value, so
  * .prose-theme outside a themed wrapper (dashboard editor preview, AI chat,
  * slides, …) renders exactly as before. Design: design/themes/proposal.md.
@@ -1927,13 +1936,16 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   /* --theme-h2-marker-bg: unset → rainbow fallback in the h2::before rule */
 }
 
-/* Fancy (Garamond) (stored "classic"): Fancy with an EB Garamond body. */
+/* Fancy (Garamond) (stored "classic"): Fancy with an EB Garamond body.
+ * Garamond's x-height is much smaller than Roboto Slab's, so 19px reads tiny;
+ * 22px brings the lowercase letters close to Fancy's size. */
 [data-typography="classic"] {
   --theme-body-font: var(--font-classic-body), serif;
   --theme-body-weight: 400;
+  --theme-body-size: 22px;
 }
 
-/* Sober: the app's sans (Inter), modest sizes, a static accent bar on h2. */
+/* Sober: modest sizes, a static accent bar on h2. Default body: Inter. */
 [data-typography="sober"] {
   --theme-body-font: var(--font-inter), system-ui, sans-serif;
   --theme-body-weight: 400;
@@ -1958,12 +1970,13 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --theme-link-weight: 500;
 }
 
-/* LaTeX: Libertinus Serif, justified + hyphenated (uses <html lang>),
- * article-class heading scale, no decoration. */
+/* LaTeX: Libertinus Serif headings, justified + hyphenated text (uses
+ * <html lang>; part of the style, kept with any body font), article-class
+ * heading scale, no decoration. Default body: Libertinus. */
 [data-typography="latex"] {
   --theme-body-font: var(--font-latex-body), serif;
   --theme-body-weight: 400;
-  --theme-body-size: 19px;
+  --theme-body-size: 21px; /* Libertinus has a small x-height; 19px read too small */
   --theme-line-height: 1.55;
   --theme-text-align: justify;
   --theme-hyphens: auto;
@@ -1982,6 +1995,33 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --theme-h3-size: 1.2em;
   --theme-title-shadow-display: none;
   --theme-link-weight: 400;
+}
+
+/* Body fonts (data-body-font). Values must match the style defaults above
+ * so that choosing a font equal to the default changes nothing. */
+[data-typography][data-body-font="roboto-slab"] {
+  --theme-body-font: var(--font-modern-body), serif;
+  --theme-body-weight: 300;
+  --theme-body-size: 19px;
+  --theme-line-height: 1.7;
+}
+[data-typography][data-body-font="garamond"] {
+  --theme-body-font: var(--font-classic-body), serif;
+  --theme-body-weight: 400;
+  --theme-body-size: 22px;
+  --theme-line-height: 1.7;
+}
+[data-typography][data-body-font="inter"] {
+  --theme-body-font: var(--font-inter), system-ui, sans-serif;
+  --theme-body-weight: 400;
+  --theme-body-size: 17px;
+  --theme-line-height: 1.65;
+}
+[data-typography][data-body-font="libertinus"] {
+  --theme-body-font: var(--font-latex-body), serif;
+  --theme-body-weight: 400;
+  --theme-body-size: 21px;
+  --theme-line-height: 1.55;
 }
 
 [data-typography] .prose-theme,

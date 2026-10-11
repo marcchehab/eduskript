@@ -8,7 +8,8 @@ import { writeSiteTheme } from '@/lib/site-theme-save'
 
 /**
  * POST /api/sites/[siteId]/theme/apply — copy this site's SAVED theme
- * (preset, navigation, reading progress, custom CSS) onto other sites.
+ * (heading style, body font, navigation, reading progress, custom CSS)
+ * onto other sites.
  * Body: { targetSiteIds: string[] }.
  *
  * The caller must manage the source AND every target (personal sites they
@@ -58,6 +59,7 @@ export async function POST(
     const theme = readSiteTheme(source)
     const settings = {
       preset: theme.preset,
+      bodyFont: theme.bodyFont,
       sidebarBehavior: source.sidebarBehavior === 'contextual' ? 'contextual' as const : 'full' as const,
       showReadingProgress: theme.showReadingProgress,
       customCss: theme.customCss,

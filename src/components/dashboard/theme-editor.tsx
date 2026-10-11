@@ -12,7 +12,7 @@ import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useUnsavedChangesGuard } from '@/components/dashboard/unsaved-changes-guard'
 import { cn } from '@/lib/utils'
-import { CUSTOM_CSS_MAX_LENGTH, type ThemePreset } from '@/lib/settings'
+import { CUSTOM_CSS_MAX_LENGTH, defaultBodyFont, type ThemePreset, type BodyFont } from '@/lib/settings'
 import { sanitizeCustomCss, type RemovedCssItem } from '@/lib/custom-css'
 import {
   THEME_PREVIEW_MESSAGE,
@@ -25,7 +25,7 @@ import type { ThemeSettingsInput } from '@/lib/site-theme-save'
 /**
  * Per-site theme editor (dashboard → <site> → Theme).
  *
- * Left: preset, navigation, reading progress, custom CSS, sharing between
+ * Left: heading style, body font, navigation, reading progress, custom CSS, sharing between
  * the user's sites. Right: a real public page of the site in an iframe. The
  * iframe is same-origin; unsaved settings are posted to it and swapped in by
  * PublicSiteLayout (src/components/public/theme-preview.ts), so the preview
@@ -35,28 +35,52 @@ import type { ThemeSettingsInput } from '@/lib/site-theme-save'
  * POST /api/sites/[siteId]/theme/apply.
  */
 
-const PRESETS: Array<{ value: ThemePreset; label: string; description: string }> = [
-  { value: 'modern', label: 'Fancy', description: 'Large titles with rainbow accents. The original look.' },
-  { value: 'classic', label: 'Fancy (Garamond)', description: 'Fancy with a Garamond body font.' },
-  { value: 'sober', label: 'Sober', description: 'Sans-serif, modest headings, no decoration.' },
-  { value: 'latex', label: 'LaTeX', description: 'Libertinus serif, justified text, like a LaTeX article.' },
+// Heading styles offered. Legacy 'classic' is shown as Fancy + Garamond
+// (see normalizeSettings).
+const STYLES: Array<{ value: ThemePreset; label: string; description: string }> = [
+  { value: 'modern', label: 'Fancy', description: 'Large titles, rainbow accents.' },
+  { value: 'sober', label: 'Sober', description: 'Modest headings, no decoration.' },
+  { value: 'latex', label: 'LaTeX', description: 'Article headings, justified text.' },
 ]
+
+// Rendered in their own font. Families/weights mirror the
+// [data-body-font] blocks in globals.css.
+const BODY_FONT_OPTIONS: Array<{ value: BodyFont; label: string; family: string; weight: number }> = [
+  { value: 'roboto-slab', label: 'Roboto Slab', family: 'var(--font-modern-body), serif', weight: 300 },
+  { value: 'garamond', label: 'EB Garamond', family: 'var(--font-classic-body), serif', weight: 400 },
+  { value: 'inter', label: 'Inter', family: 'var(--font-inter), sans-serif', weight: 400 },
+  { value: 'libertinus', label: 'Libertinus', family: 'var(--font-latex-body), serif', weight: 400 },
+]
+
+/**
+ * Legacy 'classic' = Fancy headings + Garamond default font. The editor has
+ * no classic card, so show it as Fancy + Garamond; saving that writes
+ * 'modern' + bodyFont 'garamond', which renders identically.
+ */
+function normalizeSettings(s: ThemeSettingsInput): ThemeSettingsInput {
+  return s.preset === 'classic' ? { ...s, preset: 'modern', bodyFont: s.bodyFont ?? 'garamond' } : s
+}
 
 /** Logical width of the preview page: desktop sidebar (≥1344px) plus the fixed-width paper. */
 const PREVIEW_WIDTH = 1680
 
 function sameSettings(a: ThemeSettingsInput, b: ThemeSettingsInput) {
   return a.preset === b.preset &&
+    a.bodyFont === b.bodyFont &&
     a.sidebarBehavior === b.sidebarBehavior &&
     a.showReadingProgress === b.showReadingProgress &&
     a.customCss === b.customCss
 }
 
 /** Real .prose-theme markup, scaled down, so the card uses the live CSS. */
-function PresetSample({ preset }: { preset: ThemePreset }) {
+function StyleSample({ preset, bodyFont }: { preset: ThemePreset; bodyFont: BodyFont | null }) {
   return (
-    <div className="pointer-events-none h-28 overflow-hidden rounded-md border border-border bg-card" aria-hidden>
-      <div data-typography={preset} style={{ width: 640, transform: 'scale(0.36)', transformOrigin: 'top left' }}>
+    <div className="pointer-events-none h-24 overflow-hidden rounded-md border border-border bg-card" aria-hidden>
+      <div
+        data-typography={preset}
+        data-body-font={bodyFont ?? undefined}
+        style={{ width: 640, transform: 'scale(0.2)', transformOrigin: 'top left' }}
+      >
         <div className="prose-theme px-10 pt-2">
           <h1>Cells</h1>
           <h2>Membranes</h2>
@@ -73,8 +97,8 @@ function PresetSample({ preset }: { preset: ThemePreset }) {
 export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefixes }: ThemeEditorData) {
   const router = useRouter()
   const dialog = useAlertDialog()
-  const [saved, setSaved] = useState<ThemeSettingsInput>(site.settings)
-  const [settings, setSettings] = useState<ThemeSettingsInput>(site.settings)
+  const [saved, setSaved] = useState<ThemeSettingsInput>(() => normalizeSettings(site.settings))
+  const [settings, setSettings] = useState<ThemeSettingsInput>(() => normalizeSettings(site.settings))
   const [saving, setSaving] = useState(false)
   const [removed, setRemoved] = useState<RemovedCssItem[]>([])
   const [applyTargets, setApplyTargets] = useState<string[]>([])
@@ -132,7 +156,7 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
   const handleCopyFrom = (id: string) => {
     setCopyFrom(id)
     const source = otherSites.find(s => s.id === id)
-    if (source) setSettings({ ...source.settings })
+    if (source) setSettings(normalizeSettings({ ...source.settings }))
   }
 
   return (
@@ -148,9 +172,9 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
         {/* ---------------- Controls ---------------- */}
         <div className="space-y-6">
           <section className="space-y-3">
-            <Label className="text-sm font-medium">Preset</Label>
-            <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Theme preset">
-              {PRESETS.map(p => (
+            <Label className="text-sm font-medium">Heading style</Label>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Heading style">
+              {STYLES.map(p => (
                 <button
                   key={p.value}
                   type="button"
@@ -164,14 +188,38 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
                       : 'border-border hover:border-muted-foreground/50'
                   )}
                 >
-                  <PresetSample preset={p.value} />
+                  <StyleSample preset={p.value} bodyFont={settings.bodyFont} />
                   <div className="mt-2 text-sm font-medium">{p.label}</div>
                   <div className="text-xs text-muted-foreground">{p.description}</div>
                 </button>
               ))}
             </div>
+          </section>
+
+          <section className="space-y-2">
+            <Label className="text-sm font-medium">Body font</Label>
+            <div className="space-y-1" role="radiogroup" aria-label="Body font">
+              {[null, ...BODY_FONT_OPTIONS].map(opt => {
+                const value = opt?.value ?? null
+                const shown = opt ?? BODY_FONT_OPTIONS.find(o => o.value === defaultBodyFont(settings.preset))!
+                return (
+                  <label key={value ?? 'default'} className="flex items-center gap-3 cursor-pointer rounded-md px-2 py-1 hover:bg-muted">
+                    <input
+                      type="radio"
+                      name="bodyFont"
+                      checked={settings.bodyFont === value}
+                      onChange={() => update({ bodyFont: value })}
+                    />
+                    <span style={{ fontFamily: shown.family, fontWeight: shown.weight }} className="text-base">
+                      {opt ? opt.label : `Style default (${shown.label})`}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Changing the theme reflows text. Pen annotations on existing pages may shift relative to the text.
+              Each font has its own size, tuned to how large it reads. Changing style or font reflows
+              text: pen annotations on existing pages may shift relative to the text.
             </p>
           </section>
 
@@ -295,7 +343,7 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
                 </div>
                 <ConfirmationDialog
                   title="Apply theme to other sites?"
-                  description={`This replaces the preset, navigation, reading progress bar and custom CSS of ${applyTargets.length} site${applyTargets.length === 1 ? '' : 's'} with the saved theme of ${site.name}.`}
+                  description={`This replaces the heading style, body font, navigation, reading progress bar and custom CSS of ${applyTargets.length} site${applyTargets.length === 1 ? '' : 's'} with the saved theme of ${site.name}.`}
                   confirmText="Apply"
                   onConfirm={handleApply}
                   trigger={
@@ -347,6 +395,7 @@ function ThemePreview({
   // client-side, so they show only after saving.
   const previewState = useMemo<ThemePreviewState>(() => ({
     preset: settings.preset,
+    bodyFont: settings.bodyFont,
     sidebarBehavior: settings.sidebarBehavior,
     showReadingProgress: settings.showReadingProgress,
     customCss: sanitizeCustomCss(settings.customCss, { allowedUrlPrefixes }).css,

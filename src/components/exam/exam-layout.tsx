@@ -15,7 +15,7 @@
 
 import { ExamHeader } from './exam-header'
 import { ReadingProgress } from '@/components/public/reading-progress'
-import type { ThemePreset } from '@/lib/settings'
+import type { ThemePreset, BodyFont } from '@/lib/settings'
 
 interface ExamLayoutProps {
   children: React.ReactNode
@@ -24,6 +24,8 @@ interface ExamLayoutProps {
   studentName?: string | null
   studentEmail?: string | null
   typographyPreference?: ThemePreset
+  /** Site.extraSettings.bodyFont; null/undefined = the style's default font. */
+  bodyFont?: BodyFont | null
   /** Site's reading-progress toggle (Site.extraSettings.hideReadingProgress). */
   showReadingProgress?: boolean
   /** Teacher's active RSA-OAEP public key for the offline backup feature. */
@@ -40,6 +42,7 @@ export function ExamLayout({
   studentName,
   studentEmail,
   typographyPreference = 'modern',
+  bodyFont,
   showReadingProgress = true,
   backupPublicKeyJwk,
   backupKeyId,
@@ -50,6 +53,7 @@ export function ExamLayout({
     <div
       className="h-screen overflow-hidden bg-background"
       data-typography={typographyPreference}
+      data-body-font={bodyFont ?? undefined}
     >
       {showReadingProgress && <ReadingProgress />}
 

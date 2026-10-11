@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { parseThemePreset, type ThemePreset } from '@/lib/settings'
+import { parseThemePreset, parseBodyFont, type ThemePreset, type BodyFont } from '@/lib/settings'
 
 /**
  * Live preview channel between the dashboard theme editor
@@ -28,6 +28,7 @@ export const THEME_PREVIEW_READY = 'eduskript:theme-preview-ready'
 
 export interface ThemePreviewState {
   preset: ThemePreset
+  bodyFont: BodyFont | null
   showReadingProgress: boolean
   customCss: string
   sidebarBehavior: 'full' | 'contextual'
@@ -38,6 +39,7 @@ function parseState(value: unknown): ThemePreviewState | null {
   const v = value as Record<string, unknown>
   return {
     preset: parseThemePreset(v.preset),
+    bodyFont: parseBodyFont(v.bodyFont),
     showReadingProgress: v.showReadingProgress !== false,
     customCss: typeof v.customCss === 'string' ? v.customCss : '',
     sidebarBehavior: v.sidebarBehavior === 'contextual' ? 'contextual' : 'full',

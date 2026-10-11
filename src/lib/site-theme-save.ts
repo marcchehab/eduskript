@@ -10,9 +10,11 @@ import { prisma } from './prisma'
 import { CACHE_TAGS } from './cached-queries'
 import {
   THEME_PRESETS,
+  BODY_FONTS,
   CUSTOM_CSS_MAX_LENGTH,
   mergeExtraSettings,
   type ThemePreset,
+  type BodyFont,
 } from './settings'
 import { sanitizeCustomCss, type RemovedCssItem } from './custom-css'
 import { customCssOptions } from './site-theme'
@@ -22,7 +24,10 @@ import { getTeacherFileUrl } from './s3'
 
 /** Everything the theme editor saves. */
 export interface ThemeSettingsInput {
+  /** Heading style ('classic' still accepted: legacy Fancy + Garamond). */
   preset: ThemePreset
+  /** null = the heading style's default font. */
+  bodyFont: BodyFont | null
   sidebarBehavior: 'full' | 'contextual'
   showReadingProgress: boolean
   customCss: string
@@ -33,6 +38,8 @@ export function parseThemeSettings(body: unknown): { settings: ThemeSettingsInpu
   if (typeof body !== 'object' || body === null) return { error: 'Invalid body' }
   const b = body as Record<string, unknown>
   if (!(THEME_PRESETS as readonly unknown[]).includes(b.preset)) return { error: 'Invalid theme preset' }
+  const bodyFont = b.bodyFont ?? null
+  if (bodyFont !== null && !(BODY_FONTS as readonly unknown[]).includes(bodyFont)) return { error: 'Invalid body font' }
   if (b.sidebarBehavior !== 'full' && b.sidebarBehavior !== 'contextual') return { error: 'Invalid navigation value' }
   if (typeof b.showReadingProgress !== 'boolean') return { error: 'Invalid reading progress value' }
   const css = b.customCss ?? ''
@@ -43,6 +50,7 @@ export function parseThemeSettings(body: unknown): { settings: ThemeSettingsInpu
   return {
     settings: {
       preset: b.preset as ThemePreset,
+      bodyFont: bodyFont as BodyFont | null,
       sidebarBehavior: b.sidebarBehavior,
       showReadingProgress: b.showReadingProgress,
       customCss: css,
@@ -98,6 +106,7 @@ export async function writeSiteTheme(siteId: string, settings: ThemeSettingsInpu
       extraSettings: mergeExtraSettings(row.extraSettings, {
         // Only the opt-out is stored; `undefined` deletes the key.
         hideReadingProgress: settings.showReadingProgress ? undefined : true,
+        bodyFont: settings.bodyFont ?? undefined,
         customCss: css ? css : undefined,
       }) as object,
     },

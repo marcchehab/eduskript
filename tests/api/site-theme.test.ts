@@ -35,7 +35,7 @@ const session = getServerSession as unknown as ReturnType<typeof vi.fn>
 // Sites: A and B owned by teacher-1, ORG owned by an org where teacher-1 is
 // admin, FOREIGN owned by someone else.
 const sites: Record<string, { id: string; slug: string; userId: string | null; organizationId: string | null; typographyPreference: string; sidebarBehavior: string; extraSettings: unknown }> = {
-  A: { id: 'A', slug: 'a', userId: 'teacher-1', organizationId: null, typographyPreference: 'sober', sidebarBehavior: 'contextual', extraSettings: { hideReadingProgress: true, customCss: '.x{color:red}', titleStyle: 'logo' } },
+  A: { id: 'A', slug: 'a', userId: 'teacher-1', organizationId: null, typographyPreference: 'sober', sidebarBehavior: 'contextual', extraSettings: { hideReadingProgress: true, customCss: '.x{color:red}', titleStyle: 'logo', bodyFont: 'garamond' } },
   B: { id: 'B', slug: 'b', userId: 'teacher-1', organizationId: null, typographyPreference: 'modern', sidebarBehavior: 'full', extraSettings: { titleStyle: 'icon' } },
   ORG: { id: 'ORG', slug: 'org', userId: null, organizationId: 'org-1', typographyPreference: 'modern', sidebarBehavior: 'full', extraSettings: {} },
   FOREIGN: { id: 'FOREIGN', slug: 'f', userId: 'teacher-2', organizationId: null, typographyPreference: 'modern', sidebarBehavior: 'full', extraSettings: {} },
@@ -68,7 +68,7 @@ describe('POST /api/sites/[siteId]/theme/apply', () => {
     expect(updated.map(u => u.where.id)).toEqual(['B', 'ORG'])
     expect(updated[0].data).toMatchObject({ typographyPreference: 'sober', sidebarBehavior: 'contextual' })
     // Theme keys copied, unrelated extraSettings of the target kept.
-    expect(updated[0].data.extraSettings).toEqual({ titleStyle: 'icon', hideReadingProgress: true, customCss: '.x{color:red}' })
+    expect(updated[0].data.extraSettings).toEqual({ titleStyle: 'icon', hideReadingProgress: true, bodyFont: 'garamond', customCss: '.x{color:red}' })
   })
 
   it('rejects the whole request when any target is not managed by the caller', async () => {
@@ -98,14 +98,23 @@ describe('POST /api/sites/[siteId]/theme/apply', () => {
 })
 
 describe('PUT /api/sites/[siteId]/theme', () => {
-  const valid = { preset: 'latex', sidebarBehavior: 'full', showReadingProgress: false, customCss: '' }
+  const valid = { preset: 'latex', bodyFont: null, sidebarBehavior: 'full', showReadingProgress: false, customCss: '' }
 
   it('saves preset, navigation, progress opt-out; empty CSS deletes the key', async () => {
     const res = await saveTheme(req('http://localhost/api/sites/A/theme', 'PUT', valid), params('A'))
     expect(res.status).toBe(200)
     const { data } = p.site.update.mock.calls[0][0]
     expect(data).toMatchObject({ typographyPreference: 'latex', sidebarBehavior: 'full' })
+    // bodyFont null = style default → key removed.
     expect(data.extraSettings).toEqual({ titleStyle: 'logo', hideReadingProgress: true })
+  })
+
+  it('stores a body font independently of the heading style; rejects unknown fonts', async () => {
+    const res = await saveTheme(req('http://localhost/x', 'PUT', { ...valid, preset: 'modern', bodyFont: 'inter' }), params('B'))
+    expect(res.status).toBe(200)
+    expect(p.site.update.mock.calls[0][0].data).toMatchObject({ typographyPreference: 'modern', extraSettings: { bodyFont: 'inter' } })
+    expect((await saveTheme(req('http://localhost/x', 'PUT', { ...valid, bodyFont: 'papyrus' }), params('B'))).status).toBe(400)
+    expect(p.site.update).toHaveBeenCalledTimes(1)
   })
 
   it('sanitizes custom CSS before storing and reports what was removed', async () => {

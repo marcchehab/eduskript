@@ -68,13 +68,21 @@ export interface SiteExtraSettings {
    * again at render; capped at CUSTOM_CSS_MAX_LENGTH.
    */
   customCss?: string
+
+  /**
+   * Body font of the public pages, independent of the heading style
+   * (typographyPreference). Absent = the heading style's default font
+   * (see defaultBodyFont), so sites saved before this key look unchanged.
+   */
+  bodyFont?: BodyFont
 }
 
 /**
- * Theme presets, stored in the existing Site.typographyPreference column
- * (no migration): 'modern' = Fancy (the original look, default), 'classic' =
- * Fancy with EB Garamond body, 'sober' and 'latex'. The CSS for each lives in
- * globals.css under [data-typography="…"]. See design/themes/proposal.md.
+ * Heading style, stored in the existing Site.typographyPreference column
+ * (no migration): 'modern' = Fancy (the original look, default), 'sober',
+ * 'latex'. 'classic' is legacy (= Fancy headings with a Garamond default
+ * body font): still rendered, no longer offered in the editor. The CSS lives
+ * in globals.css under [data-typography="…"]. See design/themes/proposal.md.
  */
 export const THEME_PRESETS = ['modern', 'classic', 'sober', 'latex'] as const
 export type ThemePreset = (typeof THEME_PRESETS)[number]
@@ -82,6 +90,28 @@ export type ThemePreset = (typeof THEME_PRESETS)[number]
 /** Unknown/missing values fall back to 'modern' (the column default). */
 export function parseThemePreset(value: unknown): ThemePreset {
   return (THEME_PRESETS as readonly unknown[]).includes(value) ? (value as ThemePreset) : 'modern'
+}
+
+/**
+ * Body fonts (Site.extraSettings.bodyFont → data-body-font). Each has its own
+ * size/weight/line-height in globals.css, tuned to its x-height.
+ */
+export const BODY_FONTS = ['roboto-slab', 'garamond', 'inter', 'libertinus'] as const
+export type BodyFont = (typeof BODY_FONTS)[number]
+
+/** Unknown/missing values → null (= the heading style's default font). */
+export function parseBodyFont(value: unknown): BodyFont | null {
+  return (BODY_FONTS as readonly unknown[]).includes(value) ? (value as BodyFont) : null
+}
+
+/** The font a heading style uses when no body font is chosen. */
+export function defaultBodyFont(preset: ThemePreset): BodyFont {
+  switch (preset) {
+    case 'classic': return 'garamond'
+    case 'sober': return 'inter'
+    case 'latex': return 'libertinus'
+    default: return 'roboto-slab'
+  }
 }
 
 /** Upper bound for Site.extraSettings.customCss, in characters. */
@@ -128,6 +158,8 @@ export function readExtraSettings(source: { extraSettings?: unknown } | unknown)
     out.metaDescription = bag.metaDescription.trim().slice(0, 300)
   }
   if (bag.hideReadingProgress === true) out.hideReadingProgress = true
+  const bodyFont = parseBodyFont(bag.bodyFont)
+  if (bodyFont) out.bodyFont = bodyFont
   // Not re-sanitized here (pure module, no URL allowlist); renderers go
   // through readSiteTheme() in src/lib/site-theme.ts, which does.
   if (typeof bag.customCss === 'string' && bag.customCss.trim()) {

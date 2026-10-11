@@ -70,6 +70,7 @@ export async function loadThemeEditorData(userId: string, siteId: string): Promi
       kind: r.organizationId ? 'org' : 'personal',
       settings: {
         preset: theme.preset,
+        bodyFont: theme.bodyFont,
         sidebarBehavior: r.sidebarBehavior === 'contextual' ? 'contextual' : 'full',
         showReadingProgress: theme.showReadingProgress,
         customCss: theme.customCss,

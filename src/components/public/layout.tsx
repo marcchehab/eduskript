@@ -160,6 +160,7 @@ export function PublicSiteLayout({
   const previewOverride = useThemePreviewOverride()
   const sidebarBehavior = previewOverride?.sidebarBehavior ?? sidebarBehaviorProp
   const themePreset = previewOverride?.preset ?? themeProp?.preset ?? 'modern'
+  const bodyFont = previewOverride ? previewOverride.bodyFont : (themeProp?.bodyFont ?? null)
   const showReadingProgress = previewOverride?.showReadingProgress ?? themeProp?.showReadingProgress ?? true
   const customCss = previewOverride ? previewOverride.customCss : (themeProp?.customCss ?? '')
 
@@ -488,6 +489,7 @@ export function PublicSiteLayout({
       <div
         className="min-h-screen bg-background overflow-visible"
         data-typography={themePreset}
+        data-body-font={bodyFont ?? undefined}
         style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
       >
         {/* Site custom CSS. Sanitized server-side (readSiteTheme) — no
