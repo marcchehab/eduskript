@@ -284,7 +284,7 @@ export function ThemeEditor({ site, otherSites, previewTargets, allowedUrlPrefix
                 <ul className="list-disc pl-4 space-y-0.5 break-all">
                   {removed.map((r, i) => (
                     <li key={i}>
-                      {r.kind === 'import' ? '@import rule' : 'url'}: <code>{r.value}</code>
+                      {r.kind === 'import' ? '@import rule' : r.kind === 'rule' ? 'at-rule' : 'url'}: <code>{r.value}</code>
                       {r.relative && ' (no file with this name in the skripts on this site)'}
                     </li>
                   ))}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { encode } from 'next-auth/jwt'
+import { isTunnelDomain, safeReturnPath } from '@/lib/cross-domain-auth'
 
 /**
  * Cross-domain auth callback
@@ -15,18 +16,25 @@ import { encode } from 'next-auth/jwt'
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const token = searchParams.get('token')
-  const returnPath = searchParams.get('returnPath') || '/'
+  // Relative paths only: an absolute/protocol-relative returnPath would make
+  // this an open redirect (with a freshly set session cookie).
+  const returnPath = safeReturnPath(searchParams.get('returnPath'))
 
-  // Tunnel domains bypass the DB token — production encodes the JWT directly
+  // Tunnel domains bypass the DB token — production encodes the JWT directly.
+  // Only honoured on tunnel hosts (same check as /api/auth/cross-domain):
+  // elsewhere a crafted ?jwt= link would plant an attacker's session cookie
+  // (login CSRF).
   const jwtParam = searchParams.get('jwt')
+  // Use the Host header directly — request.url mixes X-Forwarded-Proto (https)
+  // with the internal hostname (localhost:3000), producing https://localhost:3000
+  const host = request.headers.get('host') || 'localhost:3000'
+  if (jwtParam && !isTunnelDomain(host)) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+  }
   if (jwtParam) {
     const isProduction = process.env.NODE_ENV === 'production'
     const cookieName = isProduction ? '__Secure-next-auth.session-token' : 'next-auth.session-token'
-    // Use the Host header directly — request.url mixes X-Forwarded-Proto (https)
-    // with the internal hostname (localhost:3000), producing https://localhost:3000
-    const host = request.headers.get('host') || 'localhost:3000'
-    const protocol = host.startsWith('localhost') || host.startsWith('127.') ? 'http' : 'https'
-    const redirectUrl = returnPath.startsWith('http') ? returnPath : `${protocol}://${host}${returnPath}`
+    const redirectUrl = `https://${host}${returnPath}`
     const response = NextResponse.redirect(redirectUrl)
     response.cookies.set(cookieName, jwtParam, {
       httpOnly: true,

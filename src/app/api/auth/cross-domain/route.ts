@@ -7,6 +7,7 @@ import crypto from 'crypto'
 import { encode } from 'next-auth/jwt'
 import { createLogger } from '@/lib/logger'
 import { getPublicOrigin } from '@/lib/public-origin'
+import { isTunnelDomain } from '@/lib/cross-domain-auth'
 
 const log = createLogger('auth:cross-domain')
 
@@ -39,10 +40,10 @@ export async function GET(request: NextRequest) {
   const domainWithoutWww = returnDomain.replace(/^www\./, '')
 
   // Dev tunnel domains (ngrok etc.) are always allowed — they're not in the DB
-  const isTunnelDomain = domainWithoutWww.endsWith('.ngrok-free.dev') || domainWithoutWww.endsWith('.ngrok-free.app') || domainWithoutWww.endsWith('.ngrok.io')
+  const isTunnel = isTunnelDomain(domainWithoutWww)
 
   // Validate return domain is a registered custom domain
-  const customDomain = isTunnelDomain ? { domain: returnDomain, userId: null } : await prisma.teacherCustomDomain.findFirst({
+  const customDomain = isTunnel ? { domain: returnDomain, userId: null } : await prisma.teacherCustomDomain.findFirst({
     where: {
       OR: [
         { domain: returnDomain },
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
 
   // Tunnel domains (ngrok etc.) can't query production's DB for token lookup,
   // so we encode the session JWT directly into the redirect URL instead.
-  if (isTunnelDomain) {
+  if (isTunnel) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
     // Carry the domain's own (owned) site in the session, falling back to the
     // user's primary. Tunnel domains aren't in the DB, so there's no domain
     // site to resolve — they always use the primary site.
-    const domainSite = isTunnelDomain ? null : await prisma.teacherCustomDomain.findFirst({
+    const domainSite = isTunnel ? null : await prisma.teacherCustomDomain.findFirst({
       where: { domain: returnDomain, userId: user.id, isVerified: true },
       select: {
         site: {

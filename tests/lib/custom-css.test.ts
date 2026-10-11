@@ -74,9 +74,9 @@ describe('sanitizeCustomCss — url()', () => {
   })
 
   it('treats strings inside image-set / src() as URLs', () => {
-    expect(clean('.a{background:image-set("https://evil.com/a.png" 1x)}')).toBe('.a{background:image-set(none 1x)}')
-    expect(clean('.a{background:-webkit-image-set("https://evil.com/a.png" 1x)}')).toBe('.a{background:-webkit-image-set(none 1x)}')
-    expect(clean('@font-face{src:src("https://evil.com/f.woff2")}')).toBe('@font-face{src:src(none)}')
+    expect(clean('.a{background:image-set("https://evil.com/a.png" 1x)}')).toBe('.a{background:none}')
+    expect(clean('.a{background:-webkit-image-set("https://evil.com/a.png" 1x)}')).toBe('.a{background:none}')
+    expect(clean('@font-face{src:src("https://evil.com/f.woff2")}')).toBe('@font-face{src:none}')
     expect(clean(`.a{background:image-set("${PREFIX}abc.png" 1x)}`)).toBe(`.a{background:image-set("${PREFIX}abc.png" 1x)}`)
   })
 
@@ -109,6 +109,77 @@ describe('sanitizeCustomCss — url()', () => {
 
     // A map entry pointing outside the allowlist is still rejected.
     expect(clean('.a{background:url(bg.png)}', { ...opts, relativeFiles: { 'bg.png': 'https://evil.com/x.png' } } as never)).toBe('.a{background:none}')
+  })
+})
+
+describe('sanitizeCustomCss — bughunt regressions', () => {
+  it('rejects var()/attr()/env()/custom functions inside URL-string functions', () => {
+    for (const css of [
+      ':root{--u:"https://evil.example/a.png"} body{background-image:image-set(var(--u) 1x)}',
+      'body{background-image:-webkit-image-set(var(--u) 1x)}',
+      'body{background-image:image-set(attr(data-x) 1x)}',
+      'body{background-image:image-set(env(x) 1x)}',
+      'body{background-image:image-set(--u() 1x)}',
+      'body{background-image:image(if(media(x): "https://evil.example/a.png"))}',
+      'body{background:image-set([ ) ] "https://evil.example/x" 1x)}',
+      'body{background-image:image-set(u\\72l(var(--u)) 1x)}',
+    ]) {
+      const r = sanitizeCustomCss(css, opts)
+      expect(r.css, css).toMatch(/background(-image)?:none/)
+      expect(r.css, css).not.toMatch(/image-set|image\(/)
+      expect(r.removed.length, css).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps allowlisted image-set arguments', () => {
+    const css = `.a{background:image-set("${PREFIX}a.png" 1x, url(${PREFIX}b.png) 2dppx type("image/png"), linear-gradient(rgb(0 0 0), red) 1x)}`
+    expect(clean(css)).toBe(`.a{background:image-set("${PREFIX}a.png" 1x, url("${PREFIX}b.png") 2dppx type("image/png"), linear-gradient(rgb(0 0 0), red) 1x)}`)
+  })
+
+  it('removes @function rules and expression()', () => {
+    const r = sanitizeCustomCss('@function --u() { result: "https://evil.example/a.png"; } .a{width:expression(alert(1));color:red}', opts)
+    expect(r.css).toBe(' .a{width:none;color:red}')
+    expect(r.removed.map(x => x.kind)).toEqual(['rule', 'url'])
+  })
+
+  it('rejects percent-encoded traversal and query strings', () => {
+    for (const u of [
+      `${PREFIX}%2e%2e/%2e%2e/otherbucket/x.png`,
+      `${PREFIX}%2E%2E/x.png`,
+      '/fonts/%2e%2e/api/auth/cross-domain-callback?jwt=x&returnPath=https%3A%2F%2Fevil',
+      '/fonts/.%2e/api/x',
+      '/fonts/a.woff2?v=1',
+      '/fonts/a.woff2#x',
+      '/api/files/./x',
+    ]) {
+      expect(resolveAllowedUrl(u, opts), u).toBeNull()
+    }
+  })
+
+  it('allows data: only for raster images and fonts (no SVG)', () => {
+    expect(resolveAllowedUrl('data:image/svg+xml,<svg/>', opts)).toBeNull()
+    expect(resolveAllowedUrl('data:image/svg+xml;base64,PHN2Zz4=', opts)).toBeNull()
+    for (const t of ['png', 'jpeg', 'gif', 'webp', 'avif']) {
+      expect(resolveAllowedUrl(`data:image/${t};base64,AAAA`, opts)).not.toBeNull()
+    }
+  })
+
+  it('removes a bad url token whole (no stray paren)', () => {
+    expect(clean('.a{background:url(javascript:alert(1))}')).toBe('.a{background:none}')
+  })
+
+  it('stays linear on pathological input', () => {
+    const n = 50_000
+    for (const p of ['image-set(', '(', '[', '\\', '"', 'url(', 'a(']) {
+      const input = p.repeat(Math.ceil(n / p.length)).slice(0, n)
+      const t = performance.now()
+      sanitizeCustomCss(input, opts)
+      expect(performance.now() - t, p).toBeLessThan(500)
+    }
+    const nested = '('.repeat(20_000) + '"a"'.repeat(10_000)
+    const t = performance.now()
+    sanitizeCustomCss(nested, opts)
+    expect(performance.now() - t).toBeLessThan(500)
   })
 })
 

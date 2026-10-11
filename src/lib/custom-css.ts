@@ -8,10 +8,17 @@
  * 1. No external loads. Student privacy (see /datenschutz): every request a
  *    student's browser makes must stay with Eduskript. So:
  *      - `@import` rules are removed entirely (whatever they point at);
- *      - `url(…)` / `src(…)` and the string URLs inside `image-set(…)` are kept
- *        only when they point at Eduskript-served files (see isAllowedUrl);
- *        anything else is replaced by `none`, which makes the declaration
- *        invalid or imageless — the browser drops it, nothing is fetched.
+ *      - `@function` rules are removed (custom functions could return a URL
+ *        string into image-set()), and `expression(…)` calls are dropped;
+ *      - `url(…)` is kept only when it points at Eduskript-served files (see
+ *        resolveAllowedUrl); anything else is replaced by `none`, which
+ *        makes the declaration invalid or imageless — nothing is fetched;
+ *      - `image-set()`, `-webkit-image-set()`, `image()` and `src()` treat
+ *        STRINGS as URLs, and a var()/attr()/env()/custom function inside
+ *        them could produce such a string at computed-value time. Their
+ *        arguments are therefore allowlisted (checked strings, checked
+ *        url(), numbers/resolutions, type("…"), simple *-gradient()); any
+ *        other token rejects the whole call (→ `none`).
  * 2. No breaking out of the <style> element: every `<` is rewritten to the
  *    CSS escape `\3c ` (same character inside strings; outside strings `<` is
  *    never valid CSS anyway), so `</style` cannot appear in the output.
@@ -22,7 +29,8 @@
  * DECODED names, so `@\69mport` and `u\72l(` are caught like the browser
  * would read them. It deliberately over-detects in a few edge cases (e.g.
  * `#url(` or `5url(` are treated as url functions); over-detection only ever
- * removes a URL, it never lets one through. O(n) in the input length.
+ * removes a URL, it never lets one through. Linear in the input length:
+ * every helper advances past what it inspects and nothing is re-scanned.
  *
  * Pure module (no env, no DB) so the theme editor can run it client-side for
  * the live preview. Server code passes the allowlist via options; see
@@ -46,7 +54,7 @@ export interface CustomCssOptions {
 }
 
 export interface RemovedCssItem {
-  kind: 'import' | 'url'
+  kind: 'import' | 'url' | 'rule'
   /** The offending URL / at-rule text, decoded, truncated to 200 chars. */
   value: string
   /** True for a bare relative name that could be resolvable (`bg.png`). */
@@ -61,13 +69,17 @@ export interface SanitizedCss {
 /**
  * Root-relative paths the app itself serves and that are safe to load:
  * self-hosted fonts in public/fonts, next/font output, and the file proxy
- * (/api/files/<id>, redirects to the teacher-file bucket).
+ * (/api/files/<id>, redirects to the teacher-file bucket). No query string,
+ * no fragment, no percent-encoding, no dot segments.
  */
-const ALLOWED_ROOT_PATHS = /^\/(?:fonts|_next\/static\/media|api\/files)\/[A-Za-z0-9._~%-]+(?:\/[A-Za-z0-9._~%-]+)*(?:[?#][A-Za-z0-9._~%=&-]*)?$/
+const ALLOWED_ROOT_PATHS = /^\/(?:fonts|_next\/static\/media|api\/files)(?:\/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)+$/
 /** What may follow an allowed absolute prefix (content-addressed keys). */
-const ALLOWED_SUFFIX = /^[A-Za-z0-9._~%-]+(?:\/[A-Za-z0-9._~%-]+)*$/
-/** Inline data only for images and fonts. SVG-as-image cannot fetch subresources. */
-const ALLOWED_DATA = /^data:(?:image\/[a-z0-9.+-]+|font\/[a-z0-9.+-]+|application\/(?:x-)?font-[a-z0-9.+-]+)[;,]/i
+const ALLOWED_SUFFIX = /^[A-Za-z0-9_~-][A-Za-z0-9._~-]*(?:\/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*$/
+/**
+ * Inline data only for raster images and fonts. No SVG: an SVG document is a
+ * second parser with its own URL references, so it is not worth the risk.
+ */
+const ALLOWED_DATA = /^data:(?:image\/(?:png|jpeg|jpg|gif|webp|avif)|font\/[a-z0-9.+-]+|application\/(?:x-)?font-[a-z0-9.+-]+)[;,]/i
 /** In-document fragment references (`filter: url(#blur)`) load nothing. */
 const FRAGMENT = /^#[A-Za-z_][A-Za-z0-9_-]*$/
 /** A bare file name a teacher may type, resolvable via relativeFiles. */
@@ -78,29 +90,48 @@ function truncate(s: string) {
 }
 
 /**
+ * True when the browser would resolve `url` to exactly the same path (no
+ * normalisation happened). Belt and braces on top of the charset regexes,
+ * which already exclude `%`, `\\` and dot segments.
+ */
+function resolvesToItself(url: string): boolean {
+  try {
+    const u = new URL(url, 'https://x.invalid')
+    const expected = url.startsWith('/') ? `https://x.invalid${url}` : url
+    return u.href === expected && !u.search && !u.hash
+  } catch {
+    return false
+  }
+}
+
+/**
  * Decide what a decoded URL becomes: the URL to emit, or null to remove it.
  * Exported for tests.
  */
 export function resolveAllowedUrl(raw: string, opts: CustomCssOptions = {}): string | null {
   const url = raw.trim()
   if (!url) return null
-  // Control chars / whitespace / backslashes never appear in the URLs we
-  // allow; rejecting them up front rules out parser-differential tricks
-  // (`/\host`, tab-split schemes, …).
-  if (/[\u0000- \u007f\\"'<>]/.test(url)) {
-    // data: URIs may legitimately contain quotes/spaces in SVG payloads;
-    // they are checked separately below.
-    if (!ALLOWED_DATA.test(url)) return null
-  }
   if (ALLOWED_DATA.test(url)) return url
-  if (FRAGMENT.test(url)) return url
-  if (ALLOWED_ROOT_PATHS.test(url) && !/(?:^|\/)\.\.?(?:\/|$)/.test(url)) return url
-  for (const prefix of opts.allowedUrlPrefixes ?? []) {
-    if (prefix && url.startsWith(prefix)) {
-      const rest = url.slice(prefix.length)
-      if (ALLOWED_SUFFIX.test(rest) && !/(?:^|\/)\.\.?(?:\/|$)/.test(rest)) return url
-    }
+  // Everything else: strict charset only — no whitespace/controls, quotes,
+  // backslashes, `%` (rules out %2e%2e traversal), `?`, `<`.
+  if (!/^[A-Za-z0-9._~\-/:#]+$/.test(url)) {
+    return resolveRelative(url, opts)
   }
+  if (FRAGMENT.test(url)) return url
+  if (ALLOWED_ROOT_PATHS.test(url) && !/\/\.\.?(?:\/|$)/.test(url) && resolvesToItself(url)) return url
+  for (const prefix of opts.allowedUrlPrefixes ?? []) {
+    if (!prefix || !url.startsWith(prefix)) continue
+    const rest = url.slice(prefix.length)
+    if (!ALLOWED_SUFFIX.test(rest) || /(?:^|\/)\.\.?(?:\/|$)/.test(rest) || !resolvesToItself(url)) continue
+    try {
+      // The normalised path must still sit under the prefix's path.
+      if (new URL(url).pathname.startsWith(new URL(prefix).pathname)) return url
+    } catch { /* not absolute: ignore */ }
+  }
+  return resolveRelative(url, opts)
+}
+
+function resolveRelative(url: string, opts: CustomCssOptions): string | null {
   if (opts.relativeFiles && RELATIVE_NAME.test(url)) {
     const name = url.replace(/^\.\//, '')
     const resolved = Object.prototype.hasOwnProperty.call(opts.relativeFiles, name)
@@ -226,11 +257,23 @@ function consumeUnquotedUrl(s: string, i: number): { decoded: string | null; end
   return { decoded, end: j } // EOF: the browser still treats it as a url token
 }
 
-/** Bad-url remnants: consume up to and including the next `)` (escapes skipped). */
+/**
+ * Bad-url remnants: the browser consumes up to and including the next `)`
+ * (escapes skipped). We additionally swallow one directly following `)` per
+ * `(` seen inside, so `url(javascript:alert(1))` goes away whole instead of
+ * leaving a stray `)`. Removing more than the browser would is safe: dropped
+ * text is never emitted.
+ */
 function skipBadUrl(s: string, i: number) {
   let j = i
+  let opens = 0
   while (j < s.length) {
-    if (s[j] === ')') return j + 1
+    if (s[j] === ')') {
+      j++
+      while (opens > 0 && s[j] === ')') { opens--; j++ }
+      return j
+    }
+    if (s[j] === '(') opens++
     if (isValidEscape(s, j)) { j = decodeEscape(s, j)[1]; continue }
     j++
   }
@@ -279,6 +322,67 @@ function atRuleEnd(s: string, i: number) {
 /** Functions whose STRING arguments are URLs (CSS Images 4, CSS Values 4 `src()`). */
 const URL_STRING_FUNCTIONS = new Set(['src', 'image-set', '-webkit-image-set', 'image'])
 
+/** A gradient with at most one level of nested parens (rgb(), calc()) and no strings/escapes. */
+const SIMPLE_GRADIENT = /^[a-z-]*gradient\((?:[^()"'\\<@]|\([^()"'\\<@]*\))*\)$/i
+const TYPE_FN = /^type\(\s*(?:"[a-z0-9/+.-]*"|'[a-z0-9/+.-]*')\s*\)$/i
+const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:[a-z]+|%)?/i
+
+/**
+ * Sanitize the argument list of a URL-string function (image-set etc.).
+ * `inner` is the text between the parens. Returns the safe argument text,
+ * or null to reject the whole call. Allowed: whitespace, commas, comments,
+ * strings and url() that pass resolveAllowedUrl, numbers/resolutions
+ * (`1x`, `2dppx`), type("image/png"), simple *-gradient(). Anything else
+ * (var(), attr(), env(), --custom(), brackets, bare idents) can yield a URL
+ * string at computed-value time, so it rejects the call.
+ */
+function sanitizeUrlStringArgs(inner: string, opts: CustomCssOptions): string | null {
+  let out = ''
+  let i = 0
+  while (i < inner.length) {
+    const c = inner[i]
+    if (isWs(c) || c === ',') { out += c; i++; continue }
+    if (c === '/' && inner[i + 1] === '*') { i = commentEnd(inner, i); out += ' '; continue }
+    if (c === '"' || c === "'") {
+      const str = consumeString(inner, i)
+      const ok = resolveAllowedUrl(str.decoded, opts)
+      if (!ok) return null
+      out += quoteUrl(ok)
+      i = str.end
+      continue
+    }
+    const num = NUMBER.exec(inner.slice(i, i + 64))
+    if (num && /[0-9.]/.test(c + (inner[i + 1] ?? ''))) { out += num[0]; i += num[0].length; continue }
+    if (isNameChar(c) || isValidEscape(inner, i)) {
+      const name = consumeName(inner, i)
+      if (inner[name.end] !== '(') return null
+      const lower = name.decoded.toLowerCase()
+      const end = skipBalanced(inner, name.end)
+      const call = inner.slice(i, end)
+      if (lower === 'url') {
+        let j = name.end + 1
+        while (j < inner.length && isWs(inner[j])) j++
+        const value = inner[j] === '"' || inner[j] === "'"
+          ? consumeString(inner, j).decoded
+          : consumeUnquotedUrl(inner, j).decoded
+        const ok = value === null ? null : resolveAllowedUrl(value, opts)
+        if (!ok) return null
+        out += `url(${quoteUrl(ok)})`
+      } else if (lower === 'type' && TYPE_FN.test(call)) {
+        out += call
+      } else if (lower.endsWith('gradient') && SIMPLE_GRADIENT.test(call)) {
+        out += call
+      } else {
+        return null
+      }
+      i = end
+      continue
+    }
+    return null
+  }
+  return out
+}
+
 /** Escape `<` so the output can never close the <style> element. */
 function escapeLt(s: string) {
   return s.replace(/</g, '\\3c ')
@@ -298,10 +402,6 @@ export function sanitizeCustomCss(input: string, opts: CustomCssOptions = {}): S
   const removed: RemovedCssItem[] = []
   let out = ''
   let i = 0
-  // Paren frames: true when the frame belongs to a URL-string function.
-  const frames: boolean[] = []
-  const inUrlStringFunction = () => frames.some(Boolean)
-
   const removeUrl = (value: string) => {
     removed.push({ kind: 'url', value: truncate(value), ...(isRelativeFileName(value) ? { relative: true } : {}) })
   }
@@ -318,22 +418,17 @@ export function sanitizeCustomCss(input: string, opts: CustomCssOptions = {}): S
 
     if (c === '"' || c === "'") {
       const str = consumeString(s, i)
-      if (inUrlStringFunction()) {
-        const ok = resolveAllowedUrl(str.decoded, opts)
-        if (ok) out += quoteUrl(ok)
-        else { removeUrl(str.decoded); out += 'none' }
-      } else {
-        out += escapeLt(str.raw)
-      }
+      out += escapeLt(str.raw)
       i = str.end
       continue
     }
 
     if (c === '@' && i + 1 < s.length && (isNameChar(s[i + 1]) || isValidEscape(s, i + 1))) {
       const name = consumeName(s, i + 1)
-      if (name.decoded.toLowerCase() === 'import') {
+      const at = name.decoded.toLowerCase()
+      if (at === 'import' || at === 'function') {
         const end = atRuleEnd(s, name.end)
-        removed.push({ kind: 'import', value: truncate(s.slice(i, end).trim()) })
+        removed.push({ kind: at === 'import' ? 'import' : 'rule', value: truncate(s.slice(i, end).trim()) })
         i = end
         continue
       }
@@ -367,8 +462,23 @@ export function sanitizeCustomCss(input: string, opts: CustomCssOptions = {}): S
           }
           continue
         }
+        if (URL_STRING_FUNCTIONS.has(lower) || lower === 'expression') {
+          // Whole call at once: balanced end (strings/comments/brackets
+          // respected, same nesting the browser uses), then allowlist.
+          const end = skipBalanced(s, name.end)
+          const close = s[end - 1] === ')' && end > name.end + 1
+          const inner = s.slice(name.end + 1, close ? end - 1 : end)
+          const args = lower === 'expression' ? null : sanitizeUrlStringArgs(inner, opts)
+          if (args === null) {
+            removed.push({ kind: 'url', value: truncate(s.slice(i, end)) })
+            out += 'none'
+          } else {
+            out += `${escapeLt(name.raw)}(${args})`
+          }
+          i = end
+          continue
+        }
         out += escapeLt(name.raw) + '('
-        frames.push(URL_STRING_FUNCTIONS.has(lower))
         i = name.end + 1
         continue
       }
@@ -377,8 +487,6 @@ export function sanitizeCustomCss(input: string, opts: CustomCssOptions = {}): S
       continue
     }
 
-    if (c === '(') { frames.push(false); out += c; i++; continue }
-    if (c === ')') { frames.pop(); out += c; i++; continue }
     if (c === '<') { out += '\\3c '; i++; continue }
     if (c === '\\') { out += c; i++; continue } // invalid escape (before newline/EOF)
 
