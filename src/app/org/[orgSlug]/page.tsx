@@ -199,7 +199,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
       sidebarItems={sidebarData?.sidebarItems}
       fullSiteStructure={sidebarData?.fullSiteStructure}
       sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-      typographyPreference="modern"
+      theme={organization.theme}
       routePrefix={`/org/${orgSlug}/c`}
       homeUrl={`/org/${orgSlug}`}
       pageId={frontPage?.id}

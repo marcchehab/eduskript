@@ -417,6 +417,15 @@ export function getTeacherFileUrl(key: string): string {
 }
 
 /**
+ * Public URL prefix under which every teacher file lives (`…/files/`), or
+ * null when the teacher bucket isn't configured. Used as the url() allowlist
+ * for site custom CSS (src/lib/site-theme.ts).
+ */
+export function getTeacherFilesUrlPrefix(): string | null {
+  return SCALEWAY_TEACHER_BUCKET ? getTeacherFileUrl('files/') : null
+}
+
+/**
  * Check if a teacher file exists in S3
  *
  * @param hash - Content hash

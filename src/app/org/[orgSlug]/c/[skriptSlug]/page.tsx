@@ -11,6 +11,7 @@ import { buildSiteStructure } from '@/lib/site-structure'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { readExtraSettings } from '@/lib/settings'
 import { placedOnSiteWhere } from '@/lib/site-access'
+import { readSiteTheme } from '@/lib/site-theme'
 
 // ISR: published content only and no session read, so every visitor gets the
 // same HTML. Next.js 16 needs generateStaticParams() — even empty — or a
@@ -89,6 +90,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       pageIcon: true,
       showIcon: true,
       sidebarBehavior: true,
+      typographyPreference: true,
       extraSettings: true,
       organization: { select: { id: true, name: true } },
     }
@@ -103,6 +105,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         sidebarBehavior: orgSite.sidebarBehavior,
         titleStyle: orgExtra.titleStyle ?? 'icon',
         logoUrl: orgExtra.logoUrl ?? null,
+        theme: readSiteTheme(orgSite),
       }
     : null
 
@@ -235,7 +238,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         sidebarItems={sidebarData?.sidebarItems}
         fullSiteStructure={sidebarData?.fullSiteStructure}
         sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-        typographyPreference="modern"
+        theme={organization.theme}
         routePrefix={`/org/${orgSlug}/c`}
         homeUrl={`/org/${orgSlug}`}
       >

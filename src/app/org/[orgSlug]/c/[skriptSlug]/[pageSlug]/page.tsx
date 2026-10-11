@@ -16,6 +16,7 @@ import { generateExcerpt } from '@/lib/markdown'
 import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
 import { getPublicLayers } from '@/lib/public-page-data'
 import { readExtraSettings } from '@/lib/settings'
+import { readSiteTheme } from '@/lib/site-theme'
 
 interface PageProps {
   params: Promise<{
@@ -129,6 +130,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
       pageLanguage: true,
       showIcon: true,
       sidebarBehavior: true,
+      typographyPreference: true,
       extraSettings: true,
       organization: {
         select: {
@@ -154,6 +156,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
         sidebarBehavior: orgSiteRow.sidebarBehavior,
         titleStyle: orgRowExtra.titleStyle ?? 'icon',
         logoUrl: orgRowExtra.logoUrl ?? null,
+        theme: readSiteTheme(orgSiteRow),
       }
     : null
 
@@ -268,7 +271,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
       sidebarItems={sidebarData?.sidebarItems}
       fullSiteStructure={sidebarData?.fullSiteStructure}
       sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-      typographyPreference="modern"
+      theme={organization.theme}
       routePrefix={`/org/${orgSlug}/c`}
       homeUrl={`/org/${orgSlug}`}
       pageId={page.id}

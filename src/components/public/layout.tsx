@@ -12,6 +12,8 @@ import { SupporterBadge } from '@/components/ui/supporter-badge'
 import { PioneerBadge } from '@/components/ui/pioneer-badge'
 import { PIONEER_PLAN_SLUG } from '@/lib/billing'
 import { ReadingProgress } from './reading-progress'
+import { useThemePreviewOverride } from './theme-preview'
+import type { SiteTheme } from '@/lib/site-theme'
 import { PublicThemeToggle } from './theme-toggle'
 import { PublicSoundToggle } from './sound-toggle'
 import { ReflowToggle } from './reflow-toggle'
@@ -87,7 +89,9 @@ interface PublicSiteLayoutProps {
   currentPath?: string
   fullSiteStructure?: SiteStructure[] // Full site structure when sidebarBehavior is "full"
   sidebarBehavior?: 'contextual' | 'full'
-  typographyPreference?: 'modern' | 'classic'
+  // Preset (data-typography), reading-progress flag and sanitized custom CSS.
+  // Built server-side by readSiteTheme() (src/lib/site-theme.ts).
+  theme?: SiteTheme
   pageId?: string // Page ID for lazy edit permission check
   routePrefix?: string // Server-side route prefix (e.g., '/org/eduskript/c' for org content, '/{pageSlug}' for teacher pages). Used to build navigation URLs; the proxy-stripped portion is removed at click time so the link matches the browser-visible path.
   homeUrl?: string // Explicit home/logo target. Defaults to routePrefix. Required when routePrefix is a content prefix that isn't itself a valid route (e.g. '/org/{slug}/c' — pass homeUrl='/org/{slug}' to point at the org root instead).
@@ -142,14 +146,22 @@ export function PublicSiteLayout({
   children,
   currentPath: currentPathProp,
   fullSiteStructure,
-  sidebarBehavior = 'full',
-  typographyPreference = 'modern',
+  sidebarBehavior: sidebarBehaviorProp = 'full',
+  theme: themeProp,
   pageId: pageIdProp,
   routePrefix,
   homeUrl,
   hideSidebar: hideSidebarProp
 }: PublicSiteLayoutProps) {
   const router = useRouter()
+
+  // Inside the dashboard theme editor's preview iframe, unsaved settings
+  // replace the server-rendered ones (src/components/public/theme-preview.ts).
+  const previewOverride = useThemePreviewOverride()
+  const sidebarBehavior = previewOverride?.sidebarBehavior ?? sidebarBehaviorProp
+  const themePreset = previewOverride?.preset ?? themeProp?.preset ?? 'modern'
+  const showReadingProgress = previewOverride?.showReadingProgress ?? themeProp?.showReadingProgress ?? true
+  const customCss = previewOverride ? previewOverride.customCss : (themeProp?.customCss ?? '')
 
   // Route-derived state — preferred over props when the layout sits above the
   // page component (App Router shared layout), because the params change with
@@ -475,10 +487,13 @@ export function PublicSiteLayout({
       <LockdownWatcher />
       <div
         className="min-h-screen bg-background overflow-visible"
-        data-typography={typographyPreference}
+        data-typography={themePreset}
         style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
       >
-        <ReadingProgress />
+        {/* Site custom CSS. Sanitized server-side (readSiteTheme) — no
+            external url()/@import, no "<" — so it is safe as raw style text. */}
+        {customCss && <style data-site-custom-css="" dangerouslySetInnerHTML={{ __html: customCss }} />}
+        {showReadingProgress && <ReadingProgress />}
 
       {/* Top-right controls - always visible when sidebar is hidden, otherwise only on mobile */}
       <div className={`floating-page-controls print:hidden ${hideSidebar ? '' : 'min-[1344px]:hidden '}fixed top-8 right-4 z-50 flex items-center gap-2`}>

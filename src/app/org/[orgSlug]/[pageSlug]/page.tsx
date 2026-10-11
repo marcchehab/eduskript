@@ -12,6 +12,7 @@ import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { readExtraSettings } from '@/lib/settings'
 import { plainInlineText } from '@/lib/markdown'
+import { readSiteTheme } from '@/lib/site-theme'
 
 // ISR: published content only and no session read, so the response is the same
 // for every visitor. Next.js 16 needs generateStaticParams() — even empty — or
@@ -344,7 +345,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       sidebarItems={sidebarData?.sidebarItems}
       fullSiteStructure={sidebarData?.fullSiteStructure}
       sidebarBehavior={(sidebarBehavior as 'contextual' | 'full') || 'full'}
-      typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
+      theme={readSiteTheme(teacherSite)}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
     >
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

@@ -351,7 +351,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
       teacher={teacherForLayout}
       siteStructure={fullSiteStructure}
       sidebarBehavior={(layoutTeacher.sidebarBehavior as 'contextual' | 'full') || 'full'}
-      typographyPreference={(layoutTeacher.typographyPreference as 'modern' | 'classic') || 'modern'}
+      theme={layoutTeacher.theme}
       // Lets AuthButton turn the profile button into an "edit this page" link for
       // the author (same as normal pages). On normal routes the layout derives
       // pageId from siteStructure; the /exam route passes it explicitly.

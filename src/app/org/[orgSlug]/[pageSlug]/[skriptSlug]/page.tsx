@@ -11,6 +11,7 @@ import { getTeacherSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { readExtraSettings } from '@/lib/settings'
+import { readSiteTheme } from '@/lib/site-theme'
 
 interface PageProps {
   params: Promise<{
@@ -166,7 +167,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       fullSiteStructure={sidebarData?.fullSiteStructure}
       currentPath={currentPath}
       sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'full'}
-      typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
+      theme={readSiteTheme(teacherSite)}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
     >
       {/* Class toolbar (portals into the sidebar slot). The server-side

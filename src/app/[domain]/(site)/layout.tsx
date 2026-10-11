@@ -72,7 +72,7 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
         rootSkripts={rootSkripts}
         sidebarItems={sidebarItems}
         sidebarBehavior={effectiveSidebarBehavior as 'contextual' | 'full'}
-        typographyPreference={(teacher.typographyPreference as 'modern' | 'classic') || 'modern'}
+        theme={teacher.theme}
       >
         {children}
       </PublicSiteLayout>

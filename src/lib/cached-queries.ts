@@ -5,6 +5,7 @@ import { buildSiteStructure, type SiteStructure } from './site-structure'
 import { createLogger } from './logger'
 import { PRIMARY_SITE_ORDER } from './sites'
 import { readExtraSettings } from './settings'
+import { readSiteTheme } from './site-theme'
 import { placedOnSiteWhere } from './site-access'
 
 const log = createLogger('cache:queries')
@@ -65,6 +66,10 @@ function graftSitePageFields<U extends object>(user: U, site: SitePageFields) {
     metaDescription: extra.metaDescription ?? null,
     supporterBadgeHidden: extra.supporterBadgeHidden ?? false,
     supporterBadgeMessage: extra.supporterBadgeMessage ?? null,
+    // Preset + reading-progress flag + sanitized custom CSS, for the public
+    // layout. Cached with the rest (revalidate:false); theme saves bust the
+    // user/teacherContent tags (revalidateSitePresentation in src/lib/site-theme-save.ts).
+    theme: readSiteTheme(site),
   })
 }
 
@@ -615,6 +620,7 @@ export const getOrgWithLayout = (slug: string) =>
         titleStyle: extra.titleStyle ?? 'icon',
         logoUrl: extra.logoUrl ?? null,
         metaDescription: extra.metaDescription ?? null,
+        theme: readSiteTheme(site),
         pageLayout: site.pageLayout ?? null,
         frontPage: site.frontPage ?? null,
       })
