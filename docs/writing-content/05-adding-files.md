@@ -43,7 +43,7 @@ Eduskript will accept and serve any file type — but some get special treatment
 |------|------------|------------------|
 | **Images** | `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg` | Embedded with `![]()`, resizable, alignable |
 | **Excalidraw** | `.excalidraw.light.svg` + `.excalidraw.dark.svg` | Theme-aware pair, referenced as `name.excalidraw` |
-| **Video** | `.mp4`, `.mov` | Hosted on Infomaniak VOD (Switzerland), get adaptive streaming and auto-subtitles (see *Video* chapter) |
+| **Video** | `.mp4`, `.mov` | Encoded and hosted by Eduskript in Switzerland (≤1080p, ≤2 GB), get adaptive streaming and auto-subtitles (see *Video* chapter) |
 | **SQLite databases** | `.db`, `.sqlite` | Power interactive SQL editors (see *SQL Studio*) |
 | **PDFs** | `.pdf` | Embedded inline or downloaded |
 | **Code samples** | `.py`, `.js`, `.sql`, `.html`, `.css`, etc. | Linkable; no special embedding |
@@ -109,7 +109,7 @@ See the **SQL Studio** chapter in the Components section for query syntax, schem
 
 ## Video files
 
-Video files (`.mp4`, `.mov`) are hosted on Infomaniak VOD in Switzerland for adaptive streaming and auto-generated subtitles. They land in the **Videos** panel rather than the Files panel. Reference them in markdown like images:
+Video files (`.mp4`, `.mov`) are encoded and hosted by Eduskript in Switzerland (up to 1080p and 2 GB) for adaptive streaming and auto-generated subtitles. They land in the **Videos** panel rather than the Files panel. Reference them in markdown like images:
 
 ```markdown
 ![A short caption](my-lecture.mp4)

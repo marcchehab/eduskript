@@ -3,7 +3,7 @@
 import { useRef, type ReactElement } from 'react'
 import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveUrl, resolveVideo } from '@/lib/skript-files'
-import { getVideoPlayback } from '@/lib/video-playback'
+import { getVideoPlayback, isVideoPending } from '@/lib/video-playback'
 import { useVideoGate, CouplingToggle } from './coupled-video-context'
 import { HlsVideo } from './hls-video'
 import { StickMe } from './stick-me'
@@ -66,12 +66,12 @@ export function MuxVideo({
     },
   })
 
-  // Resolve video metadata → provider-specific HLS source (Infomaniak or legacy Mux)
+  // Resolve video metadata → provider-specific HLS source (self-hosted or legacy Mux)
   const videoInfo = files ? resolveVideo(files, src) : undefined
   const playback = videoInfo ? getVideoPlayback(videoInfo.provider, videoInfo.metadata) : null
 
   if (!playback) {
-    const processing = videoInfo?.metadata.status === 'waiting' || videoInfo?.metadata.status === 'processing'
+    const processing = isVideoPending(videoInfo?.metadata)
     return (
       <span className="block bg-muted rounded-lg p-4 text-center text-muted-foreground" style={{ aspectRatio: '16/9' }}>
         <span className="block">{processing ? `Video is still processing: ${src}` : `Video not found: ${src}`}</span>
@@ -84,7 +84,7 @@ export function MuxVideo({
   const poster = resolvePoster(posterOverride, files) ?? playback.poster
 
   // preload: nothing but the poster loads until the viewer presses play
-  // (see hls-video.tsx). Before that, the old Mux player pulled 4-6 segment
+  // (see hls-video.tsx). The old Mux player pulled 4-6 segment
   // requests on mount, which kept the page tab in "loading" state for seconds
   // on slow connections although most visitors never play the video. gif and
   // autoplay videos load on mount.
@@ -104,6 +104,7 @@ export function MuxVideo({
         hlsUrl={playback.hlsUrl}
         poster={poster}
         captions={playback.captions}
+        thumbnailsVtt={playback.thumbnailsVtt}
         aspectRatio={playback.aspectRatio}
         className={className}
         gif={gif}

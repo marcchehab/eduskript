@@ -18,6 +18,7 @@ import type { ExportManifest, ImportError } from '@/lib/import-shared'
 import { validateMarkdownSyntax, parseFrontmatter, attachmentContentType } from '@/lib/import-shared'
 import { checkImportTargets, createImportStructure } from '@/lib/import-actions'
 import { requestVideoUpload, finishVideoUpload } from '@/lib/video-upload-client'
+import { checkVideoFile } from '@/lib/video-limits'
 
 export interface ParsedPage {
   slug: string
@@ -255,18 +256,20 @@ async function uploadVideo(skriptId: string, video: ParsedVideo): Promise<void> 
   const bytes = await video.entry.async('arraybuffer')
 
   const contentType = video.filename.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4'
-  const { uploadUrl, videoId, uploadHeaders } = await requestVideoUpload(video.filename, skriptId, contentType)
+  const problem = await checkVideoFile(new Blob([bytes], { type: contentType }))
+  if (problem) throw new Error(problem)
+  const { uploadUrl, videoId, uploadHeaders } = await requestVideoUpload(video.filename, skriptId, contentType, bytes.byteLength)
 
   const putRes = await fetch(uploadUrl, { method: 'PUT', body: bytes, headers: uploadHeaders })
   if (!putRes.ok) throw new Error(`Video upload failed (${putRes.status})`)
-  // Infomaniak encodes asynchronously; the row turns ready via callback or
-  // the video browser's sync poll, same as a normal dashboard upload.
+  // Queues the encode; the worker (scripts/video-worker.mjs) marks the row
+  // ready, same as a normal dashboard upload.
   await finishVideoUpload(videoId)
 }
 
 /**
  * Creates the collection/skript/page structure, then uploads attachments
- * and videos directly to S3 (then Infomaniak VOD) against the resulting skript ids. Each
+ * and videos directly to S3 (then the encoder queue) against the resulting skript ids. Each
  * attachment/video failure is caught and reported rather than aborting
  * the rest of the import.
  */

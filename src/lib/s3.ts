@@ -197,13 +197,16 @@ export function getBucketName(): string {
  * @param contentType - MIME type of the file
  * @param expiresIn - URL expiry time in seconds (default: 900 = 15 minutes)
  * @param bucket - Optional bucket name (defaults to main bucket)
+ * @param contentLength - Optional exact size; signed, so a PUT of any other
+ *   size is rejected by the storage
  * @returns Object with upload URL and expiration time
  */
 export async function generatePresignedUploadUrl(
   key: string,
   contentType: string,
   expiresIn: number = 900,
-  bucket?: string
+  bucket?: string,
+  contentLength?: number
 ): Promise<{ url: string; expiresAt: Date }> {
   const client = getS3Client()
   const targetBucket = bucket || SCALEWAY_BUCKET
@@ -212,9 +215,13 @@ export async function generatePresignedUploadUrl(
     Bucket: targetBucket,
     Key: key,
     ContentType: contentType,
+    ...(contentLength ? { ContentLength: contentLength } : {}),
   })
 
-  const url = await getSignedUrl(client, command, { expiresIn })
+  const url = await getSignedUrl(client, command, {
+    expiresIn,
+    ...(contentLength ? { signableHeaders: new Set(['content-type', 'content-length']) } : {}),
+  })
   const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
   return { url, expiresAt }

@@ -1,11 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateSkriptFiles } from '@/lib/skript-files.server'
-import { deleteFromS3, getTeacherBucketName } from '@/lib/s3'
-import { deleteMedia, getVodConfig } from '@/lib/infomaniak-vod'
-import { findVideosByMediaId } from '@/lib/video-sync.server'
+import { cleanupDeletedVideo } from '@/lib/video-jobs.server'
 
 export async function DELETE(
   _request: NextRequest,
@@ -29,26 +27,16 @@ export async function DELETE(
   }
 
   // TODO: Mux rows still leave their asset on Mux (deleted manually after
-  // the migration, see MIGRATION-VOD.md).
+  // the migration, see MIGRATION-VIDEO.md).
   await prisma.video.delete({ where: { id } })
 
-  // Infomaniak: drop the media once no other row (page-copy duplicates share
-  // it via metadata.mediaId) references it. Best effort — a failure leaves an
-  // orphan on Infomaniak, not a broken page.
-  const meta = (video.metadata ?? {}) as Record<string, unknown>
-  if (video.provider === 'infomaniak') {
-    try {
-      if (typeof meta.uploadKey === 'string') {
-        await deleteFromS3(meta.uploadKey, getTeacherBucketName())
-      }
-      const mediaId = typeof meta.mediaId === 'string' ? meta.mediaId : null
-      const config = getVodConfig()
-      if (mediaId && config && (await findVideosByMediaId(mediaId)).length === 0) {
-        await deleteMedia(config, mediaId)
-      }
-    } catch (error) {
-      console.warn('Video delete: provider cleanup failed:', error instanceof Error ? error.message : error)
-    }
+  // Self-hosted: drop job, encoded outputs and original once no other row
+  // (page copies, rows sharing a migrated Mux asset) uses the job.
+  // After the response: Swift's bulk delete takes ~0.3 s per object, so a
+  // long video's ~500 segments would otherwise hold the request for minutes.
+  if (video.provider === 'self') {
+    const meta = (video.metadata ?? {}) as Record<string, unknown>
+    after(() => cleanupDeletedVideo(video.encodeJobId, meta))
   }
   // A video is M2M with skripts, so drop every skript's file cache.
   invalidateSkriptFiles()

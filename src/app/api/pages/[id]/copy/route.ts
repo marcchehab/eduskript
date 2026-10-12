@@ -16,8 +16,8 @@ interface RouteParams {
  * POST /api/pages/[id]/copy — Copy a published page into the caller's skript.
  * Creates a draft copy with provenance tracking (forkedFromPageId, forkedFromAuthorId).
  * Referenced files are duplicated as DB rows pointing to the same S3 objects (content-addressed).
- * Referenced videos are duplicated as Video rows pointing to the same Mux asset
- * (same playbackId, null muxAssetId to avoid @unique collision).
+ * Referenced videos are duplicated as Video rows pointing to the same hosted video
+ * (same metadata and encodeJobId; null muxAssetId to avoid @unique collision).
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
@@ -134,6 +134,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               filename: true,
               provider: true,
               metadata: true,
+              encodeJobId: true,
             },
           })
         : []
@@ -195,6 +196,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               filename: src.filename,
               provider: src.provider,
               metadata: src.metadata ?? {},
+              // Shares the encoded output; keeps it alive when the source row is deleted.
+              encodeJobId: src.encodeJobId,
               uploadedById: session.user.id,
               skripts: { connect: { id: targetSkriptId } },
             },

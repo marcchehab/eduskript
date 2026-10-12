@@ -24,8 +24,8 @@ export async function GET() {
     where: { filename: { in: filenames } },
     select: { filename: true, provider: true, metadata: true },
   })
-  // Infomaniak rows first so they win over a leftover Mux row of the same name.
-  videos.sort((a, b) => Number(b.provider === 'infomaniak') - Number(a.provider === 'infomaniak'))
+  // Self-hosted rows first so they win over a leftover Mux row of the same name.
+  videos.sort((a, b) => Number(b.provider === 'self') - Number(a.provider === 'self'))
 
   const result: Partial<Record<QuestStep, VideoPlayback>> = {}
   for (const step of QUEST_STEPS) {

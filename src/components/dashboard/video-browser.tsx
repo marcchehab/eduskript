@@ -22,7 +22,7 @@ interface VideoBrowserProps {
 
 // Status polling while a video is still processing (see the effect below).
 const STATUS_POLL_MS = 5000
-const MAX_STATUS_POLLS = 120
+const MAX_STATUS_POLLS = 240
 
 export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded, onUploadComplete, skriptId }: VideoBrowserProps) {
   const [query, setQuery] = useState('')
@@ -46,17 +46,11 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
     ? videos.filter(v => v.filename.toLowerCase().includes(query.toLowerCase()))
     : videos
 
-  // Infomaniak encodes uploads asynchronously and reports back through a
-  // callback — which never reaches localhost and may be missed in production.
-  // So while at least one video is unfinished (encoding, or captions still
-  // being transcribed), ask the server to pull the state from Infomaniak
-  // (/api/videos/sync) every 5s and re-fetch the list. Gives up after
-  // MAX_STATUS_POLLS (~10 min) so a stuck upload doesn't poll forever; the
-  // daily cron syncs whatever is left. Legacy Mux rows still rely on the Mux
-  // webhook; for them the poll is only the re-fetch.
-  const pendingIds = videos.filter(v => isVideoPending(v.metadata)).map(v => v.id)
-  const pendingKey = pendingIds.join(',')
-  const pending = pendingIds.length > 0
+  // The encoder (scripts/video-worker.mjs) writes queue position/progress
+  // into the DB row; nothing pushes that to this list. While at least one
+  // video is unfinished, re-fetch every 5s; give up after MAX_STATUS_POLLS
+  // (~20 min — a long lecture can take that long behind other jobs).
+  const pending = videos.some(v => isVideoPending(v.metadata))
   const pollsRef = useRef(0)
   const onVideoAddedRef = useRef(onVideoAdded)
   onVideoAddedRef.current = onVideoAdded
@@ -66,23 +60,32 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
       pollsRef.current = 0
       return
     }
-    const ids = pendingKey.split(',')
     const timer = setInterval(() => {
       if (pollsRef.current >= MAX_STATUS_POLLS) {
         clearInterval(timer)
         return
       }
       pollsRef.current += 1
-      fetch('/api/videos/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      })
-        .catch(() => {})
-        .finally(() => onVideoAddedRef.current?.())
+      onVideoAddedRef.current?.()
     }, STATUS_POLL_MS)
     return () => clearInterval(timer)
-  }, [pending, pendingKey])
+  }, [pending])
+
+  const [retryingId, setRetryingId] = useState<string | null>(null)
+  const handleRetry = async (video: VideoInfo) => {
+    setRetryingId(video.id)
+    try {
+      const res = await fetch(`/api/videos/${video.id}/retry`, { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        dialog.showError(data.error || 'Could not retry')
+        return
+      }
+      onVideoAdded?.()
+    } finally {
+      setRetryingId(null)
+    }
+  }
 
   const handleCopyFilename = async (filename: string) => {
     try {
@@ -211,21 +214,42 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
   }
 
   const getStatusIndicator = (video: VideoInfo) => {
-    const status = video.metadata.status
+    const { status, progress, error } = video.metadata
     if (!status || status === 'ready') return null
 
-    if (status === 'waiting' || status === 'processing') {
+    if (status === 'waiting' || status === 'queued' || status === 'encoding' || status === 'processing') {
+      const label =
+        status === 'encoding' && typeof progress === 'number'
+          ? `${Math.round(progress * 100)}%`
+          : status === 'queued'
+            ? 'queued'
+            : status === 'waiting'
+              ? 'uploading'
+              : 'processing'
       return (
-        <span className="shrink-0" title={`Video is ${status}`}>
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+        <span className="shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground" title={`Video is ${status}`}>
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          {label}
         </span>
       )
     }
 
     if (status === 'errored') {
       return (
-        <span className="shrink-0" title="Video processing failed">
-          <AlertCircle className="w-3.5 h-3.5 text-destructive" />
+        <span className="shrink-0 flex items-center gap-1">
+          <span title={error || 'Video processing failed'}>
+            <AlertCircle className="w-3.5 h-3.5 text-destructive" />
+          </span>
+          {video.provider === 'self' && (
+            <button
+              onClick={e => { e.stopPropagation(); handleRetry(video) }}
+              disabled={retryingId === video.id}
+              className="text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-accent disabled:opacity-50"
+              title={error ? `Failed: ${error}` : 'Retry processing'}
+            >
+              Retry
+            </button>
+          )}
         </span>
       )
     }

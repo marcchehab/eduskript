@@ -76,7 +76,7 @@ async function fetchSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
 
 /**
  * Coarse tag for callers that cannot name the affected skript — the video
- * provider callbacks/sync (src/lib/video-sync.server.ts)
+ * encoder revalidation ping (/api/videos/revalidate)
  * and the admin video tools work from an asset or video id, and a video is M2M
  * with skripts. Dropping every skript's file cache is fine there: both are rare,
  * manual events, and the entries rebuild from two indexed queries.

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Upload, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { requestVideoUpload, finishVideoUpload } from '@/lib/video-upload-client'
+import { checkVideoFile } from '@/lib/video-limits'
 import {
   Dialog,
   DialogContent,
@@ -103,11 +104,16 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
     setState('preparing')
 
     try {
+      // Step 0: limits (≤1080p, ≤2 GB) — read locally, nothing uploaded yet.
+      const problem = await checkVideoFile(file)
+      if (problem) throw new Error(problem)
+
       // Step 1: Video row + presigned S3 PUT
       const { uploadUrl, videoId, uploadHeaders } = await requestVideoUpload(
         filename.trim(),
         skriptId,
-        file.type
+        file.type,
+        file.size
       )
 
       // Step 2: Upload directly to S3 via PUT (XHR for progress events)
@@ -148,12 +154,12 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
         xhr.send(file)
       })
 
-      // Step 3: hand the upload to Infomaniak VOD for encoding.
+      // Step 3: queue the encode.
       setState('preparing')
       await finishVideoUpload(videoId)
 
       // Close modal and notify parent. Encoding runs asynchronously; the
-      // video browser shows the processing state and polls /api/videos/sync.
+      // video browser shows the processing state and re-fetches the list while it is pending.
       const uploadedName = filename.trim()
       reset()
       onOpenChange(false)
@@ -201,7 +207,7 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
                       Drop a video file here or click to browse
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      MP4, MOV, WebM supported
+                      MP4, MOV, WebM · up to 1080p and 2 GB
                     </p>
                   </div>
                 )}
@@ -277,7 +283,7 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
                 />
               </div>
               <p className="text-xs text-center text-muted-foreground">
-                Video hosting in Switzerland (Infomaniak)
+                Stored in Switzerland
               </p>
             </div>
           )}

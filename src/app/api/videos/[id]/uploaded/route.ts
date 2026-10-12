@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { startInfomaniakImport } from '@/lib/video-sync.server'
+import { enqueueUploadedVideo } from '@/lib/video-jobs.server'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 /**
  * POST /api/videos/[id]/uploaded — step 2 of a video upload: the browser has
- * PUT the file into S3; hand it to Infomaniak VOD. Idempotent (a second call
- * returns the existing media id). Only the uploader may call it.
+ * PUT the file into S3; queue the encode for scripts/video-worker.mjs.
+ * Idempotent. Only the uploader may call it.
  */
 export async function POST(
   _request: NextRequest,
@@ -19,18 +20,16 @@ export async function POST(
   }
   const { id } = await params
   const video = await prisma.video.findUnique({ where: { id }, select: { uploadedById: true, provider: true } })
-  if (!video || video.uploadedById !== session.user.id || video.provider !== 'infomaniak') {
+  if (!video || video.uploadedById !== session.user.id || video.provider !== 'self') {
     return NextResponse.json({ error: 'Video not found' }, { status: 404 })
   }
 
   try {
-    const metadata = await startInfomaniakImport(id)
+    const metadata = await enqueueUploadedVideo(id)
+    invalidateSkriptFiles()
     return NextResponse.json({ status: metadata.status })
   } catch (error) {
-    console.error('Video import start failed:', error instanceof Error ? error.message : error)
-    await prisma.video
-      .update({ where: { id }, data: { metadata: { status: 'errored', error: 'Import failed' } } })
-      .catch(() => {})
-    return NextResponse.json({ error: 'Could not start video processing' }, { status: 502 })
+    console.error('Video enqueue failed:', error instanceof Error ? error.message : error)
+    return NextResponse.json({ error: 'Could not queue the video for processing' }, { status: 500 })
   }
 }

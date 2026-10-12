@@ -59,7 +59,7 @@ The markdown transformation follows this **exact plugin order** (critical for pr
 
 4. **`remarkMuxVideo`** (`src/lib/remark-plugins/mux-video.ts`)
    - **Hybrid plugin**: Queries DB on server (skriptId), uses fileList on client
-   - Transforms `.mp4`/`.mov` references to uploaded-video components (Infomaniak VOD or legacy Mux)
+   - Transforms `.mp4`/`.mov` references to uploaded-video components (self-hosted HLS or legacy Mux)
    - Looks up `{video}.json` metadata file for playback ID, poster, blur data
    - Creates a custom `<muxvideo>` element (historic name; provider-independent since 2026-10)
 

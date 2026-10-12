@@ -11,7 +11,6 @@
  * - Reset demo user content from demo-content/ files
  * - Prune old metric_points and db_activity_hours rows
  * - Delete unclaimed anonymous skript imports past retention (7 days)
- * - Sync unfinished Infomaniak VOD videos (missed callbacks)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -22,8 +21,6 @@ import { revalidateUserSites } from '@/lib/billing-revalidate'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 import { sendDueTrialEmails } from '@/lib/trial-emails'
 import { deleteExpiredImports } from '@/lib/script-import/service'
-import { getVodConfig } from '@/lib/infomaniak-vod'
-import { syncPendingInfomaniakVideos } from '@/lib/video-sync.server'
 
 
 export async function POST(request: NextRequest) {
@@ -198,14 +195,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[cron] script-import cleanup error:', error)
     results.deletedScriptImports = 'error'
-  }
-
-  // --- Task 5: Sync Infomaniak videos whose callback never arrived ---
-  try {
-    results.videoSync = getVodConfig() ? await syncPendingInfomaniakVideos() : 'not configured'
-  } catch (error) {
-    console.error('[cron] video sync error:', error)
-    results.videoSync = 'error'
   }
 
   return NextResponse.json({ success: true, results })

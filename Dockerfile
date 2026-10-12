@@ -74,11 +74,14 @@ FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 # LibreOffice headless for .doc/.odt/.rtf → .docx. Both run as child processes
 # only during an import. LibreOffice adds ~700 MB to the image; the layer only
 # changes when these versions change.
+# ffmpeg (Debian 5.1): the video encoder role (scripts/video-worker.mjs) uses
+# it. Adds ~380 MB on top of LibreOffice (measured with du on bookworm-slim:
+# 462 → 854 MB incl. apt lists); the web role doesn't use it.
 ARG PANDOC_VERSION=3.12
 ARG PANDOC_SHA256=91903ff19f1b1d4db4129797c7e18f71212990d7394fcff1787719aebf04e372
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl fonts-dejavu-core tini \
-      libreoffice-writer-nogui libreoffice-math-nogui \
+      libreoffice-writer-nogui libreoffice-math-nogui ffmpeg \
  && curl -fsSL -o /tmp/pandoc.deb https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb \
  && echo "${PANDOC_SHA256}  /tmp/pandoc.deb" | sha256sum -c - \
  && dpkg -i /tmp/pandoc.deb && rm /tmp/pandoc.deb \

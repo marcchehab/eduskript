@@ -1,12 +1,14 @@
 # Video
 
-Video ohne die YouTube-Steuer — keine Werbung, kein Versinken in Empfehlungen, kein «Dieses Video ist in deiner Region nicht verfügbar». Eduskript hostet deine Videos in der Schweiz über [Infomaniak VOD](https://www.infomaniak.com/de/hosting/video-streaming), das heisst adaptives Streaming auf jedem Gerät plus automatisch generierte Untertitel — und die Browser der Schülerinnen und Schüler sprechen beim Abspielen nur mit Schweizer Servern.
+Video ohne die YouTube-Steuer — keine Werbung, kein Versinken in Empfehlungen, kein «Dieses Video ist in deiner Region nicht verfügbar». Eduskript kodiert und hostet deine Videos selbst, auf Servern in der Schweiz: adaptives Streaming auf jedem Gerät, automatisch generierte Untertitel, und die Browser der Schülerinnen und Schüler sprechen beim Abspielen nur mit Schweizer Servern.
 
 ---
 
 ## Hochladen und einbetten
 
-Lege eine `.mp4`- oder `.mov`-Datei in der **Videos**-Schublade deines Skripts ab. Sie wird für adaptives Streaming aufbereitet (das dauert ein bis zwei Minuten — die Datei erscheint in der Videoliste mit einer «processing»-Anzeige, bis sie bereit ist).
+Lege eine `.mp4`- oder `.mov`-Datei in der **Videos**-Schublade deines Skripts ab. Sie wird für adaptives Streaming aufbereitet — die Videoliste zeigt «queued» und dann den Fortschritt in Prozent, bis sie bereit ist (bei einer 1080p-Quelle etwa ein Fünftel der Videolänge, länger, wenn andere Videos in der Warteschlange vorne sind). Schlägt die Aufbereitung fehl, zeigt die Liste den Grund und einen **Retry**-Button.
+
+**Grenzen:** höchstens 1080p (1920×1080, hoch oder quer), 2 GB pro Datei, 2 Stunden. Grössere Videos werden vor dem Hochladen abgelehnt — exportiere sie zuerst in 1080p. Handyvideos (HEVC, gedreht, variable Bildrate) funktionieren.
 
 Sobald sie bereit ist, bette sie in Markdown wie ein Bild ein:
 
@@ -50,7 +52,7 @@ Beide Syntaxen führen zum selben Player. Gibst du kein Poster an, wird das auto
 
 ## Automatisch generierte Untertitel
 
-Jedes hochgeladene Video wird nach der Aufbereitung automatisch transkribiert (die gesprochene Sprache wird erkannt, z. B. Deutsch oder Englisch). Die Untertitel erscheinen kurz nachdem das Video selbst bereit ist. Schülerinnen und Schüler schalten sie über den Untertitel-Button des Players ein. Videos ohne Sprache erhalten keine Untertitel.
+Jedes hochgeladene Video wird während der Aufbereitung automatisch transkribiert (Whisper, betrieben von Infomaniak in der Schweiz; die gesprochene Sprache wird erkannt, z. B. Deutsch oder Englisch). Schülerinnen und Schüler schalten die Untertitel über den Untertitel-Button des Players ein. Videos ohne Sprache erhalten keine Untertitel.
 
 ---
 
@@ -71,7 +73,7 @@ Nützlich für kurze Demo-Loops im Seitenhintergrund, Intro-Animationen oder vis
 
 ## Adaptives Streaming, jedes Gerät
 
-Jeder Upload wird in mehreren Qualitätsstufen aufbereitet (360p, 480p, 720p, 1080p, je nach Quelle). Der Player wählt die passende Stufe anhand der Verbindung und der Playergrösse — ein Handy im Mobilfunknetz erhält eine kleine Stufe, ein Laptop im WLAN die volle.
+Jeder Upload wird in zwei Qualitätsstufen aufbereitet, 720p und 480p (weniger, wenn die Quelle kleiner ist). Der Player wählt die passende anhand der Verbindung und der Playergrösse; Schülerinnen und Schüler können im Einstellungsmenü auch selbst wählen. Der Download im Skript-Export ist die 720p-Version.
 
 ---
 

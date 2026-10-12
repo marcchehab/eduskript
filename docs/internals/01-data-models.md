@@ -140,27 +140,35 @@ Content-addressed by `hash`. See the **File Storage** chapter for the S3 storage
 
 ---
 
-## Video (Infomaniak VOD; legacy Mux)
+## Video (self-hosted HLS; legacy Mux)
 
 ```prisma
 model Video {
   id           String  @id @default(cuid())
   filename     String
-  provider     String  @default("mux")  // "infomaniak" | "mux" (not yet migrated)
+  provider     String  @default("mux")  // "self" | "mux" (not yet migrated)
   metadata     Json                     // provider-specific, see src/lib/video-playback.ts
   uploadedById String?
   muxUploadId  String? @unique          // legacy Mux webhook lookup
   muxAssetId   String? @unique          // legacy Mux webhook lookup / static MP4
-  vodMediaId   String? @unique          // Infomaniak media id (callback lookup)
+  encodeJobId  String?                  // → VideoEncodeJob (shared by page copies)
   skripts      Skript[]                 // M2M via _SkriptVideos
+}
+
+model VideoEncodeJob {                  // queue for scripts/video-worker.mjs
+  status       String                   // queued | running | done | failed
+  source       String                   // "s3:<key>" or Mux HLS URL
+  outputPrefix String                   // videos/<uuid>/ in the teacher bucket
+  attempts, availableAt, lockedAt, progress, error
 }
 ```
 
 Videos are separate from the `File` table. Uploads go browser → S3
-(`video-uploads/`, deleted once encoded) → Infomaniak VOD import; state comes
-back via callback, dashboard poll and daily cron (`src/lib/video-sync.server.ts`).
-Playback is `<video>` + hls.js for both providers (`src/components/markdown/hls-video.tsx`).
-Rollout/migration: `MIGRATION-VOD.md`.
+(`video-uploads/`, original kept) → job → encoder role (ffmpeg: 720p/480p
+HLS, 720p MP4, poster, scrub sprites, Whisper captions) → S3 `videos/<uuid>/`.
+The worker mirrors status/progress into `Video.metadata` and pings
+`/api/videos/revalidate`. Playback: `<video>` + hls.js with custom controls
+(`src/components/markdown/hls-video.tsx`). Rollout: `MIGRATION-VIDEO.md`.
 
 ---
 

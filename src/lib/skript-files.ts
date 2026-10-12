@@ -32,10 +32,12 @@ export interface VideoInfo {
     aspectRatio?: number
     assetId?: string
     status?: string
-    // provider "infomaniak"
+    // provider "self"
     hlsUrl?: string
     captions?: Array<{ src: string; lang: string; label: string }>
-    captionsStatus?: string
+    thumbnailsVtt?: string
+    progress?: number
+    error?: string
   }
 }
 
@@ -52,7 +54,9 @@ export function toVideoInfoMetadata(raw: unknown, defaultStatus?: string): Video
     status: str(m.status) ?? defaultStatus,
     hlsUrl: str(m.hlsUrl),
     captions: Array.isArray(m.captions) ? (m.captions as NonNullable<VideoInfo['metadata']['captions']>) : undefined,
-    captionsStatus: str(m.captionsStatus),
+    thumbnailsVtt: str(m.thumbnailsVtt),
+    progress: typeof m.progress === 'number' ? m.progress : undefined,
+    error: str(m.error),
   }
 }
 

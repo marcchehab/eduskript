@@ -220,11 +220,11 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
 }
 
 /**
- * Polls prepare-download until a video's MP4 is ready. Infomaniak rows answer
- * at once (highest stored rendition); Mux rows need a static rendition first.
+ * Polls prepare-download until a video's MP4 is ready. Self-hosted rows answer
+ * at once (stored 720p MP4); Mux rows need a static rendition first.
  */
 async function resolveVideoUrl(video: ExportVideo): Promise<string> {
-  if (video.provider !== 'infomaniak' && !video.muxAssetId) throw new Error('Video is not ready on Mux yet')
+  if (video.provider !== 'self' && !video.muxAssetId) throw new Error('Video is not ready on Mux yet')
 
   for (let attempt = 0; attempt < VIDEO_POLL_ATTEMPTS; attempt++) {
     const res = await fetch(`/api/videos/${video.id}/prepare-download`, { method: 'POST' })

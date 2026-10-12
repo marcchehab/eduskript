@@ -1,12 +1,14 @@
 # Video
 
-Video without the YouTube tax — no ads, no recommendation rabbit hole, no "your video is unavailable in your region." Eduskript hosts your videos in Switzerland via [Infomaniak VOD](https://www.infomaniak.com/en/hosting/video-streaming), which means adaptive streaming on every device, plus auto-generated subtitles — and students' browsers only talk to Swiss servers when they watch.
+Video without the YouTube tax — no ads, no recommendation rabbit hole, no "your video is unavailable in your region." Eduskript encodes and hosts your videos itself, on servers in Switzerland: adaptive streaming on every device, auto-generated subtitles, and students' browsers only talk to Swiss servers when they watch.
 
 ---
 
 ## Upload and embed
 
-Drop an `.mp4` or `.mov` file into your skript's **Videos** drawer. It is encoded for adaptive streaming (this takes a minute or two — the file becomes available in the videos list with a "processing" indicator until ready).
+Drop an `.mp4` or `.mov` file into your skript's **Videos** drawer. It is encoded for adaptive streaming — the videos list shows "queued" and then the progress in percent until it is ready (roughly a fifth of the video's length for a 1080p source, longer when other videos are ahead in the queue). If processing fails, the list shows the reason and a **Retry** button.
+
+**Limits:** up to 1080p (1920×1080, portrait or landscape), 2 GB per file, 2 hours. Bigger videos are refused before uploading — export them at 1080p first. Phone videos (HEVC, rotated, variable frame rate) are fine.
 
 Once ready, embed it in markdown like an image:
 
@@ -16,11 +18,12 @@ Once ready, embed it in markdown like an image:
 
 The video player gets:
 - Poster (preview frame)
-- Play / pause / scrubber
+- Play / pause / scrubber with preview thumbnails when you hover or drag
 - Volume
 - Captions toggle (auto-generated subtitles)
+- Settings: quality (Auto, 720p, 480p) and playback speed
 - Fullscreen
-- Adaptive quality (picked automatically)
+- Keyboard: space/K play, ←/→ seek 5 s, F fullscreen, M mute, C captions
 
 All automatically. No configuration needed for any of it.
 
@@ -50,7 +53,7 @@ Both syntaxes converge on the same player. If you don't specify a poster, the au
 
 ## Auto-generated subtitles
 
-Every uploaded video is transcribed automatically after encoding (the spoken language is detected, e.g. German or English). Subtitles appear shortly after the video itself is ready. Students toggle them on with the captions button on the player. Videos without speech get no subtitles.
+Every uploaded video is transcribed automatically while it is encoded (Whisper, run by Infomaniak in Switzerland; the spoken language is detected, e.g. German or English). Students toggle them on with the captions button on the player. Videos without speech get no subtitles.
 
 ---
 
@@ -71,7 +74,7 @@ Useful for short demo loops in the page background, intro animations, or visual 
 
 ## Adaptive streaming, every device
 
-Each upload is encoded into several quality renditions (360p, 480p, 720p, 1080p, depending on the source). The player picks the right quality based on the student's connection and the player size — a phone on cellular gets a small rendition, a laptop on WiFi the full one.
+Each upload is encoded into two quality renditions, 720p and 480p (fewer if the source is smaller). The player picks the right one based on the student's connection and the player size; students can also pick one in the settings menu. The download in the skript export is the 720p version.
 
 ---
 

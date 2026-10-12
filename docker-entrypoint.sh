@@ -9,6 +9,12 @@
 # + all seeds (config/deploy.yml).
 set -e
 
+# Kamal roles with their own `cmd` (e.g. the video encoder) skip migrations
+# and seeds — the web role owns those.
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
 ./node_modules/.bin/prisma migrate deploy
 node scripts/seed-admin.js   || echo 'Seeding failed, continuing...'
 node scripts/seed-demo.mjs   || echo 'Demo seed failed, continuing...'

@@ -17,6 +17,29 @@ servers:
       # 2 × 2.5g during the deploy overlap + 2g db + 0.25g caddy < 8 GB host.
       # A leaking Node heap kills this container, not Postgres.
       memory: 2500m
+  # Video encoder (scripts/video-worker.mjs, MIGRATION-VIDEO.md): same image,
+  # one ffmpeg job at a time. Capped at 2 of the 4 vCPUs and given low CPU
+  # shares so the web role wins under contention; ffmpeg itself runs under
+  # nice 19 / ionice idle. Measured on the VPS: 7:51 1080p → 720p veryfast in
+  # 55 s at 2 cores without visible website latency.
+  # Memory: 1g on top of the web budget above — the deploy overlap (2 web
+  # containers) then exceeds 8 GB in theory; ffmpeg stays well under 1g for
+  # ≤1080p input.
+  encoder:
+    hosts:
+      - 179.237.126.129
+    cmd: node scripts/video-worker.mjs
+    proxy: false
+    options:
+      cpus: 2
+      cpu-shares: 128
+      memory: 1g
+    env:
+      clear:
+        # Cache revalidation ping after each job (the app caches video rows).
+        VIDEO_WORKER_APP_URL: https://eduskript.org
+        VIDEO_FFMPEG_THREADS: "2"
+        VIDEO_FFMPEG_PRESET: veryfast
 
 ssh:
   user: deploy
@@ -105,10 +128,6 @@ env:
     - MUX_TOKEN_ID
     - MUX_TOKEN_SECRET
     - MUX_WEBHOOK_SECRET
-    - INFOMANIAK_VOD_TOKEN            # video hosting (Infomaniak VOD, CH), see MIGRATION-VOD.md
-    - INFOMANIAK_VOD_CHANNEL
-    - INFOMANIAK_VOD_FOLDER
-    - INFOMANIAK_VOD_CALLBACK_SECRET  # bearer token of the VOD callback
     - OPENROUTER_API_KEY
     - INFOMANIAK_AI_TOKEN       # AI for student data (Infomaniak AI Services, CH)
     - PAYREXX_API_SECRET

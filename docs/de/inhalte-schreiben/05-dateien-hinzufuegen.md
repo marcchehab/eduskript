@@ -43,7 +43,7 @@ Eduskript akzeptiert und liefert jeden Dateityp aus — einige werden aber spezi
 |------|------------|------------------|
 | **Bilder** | `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg` | Eingebettet mit `![]()`, skalierbar, ausrichtbar |
 | **Excalidraw** | `.excalidraw.light.svg` + `.excalidraw.dark.svg` | Themenabhängiges Paar, referenziert als `name.excalidraw` |
-| **Video** | `.mp4`, `.mov` | Werden bei Infomaniak VOD (Schweiz) gehostet, erhalten adaptives Streaming und automatische Untertitel (siehe Kapitel *Video*) |
+| **Video** | `.mp4`, `.mov` | Werden von Eduskript in der Schweiz aufbereitet und gehostet (≤1080p, ≤2 GB), erhalten adaptives Streaming und automatische Untertitel (siehe Kapitel *Video*) |
 | **SQLite-Datenbanken** | `.db`, `.sqlite` | Treiben interaktive SQL-Editoren an (siehe *SQL-Datenbanken*) |
 | **PDFs** | `.pdf` | Inline eingebettet oder heruntergeladen |
 | **Code-Beispiele** | `.py`, `.js`, `.sql`, `.html`, `.css` usw. | Verlinkbar; keine spezielle Einbettung |
@@ -109,7 +109,7 @@ Siehe das Kapitel **SQL-Datenbanken** im Abschnitt Komponenten für Abfragesynta
 
 ## Videodateien
 
-Videodateien (`.mp4`, `.mov`) werden bei Infomaniak VOD in der Schweiz gehostet, für adaptives Streaming und automatisch erzeugte Untertitel. Sie landen im **Videos**-Panel statt im Files-Panel. Referenziere sie im Markdown wie Bilder:
+Videodateien (`.mp4`, `.mov`) werden von Eduskript in der Schweiz aufbereitet und gehostet (bis 1080p und 2 GB), für adaptives Streaming und automatisch erzeugte Untertitel. Sie landen im **Videos**-Panel statt im Files-Panel. Referenziere sie im Markdown wie Bilder:
 
 ```markdown
 ![A short caption](my-lecture.mp4)

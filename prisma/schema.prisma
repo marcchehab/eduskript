@@ -487,23 +487,25 @@ model File {
   @@map("files")
 }
 
-// Video storage for hosted video files (Infomaniak VOD; Mux for rows not yet
-// migrated). Uses JSONB for provider-specific metadata — shapes documented in
+// Video storage for hosted video files: self-encoded HLS on our S3 (provider
+// "self", encoded by scripts/video-worker.mjs); Mux for rows not yet migrated.
+// Uses JSONB for provider-specific metadata — shapes documented in
 // src/lib/video-playback.ts.
 model Video {
   id           String  @id @default(cuid())
   filename     String // e.g., "lecture.mp4"
-  provider     String  @default("mux") // "mux" | "infomaniak"
+  provider     String  @default("mux") // "mux" | "self"
   metadata     Json // Provider-specific, see src/lib/video-playback.ts
   uploadedById String? @map("uploaded_by_id")
   muxUploadId  String? @unique @map("mux_upload_id") // For webhook lookup after direct upload
   muxAssetId   String? @unique @map("mux_asset_id") // For webhook lookup when asset ready
-  // Infomaniak VOD media id, for callback lookup. Null on page-copy duplicates
-  // that share another row's media (same as muxAssetId).
-  vodMediaId   String? @unique @map("vod_media_id")
+  // Encode job producing this row's HLS output. Several rows can share one job
+  // (page copies; migrated Mux rows with the same playback id).
+  encodeJobId  String? @map("encode_job_id")
 
-  uploadedBy User?    @relation("UploadedVideos", fields: [uploadedById], references: [id], onDelete: SetNull)
-  skripts    Skript[] @relation("SkriptVideos") // Many-to-many
+  uploadedBy User?           @relation("UploadedVideos", fields: [uploadedById], references: [id], onDelete: SetNull)
+  encodeJob  VideoEncodeJob? @relation(fields: [encodeJobId], references: [id], onDelete: SetNull)
+  skripts    Skript[]        @relation("SkriptVideos") // Many-to-many
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -511,7 +513,30 @@ model Video {
   @@unique([filename, provider, uploadedById])
   @@index([filename])
   @@index([uploadedById])
+  @@index([encodeJobId])
   @@map("videos")
+}
+
+// Queue for the video encoder (scripts/video-worker.mjs). One worker holds a
+// Postgres advisory lock, so at most one job runs at a time.
+model VideoEncodeJob {
+  id           String    @id @default(cuid())
+  status       String    @default("queued") // "queued" | "running" | "done" | "failed"
+  // "s3:<key>" (teacher bucket upload) or an http(s) URL (Mux HLS for migration)
+  source       String
+  outputPrefix String    @map("output_prefix") // S3 key prefix, ends with "/"
+  attempts     Int       @default(0)
+  availableAt  DateTime  @default(now()) @map("available_at") // retry backoff
+  lockedAt     DateTime? @map("locked_at") // heartbeat while running
+  progress     Float? // 0..1
+  error        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  videos Video[]
+
+  @@index([status, availableAt])
+  @@map("video_encode_jobs")
 }
 
 // Collaboration request model for pending requests

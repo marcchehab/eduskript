@@ -21,12 +21,12 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid topic' }, { status: 400 })
   }
 
-  // Prefer a migrated/new Infomaniak row over a leftover Mux one.
+  // Prefer a migrated/new self-hosted row over a leftover Mux one.
   const videos = await prisma.video.findMany({
     where: { filename: helpVideoFilename(topic) },
     select: { provider: true, metadata: true },
   })
-  videos.sort((a, b) => Number(b.provider === 'infomaniak') - Number(a.provider === 'infomaniak'))
+  videos.sort((a, b) => Number(b.provider === 'self') - Number(a.provider === 'self'))
   const playback = videos
     .filter(v => (v.metadata as Record<string, unknown> | null)?.status === 'ready')
     .map(v => getVideoPlayback(v.provider, v.metadata as Record<string, unknown>))

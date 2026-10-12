@@ -5,16 +5,19 @@ import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 import { generatePresignedUploadUrl, getTeacherBucketName, isTeacherS3Configured } from '@/lib/s3'
-import { getVodConfig } from '@/lib/infomaniak-vod'
-import { newUploadKey } from '@/lib/video-sync.server'
+import { newUploadKey } from '@/lib/video-jobs.server'
+import { videoSizeProblem } from '@/lib/video-limits'
 
 /**
  * POST /api/videos/upload-url — step 1 of a video upload.
  *
- * Creates the Video row (provider "infomaniak", status "waiting") and returns
- * a presigned S3 PUT into the teacher bucket under video-uploads/. The client
- * then PUTs the file and calls POST /api/videos/[id]/uploaded, which hands the
- * object to Infomaniak VOD (src/lib/video-sync.server.ts).
+ * Creates the Video row (provider "self", status "waiting") and returns a
+ * presigned S3 PUT into the teacher bucket under video-uploads/. The PUT signs
+ * Content-Type and Content-Length, so the 2 GB limit can't be bypassed by
+ * sending a bigger file. The client then PUTs the file and calls
+ * POST /api/videos/[id]/uploaded, which queues the encode
+ * (src/lib/video-jobs.server.ts). Resolution is checked in the browser before
+ * and by the encoder after (src/lib/video-limits.ts).
  */
 
 export async function POST(request: NextRequest) {
@@ -63,7 +66,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!getVodConfig() || !isTeacherS3Configured()) {
+    const size = Number(body.size)
+    if (!Number.isFinite(size) || size <= 0) {
+      return NextResponse.json({ error: 'size is required' }, { status: 400 })
+    }
+    const sizeProblem = videoSizeProblem(size)
+    if (sizeProblem) return NextResponse.json({ error: sizeProblem }, { status: 413 })
+
+    if (!isTeacherS3Configured()) {
       return NextResponse.json({ error: 'Video hosting is not configured on this server' }, { status: 503 })
     }
 
@@ -76,7 +86,7 @@ export async function POST(request: NextRequest) {
     const video = await prisma.video.create({
       data: {
         filename: sanitizedFilename,
-        provider: 'infomaniak',
+        provider: 'self',
         metadata: { status: 'waiting', uploadKey },
         uploadedById: session.user.id,
         ...(skriptId ? { skripts: { connect: { id: skriptId } } } : {}),
@@ -88,7 +98,8 @@ export async function POST(request: NextRequest) {
       uploadKey,
       contentType,
       6 * 3600,
-      getTeacherBucketName()
+      getTeacherBucketName(),
+      size
     )
 
     invalidateSkriptFiles(skriptId)

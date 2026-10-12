@@ -12,8 +12,8 @@ const mux = new Mux({
 /**
  * POST /api/videos/[id]/prepare-download
  *
- * Infomaniak rows: returns the highest MP4 rendition (stored on sync as
- * metadata.mp4Url; play.vod2.infomaniak.com, CORS *) — always ready at once.
+ * Self-hosted rows: returns the 720p download MP4 the encoder wrote to S3
+ * (metadata.mp4Url, public, CORS *) — ready as soon as the video is.
  *
  * Mux rows (until migrated): Mux assets only serve HLS streaming by default — there's no downloadable
  * original file. This enables (or checks progress of) a static MP4
@@ -47,7 +47,7 @@ export async function POST(
     return NextResponse.json({ error: 'Video not found or access denied' }, { status: 404 })
   }
 
-  if (video.provider === 'infomaniak') {
+  if (video.provider === 'self') {
     const meta = video.metadata as Record<string, unknown>
     if (meta?.status !== 'ready') {
       return NextResponse.json({ status: 'preparing' })
