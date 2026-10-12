@@ -33,7 +33,7 @@ servers:
     options:
       cpus: 2
       cpu-shares: 128
-      memory: 1g
+      memory: 768m
     env:
       clear:
         # Cache revalidation ping after each job (the app caches video rows).
