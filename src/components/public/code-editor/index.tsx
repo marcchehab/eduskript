@@ -3622,6 +3622,8 @@ export const CodeEditor = memo(function CodeEditor({
     ensurePyodideLoaded()
 
     // Detect required packages by parsing imports (cheap; same map as before).
+    // Every value must be listed in src/lib/pyodide-dist.json — only those
+    // (plus deps) are self-hosted by scripts/fetch-pyodide.mjs.
     const packageMap: Record<string, string> = {
       'matplotlib': 'matplotlib',
       'numpy': 'numpy',

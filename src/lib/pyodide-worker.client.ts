@@ -24,8 +24,25 @@
 
 import { parseAssertions, TURTLE_PRELUDE, type ParsedAssertion } from '@/components/public/code-editor/python-check-runner'
 import type { PythonCheckResult, PythonFile } from '@/components/public/code-editor/types'
+import pyodideDist from './pyodide-dist.json'
 
-const PYODIDE_VERSION = 'v0.29.0'
+/**
+ * Pyodide is self-hosted (no CDN — student browsers must not contact third
+ * parties). Files live at `<base>v<version>/`, assembled by
+ * scripts/fetch-pyodide.mjs: public/pyodide in dev (`pnpm dev` runs it), a
+ * dedicated Dockerfile stage in production. NEXT_PUBLIC_PYODIDE_BASE_URL
+ * (build-time) can point elsewhere, e.g. an object-storage prefix — that host
+ * then needs CORS for our origins (pyodide fetch()es the .wasm/.zip/.whl).
+ */
+const PYODIDE_BASE_URL = (process.env.NEXT_PUBLIC_PYODIDE_BASE_URL || '/pyodide/').replace(/\/?$/, '/')
+
+/**
+ * Absolute index URL. The worker runs from a blob: URL, where relative URLs
+ * don't resolve against the page — so resolve on the main thread.
+ */
+function pyodideIndexUrl(): string {
+  return new URL(`${PYODIDE_BASE_URL}v${pyodideDist.version}/`, window.location.href).href
+}
 
 // ─── Python source embedded into the worker ──────────────────────────────
 // Kept verbatim from the previous main-thread implementation. JSON.stringify
@@ -201,8 +218,8 @@ json.dumps(__results)
 // Built once at module init. JSON.stringify embeds Python strings safely.
 
 const WORKER_SOURCE = `
-importScripts('https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/pyodide.js')
-const PYODIDE_INDEX = 'https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/'
+const PYODIDE_INDEX = __PYODIDE_INDEX__
+importScripts(PYODIDE_INDEX + 'pyodide.js')
 
 const EDUSKRIPT_DISPLAY_HELPERS = ${JSON.stringify(EDUSKRIPT_DISPLAY_HELPERS)}
 const MATPLOTLIB_BACKEND_CONFIG = ${JSON.stringify(MATPLOTLIB_BACKEND_CONFIG)}
@@ -403,7 +420,8 @@ export function warmPyodideWorker(): void {
 function getWorker(): Worker {
   if (worker) return worker
   if (!workerUrl) {
-    const blob = new Blob([WORKER_SOURCE], { type: 'application/javascript' })
+    const source = WORKER_SOURCE.replace('__PYODIDE_INDEX__', () => JSON.stringify(pyodideIndexUrl()))
+    const blob = new Blob([source], { type: 'application/javascript' })
     workerUrl = URL.createObjectURL(blob)
   }
   worker = new Worker(workerUrl)

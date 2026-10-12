@@ -80,6 +80,14 @@ const nextConfig: NextConfig = {
           { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
       },
+      {
+        // Self-hosted Pyodide (~70 MB incl. wheels). Path carries the version
+        // (/pyodide/v<version>/), so its files never change in place.
+        source: '/pyodide/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
     ]
   },
   images: {

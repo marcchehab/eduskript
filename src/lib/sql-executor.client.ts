@@ -4,9 +4,11 @@
  * This file should NEVER be imported on the server side.
  * All imports from this file should be dynamic imports wrapped in client-only code.
  *
- * NOTE: We load sql.js from CDN via script tag instead of importing it as a module
- * to avoid Next.js 16 + Turbopack compilation issues with the fs module.
- * This is a known limitation of Next.js 16 + Turbopack.
+ * sql.js is bundled from npm (dynamic import -> lazy chunk). The bundler picks
+ * the package's `browser` export (dist/sql-wasm-browser.js), which has no
+ * Node `fs`/`path` branch -- that branch is what broke Turbopack when the main
+ * entry was imported. The .wasm is emitted as a static asset via
+ * `new URL(..., import.meta.url)`, so everything is served from our origin.
  */
 
 'use client'
@@ -24,17 +26,8 @@ interface SqlJsStatic {
 
 type InitSqlJs = (config?: { locateFile?: (file: string) => string }) => Promise<SqlJsStatic>
 
-// Extend window to include initSqlJs from CDN
-declare global {
-  interface Window {
-    initSqlJs?: InitSqlJs
-  }
-}
-
 // SQL.js singleton instance
 let sqlInstance: SqlJsStatic | null = null
-let scriptLoaded = false
-let scriptLoading: Promise<void> | null = null
 
 // Database instances stored by path (allows multiple databases to be open simultaneously)
 const databaseCache = new Map<string, SqlJsDatabase>()
@@ -61,59 +54,13 @@ export interface SqlExecutionResult {
 // 2. A database name that will be resolved to a file in the current skript
 
 /**
- * Load sql.js library from CDN via script tag
- */
-async function loadSqlJsScript(): Promise<void> {
-  // If already loaded or loading, return
-  if (scriptLoaded) return
-  if (scriptLoading) return scriptLoading
-
-  scriptLoading = new Promise((resolve, reject) => {
-    // Check if script already exists
-    if (typeof window !== 'undefined' && window.initSqlJs) {
-      scriptLoaded = true
-      resolve()
-      return
-    }
-
-    // Create script tag
-    const script = document.createElement('script')
-    script.src = 'https://sql.js.org/dist/sql-wasm.js'
-    script.async = true
-
-    script.onload = () => {
-      scriptLoaded = true
-      resolve()
-    }
-
-    script.onerror = () => {
-      scriptLoading = null
-      reject(new Error('Failed to load sql.js from CDN'))
-    }
-
-    document.head.appendChild(script)
-  })
-
-  return scriptLoading
-}
-
-/**
  * Initialize SQL.js WASM module
  */
 async function initializeSqlJs(): Promise<SqlJsStatic> {
   if (!sqlInstance) {
-    // Load script from CDN first
-    await loadSqlJsScript()
-
-    // Initialize sql.js from window object
-    if (!window.initSqlJs) {
-      throw new Error('sql.js failed to load from CDN')
-    }
-
-    sqlInstance = await window.initSqlJs({
-      // Load WASM files from CDN
-      locateFile: (file) => `https://sql.js.org/dist/${file}`,
-    })
+    const mod = (await import('sql.js')) as unknown as { default: InitSqlJs }
+    const wasmUrl = new URL('sql.js/dist/sql-wasm-browser.wasm', import.meta.url).href
+    sqlInstance = await mod.default({ locateFile: () => wasmUrl })
   }
   return sqlInstance
 }

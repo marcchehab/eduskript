@@ -79,10 +79,11 @@ IndexedDB stores per-editor state (code, active file, font size, width, transfor
 
 ## Implementation
 
-**SQL.js loading:**
+**SQL.js loading** (npm `sql.js`, bundled — no CDN; the package's `browser` export has no Node `fs` branch):
 ```typescript
-script.src = 'https://sql.js.org/dist/sql-wasm.js'
-locateFile: (file) => `https://sql.js.org/dist/${file}`
+const mod = await import('sql.js')
+const wasmUrl = new URL('sql.js/dist/sql-wasm-browser.wasm', import.meta.url).href
+sqlInstance = await mod.default({ locateFile: () => wasmUrl })
 ```
 
 **Caching:**

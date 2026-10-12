@@ -5,6 +5,7 @@
 #   deps    full install (dev deps needed by `next build`)
 #   build   `pnpm build` → .next/standalone
 #   prod    prod-only node_modules for the start sequence (prisma CLI, seeds)
+#   pyodide self-hosted Python runtime + wheels (scripts/fetch-pyodide.mjs)
 # The runtime image carries both the standalone server (with its own traced
 # node_modules) and the prod node_modules — ~1 GB, but the node_modules layer
 # only changes with pnpm-lock.yaml, so most deploys push just the app layer.
@@ -29,6 +30,19 @@ COPY prisma.config.ts ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store npm pkg delete scripts.prepare \
  && pnpm install --frozen-lockfile --prod \
  && DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy ./node_modules/.bin/prisma generate
+
+# Self-hosted Pyodide (core from the npm package + wheels verified against
+# pyodide-lock.json). Own stage so its ~70 MB layer is rebuilt and pushed only
+# when the pyodide version, package list or this script changes.
+# public/pyodide is dockerignored, so the working-tree copy never ends up in
+# the app layer.
+# Copies just node_modules/pyodide (not FROM deps), so an unrelated lockfile
+# change doesn't re-run the download and produce a new layer to push.
+FROM base AS pyodide
+COPY --from=deps /app/node_modules/pyodide ./node_modules/pyodide
+COPY scripts/fetch-pyodide.mjs ./scripts/
+COPY src/lib/pyodide-dist.json ./src/lib/
+RUN node scripts/fetch-pyodide.mjs /pyodide
 
 FROM base AS build
 # NEXT_PUBLIC_* are inlined at build time. NEXTAUTH_URL feeds
@@ -80,6 +94,9 @@ COPY --chown=node:node prisma ./prisma
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node docs ./docs
 COPY --chown=node:node demo-content ./demo-content
+# Before the standalone copy: it is the rarely-changing layer. The standalone
+# COPY below merges into the same directory and leaves public/pyodide alone.
+COPY --from=pyodide --chown=node:node /pyodide ./.next/standalone/public/pyodide
 COPY --from=build --chown=node:node /app/.next/standalone ./.next/standalone
 USER node
 EXPOSE 3000

@@ -11,8 +11,18 @@ export async function extractPdfPages(
   /** Render scale — 2 gives ~150 DPI for a typical PDF (72pt base). */
   scale = 2
 ): Promise<Blob[]> {
-  const pdfjsLib = await import('pdfjs-dist')
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+  // The worker module is bundled as a lazy chunk (same pdfjs-dist version,
+  // our origin — no unpkg) and handed to pdfjs via `globalThis.pdfjsWorker`,
+  // which makes pdfjs run it on the main thread ("fake worker") instead of a
+  // Web Worker. Trade-off: PDF parsing blocks the UI while extracting (teacher
+  // dashboard only). A real Worker via `new URL(..., import.meta.url)` breaks
+  // the server webpack build (pdfjs-dist is a serverExternalPackage).
+  const [pdfjsLib, pdfjsWorker] = await Promise.all([
+    import('pdfjs-dist'),
+    // @ts-expect-error -- no type declarations for the worker entry
+    import('pdfjs-dist/build/pdf.worker.min.mjs'),
+  ])
+  ;(globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker
 
   // pdfjs-dist 6 dropped the bare-string shorthand; the URL must be passed as
   // an explicit DocumentInitParameters field.

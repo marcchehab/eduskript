@@ -2,26 +2,30 @@
  * Celebration Effects
  *
  * A collection of tsParticles-based celebration animations for when students
- * pass all tests. Effects are loaded from CDN on demand (~180KB, cached).
+ * pass all tests. tsParticles v2 (engine + `loadFull` preset, the same set the
+ * former CDN `tsparticles.bundle.min.js` registered) is bundled from npm and
+ * code-split via dynamic import — loaded on first use, served from our origin.
  * Each effect is a function that takes a container rect and the tsParticles instance.
  */
 
 type TsParticles = any
 type EffectFn = (tsParticles: TsParticles, id: string, rect: DOMRect) => Promise<void>
 
-/** Load tsParticles v2 from CDN. Cached after first load. */
-export function loadTsParticles(): Promise<TsParticles> {
-  if ((window as any).tsParticles) return Promise.resolve((window as any).tsParticles)
-  if ((window as any).__tsParticlesPromise) return (window as any).__tsParticlesPromise
+let tsParticlesPromise: Promise<TsParticles> | null = null
 
-  ;(window as any).__tsParticlesPromise = new Promise<TsParticles>((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = 'https://cdn.jsdelivr.net/npm/tsparticles@2/tsparticles.bundle.min.js'
-    script.onload = () => resolve((window as any).tsParticles)
-    script.onerror = () => reject(new Error('Failed to load tsParticles'))
-    document.head.appendChild(script)
-  })
-  return (window as any).__tsParticlesPromise
+/** Load tsParticles (lazy chunk). Cached after first load; retried after a failure. */
+export function loadTsParticles(): Promise<TsParticles> {
+  if (tsParticlesPromise) return tsParticlesPromise
+  tsParticlesPromise = (async () => {
+    const [{ tsParticles }, { loadFull }] = await Promise.all([
+      import('tsparticles-engine'),
+      import('tsparticles'),
+    ])
+    await loadFull(tsParticles)
+    return tsParticles
+  })()
+  tsParticlesPromise.catch(() => { tsParticlesPromise = null })
+  return tsParticlesPromise
 }
 
 // Helper: viewport-relative position (percentage)

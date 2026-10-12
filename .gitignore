@@ -100,3 +100,6 @@ onboarding-videos/
 # Licensed Kara tileset (gameart2d, not redistributable) — local dev copy only.
 # Prod serves it from the bucket via NEXT_PUBLIC_KARA_TILESET_URL.
 /public/kara-tiles/
+
+# Self-hosted Pyodide, assembled by scripts/fetch-pyodide.mjs (pnpm dev runs it).
+/public/pyodide/

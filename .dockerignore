@@ -72,3 +72,7 @@ tsconfig.tsbuildinfo
 or.json
 QUEUE*.md
 MIGRATION-VPS.md
+
+# Self-hosted Pyodide: built in its own Dockerfile stage (cached layer), never
+# from the working tree — else ~70 MB would ride along in every app layer.
+public/pyodide
