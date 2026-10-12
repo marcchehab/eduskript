@@ -21,7 +21,7 @@ The video player gets:
 - Play / pause / scrubber with preview thumbnails when you hover or drag
 - Volume
 - Captions toggle (auto-generated subtitles)
-- Settings: quality (Auto, 720p, 480p) and playback speed
+- Settings: quality (Auto, 1080p, 720p, 480p) and playback speed
 - Fullscreen
 - Keyboard: space/K play, ←/→ seek 5 s, F fullscreen, M mute, C captions
 
@@ -74,7 +74,7 @@ Useful for short demo loops in the page background, intro animations, or visual 
 
 ## Adaptive streaming, every device
 
-Each upload is encoded into two quality renditions, 720p and 480p (fewer if the source is smaller). The player picks the right one based on the student's connection and the player size; students can also pick one in the settings menu. The download in the skript export is the 720p version.
+Each upload is encoded into quality renditions 1080p (for 1080p sources), 720p and 480p (fewer if the source is smaller). The player picks the right one based on the student's connection and the player size; students can also pick one in the settings menu. The download in the skript export is the 720p version.
 
 ---
 

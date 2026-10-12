@@ -67,9 +67,12 @@ describe('ffprobe parsing + validation', () => {
 })
 
 describe('rendition planning + ffmpeg args', () => {
-  it('720p + 480p for 1080p, never upscales, even dimensions, portrait aware', () => {
-    expect(planRenditions(1920, 1080).map((r: { width: number; height: number }) => `${r.width}x${r.height}`)).toEqual(['1280x720', '854x480'])
-    expect(planRenditions(1080, 1920).map((r: { width: number; height: number }) => `${r.width}x${r.height}`)).toEqual(['720x1280', '480x854'])
+  it('1080p + 720p + 480p for 1080p sources, 720p + 480p below, never upscales, even dimensions, portrait aware', () => {
+    const dims = (w: number, h: number) => planRenditions(w, h).map((r: { width: number; height: number }) => `${r.width}x${r.height}`)
+    expect(dims(1920, 1080)).toEqual(['1920x1080', '1280x720', '854x480'])
+    expect(dims(1080, 1920)).toEqual(['1080x1920', '720x1280', '480x854'])
+    expect(dims(1440, 900)).toEqual(['1152x720', '768x480'])
+    expect(planRenditions(1920, 1080)[0]).toMatchObject({ crf: 23, maxrateK: 5000 })
     expect(planRenditions(641, 361).map((r: { name: string }) => r.name)).toEqual(['360p'])
     const odd = planRenditions(1001, 541)
     for (const r of odd) expect(r.width % 2 + r.height % 2).toBe(0)
@@ -86,12 +89,14 @@ describe('rendition planning + ffmpeg args', () => {
   it('one encode run: split filter, yuv420p, 4 s keyframes, bitrate caps, faststart MP4s', () => {
     const args = buildEncodeArgs({ input: 'in.mov', renditions: planRenditions(1920, 1080), fps: 60, hasAudio: true, outDir: '/w', threads: 2 })
     const joined = args.join(' ')
-    expect(joined).toContain('[0:v:0]fps=30,format=yuv420p,setsar=1,split=2[s0][s1]')
+    expect(joined).toContain('[0:v:0]fps=30,format=yuv420p,setsar=1,split=3[s0][s1][s2]')
+    expect(joined).toContain('scale=1920:1080')
     expect(joined).toContain('scale=1280:720')
     expect(joined).toContain('-preset veryfast')
     expect(joined).toContain('-maxrate 3000k')
     expect(joined).toContain('expr:gte(t,n_forced*4)')
-    expect(args.filter((a: string) => a === '+faststart')).toHaveLength(2)
+    expect(args.filter((a: string) => a === '+faststart')).toHaveLength(3)
+    expect(args.filter((a: string) => a === 'expr:gte(t,n_forced*4)')).toHaveLength(3) // same GOP grid in every rung
     expect(args).toContain('/w/720p.mp4')
     expect(args).toContain('/w/480p.mp4')
     expect(joined).toContain('-map 0:a:0')
@@ -106,11 +111,12 @@ describe('rendition planning + ffmpeg args', () => {
     expect(two.join(' ')).toContain('-map 1:a:0')
   })
 
-  it('HLS remux copies streams into 4 s MPEG-TS segments', () => {
+  it('HLS remux copies streams into 4 s fMP4 segments (no transmux in the browser)', () => {
     const args = buildHlsArgs('/w/720p.mp4', '/w/out/720p').join(' ')
     expect(args).toContain('-c copy')
     expect(args).toContain('-hls_time 4')
-    expect(args).toContain('-hls_segment_type mpegts')
+    expect(args).toContain('-hls_segment_type fmp4')
+    expect(args).toContain('seg_%04d.m4s')
     expect(args).toContain('-hls_playlist_type vod')
   })
 
@@ -212,7 +218,8 @@ describe('retry policy', () => {
 
   it('serves outputs with the right content types', () => {
     expect(contentTypeFor('master.m3u8')).toBe('application/vnd.apple.mpegurl')
-    expect(contentTypeFor('720p/seg_0001.ts')).toBe('video/mp2t')
+    expect(contentTypeFor('720p/seg_0001.m4s')).toBe('video/iso.segment')
+    expect(contentTypeFor('720p/init.mp4')).toBe('video/mp4')
     expect(contentTypeFor('captions.de.vtt')).toBe('text/vtt; charset=utf-8')
   })
 })

@@ -73,7 +73,7 @@ Nützlich für kurze Demo-Loops im Seitenhintergrund, Intro-Animationen oder vis
 
 ## Adaptives Streaming, jedes Gerät
 
-Jeder Upload wird in zwei Qualitätsstufen aufbereitet, 720p und 480p (weniger, wenn die Quelle kleiner ist). Der Player wählt die passende anhand der Verbindung und der Playergrösse; Schülerinnen und Schüler können im Einstellungsmenü auch selbst wählen. Der Download im Skript-Export ist die 720p-Version.
+Jeder Upload wird in Qualitätsstufen aufbereitet: 1080p (bei 1080p-Quellen), 720p und 480p (weniger, wenn die Quelle kleiner ist). Der Player wählt die passende anhand der Verbindung und der Playergrösse; Schülerinnen und Schüler können im Einstellungsmenü auch selbst wählen. Der Download im Skript-Export ist die 720p-Version.
 
 ---
 

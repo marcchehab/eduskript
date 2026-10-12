@@ -7,7 +7,7 @@ import type { VideoCaption } from '@/lib/video-playback'
 /**
  * <video> + hls.js (bundled from npm, loaded on demand — no CDN) with our own
  * controls: play/pause, scrubber with sprite thumbnails on hover/drag, time,
- * mute + volume, captions toggle, settings (quality Auto/720p/480p, speed),
+ * mute + volume, captions toggle, settings (quality Auto/1080p/720p/480p, speed),
  * fullscreen. Custom controls because native ones can't host a quality menu
  * or scrub previews. Replaced @mux/mux-player-react (2026-10).
  *
@@ -148,7 +148,11 @@ export function HlsVideo({
       const { default: Hls } = await import('hls.js')
       if (cancelled) return
       if (Hls.isSupported()) {
-        const hls = new Hls({ capLevelToPlayerSize: true }) as unknown as HlsLike
+        const hls = new Hls({
+          capLevelToPlayerSize: true,
+          // Dev-only: window.__HLS_DEBUG = true logs hls.js internals (diagnostics).
+          debug: process.env.NODE_ENV !== 'production' && !!(window as unknown as { __HLS_DEBUG?: boolean }).__HLS_DEBUG,
+        }) as unknown as HlsLike
         hls.on(Hls.Events.MANIFEST_PARSED, () => setLevels(hls.levels.map(l => ({ height: Math.min(l.height, l.width) }))))
         hls.on(Hls.Events.LEVEL_SWITCHED, (_e: unknown, data: unknown) => {
           const lvl = hls.levels[(data as { level: number }).level]
@@ -157,6 +161,8 @@ export function HlsVideo({
         ;(hls as unknown as { loadSource(u: string): void }).loadSource(hlsUrl)
         ;(hls as unknown as { attachMedia(v: HTMLVideoElement): void }).attachMedia(video)
         hlsRef.current = hls
+        // Dev-only handle for playback diagnostics (e2e: stalls, level switches).
+        if (process.env.NODE_ENV !== 'production') (video as unknown as { __hls?: unknown }).__hls = hls
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = hlsUrl
       } else {

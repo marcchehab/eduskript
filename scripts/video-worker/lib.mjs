@@ -97,7 +97,9 @@ const even = n => Math.max(2, 2 * Math.round(n / 2))
 
 /**
  * Renditions named by their short side ("720p" is 1280×720 landscape or
- * 720×1280 portrait). Never upscales: a 540p source gets one 540p rendition.
+ * 720×1280 portrait), highest first. 1080p only for ≥1080p sources (always
+ * re-encoded — the original may be HEVC or a very high bitrate). Never
+ * upscales: a 540p source gets one 540p rendition.
  */
 export function planRenditions(width, height) {
   const short = Math.min(width, height)
@@ -109,8 +111,10 @@ export function planRenditions(width, height) {
     const h = landscape ? s : even(height * scale)
     return { name: `${s}p`, short: s, width: w, height: h, crf, maxrateK, bufsizeK: maxrateK * 2, audioK }
   }
-  const out = [make(720, 23, 3000, 128)]
-  if (short > 480 && out[0].short > 480) out.push(make(480, 24, 1200, 96))
+  const out = []
+  if (short >= 1080) out.push(make(1080, 23, 5000, 128))
+  out.push(make(720, 23, 3000, 128))
+  if (short > 480 && out[out.length - 1].short > 480) out.push(make(480, 24, 1200, 96))
   return out
 }
 
@@ -160,13 +164,22 @@ export function buildEncodeArgs({ input, renditions, fps, hasAudio, outDir, thre
   return args
 }
 
-/** Remux one rendition MP4 into HLS (MPEG-TS segments: plays in hls.js and Safari/iOS natively). */
+/**
+ * Remux one rendition MP4 into HLS with fragmented-MP4 segments (CMAF-style;
+ * hls.js appends them to MSE as-is, Safari/iOS play them natively since
+ * iOS 10). Replaced MPEG-TS on 2026-10-12: with TS, hls.js transmuxes every
+ * segment in the browser and has to re-derive timestamps (TS adds a 1.4 s
+ * offset and interleaves audio ~70 ms ahead of video at each cut, which
+ * hls.js patches by injecting silent AAC frames) — fMP4 carries the encoder's
+ * timestamps unchanged.
+ */
 export function buildHlsArgs(mp4, dir) {
   return [
     '-hide_banner', '-nostdin', '-y', '-i', mp4, '-map', '0', '-c', 'copy',
     '-f', 'hls', '-hls_time', String(SEGMENT_SECONDS), '-hls_playlist_type', 'vod',
-    '-hls_flags', 'independent_segments', '-hls_segment_type', 'mpegts',
-    '-hls_segment_filename', `${dir}/seg_%04d.ts`, `${dir}/index.m3u8`,
+    '-hls_flags', 'independent_segments', '-hls_segment_type', 'fmp4',
+    '-hls_fmp4_init_filename', 'init.mp4',
+    '-hls_segment_filename', `${dir}/seg_%04d.m4s`, `${dir}/index.m3u8`,
   ]
 }
 
@@ -199,7 +212,7 @@ export function playlistBandwidth(playlistText, sizeOf) {
 
 /** variants: [{ name, width, height, bandwidth, averageBandwidth, codecs, fps }] (highest first) */
 export function buildMasterPlaylist(variants) {
-  const out = ['#EXTM3U', '#EXT-X-VERSION:6', '#EXT-X-INDEPENDENT-SEGMENTS']
+  const out = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS']
   for (const v of variants) {
     out.push(
       `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},AVERAGE-BANDWIDTH=${v.averageBandwidth},RESOLUTION=${v.width}x${v.height},CODECS="${v.codecs}",FRAME-RATE=${v.fps.toFixed(3)}`,
@@ -379,6 +392,7 @@ export function isSilent(volumedetectStderr) {
 
 export function contentTypeFor(name) {
   if (name.endsWith('.m3u8')) return 'application/vnd.apple.mpegurl'
+  if (name.endsWith('.m4s')) return 'video/iso.segment'
   if (name.endsWith('.ts')) return 'video/mp2t'
   if (name.endsWith('.mp4')) return 'video/mp4'
   if (name.endsWith('.jpg')) return 'image/jpeg'

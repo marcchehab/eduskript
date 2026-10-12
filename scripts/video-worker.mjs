@@ -11,9 +11,9 @@
  * Per job (sources: "s3:<key>" upload in the teacher bucket, or an HLS URL
  * for Mux migration):
  *   1. ffprobe + validate (≤1080p either orientation, has video, ≤2 h, ≤2 GB)
- *   2. one ffmpeg run → 720p + 480p MP4s (x264 veryfast, CRF 23/24 with
+ *   2. one ffmpeg run → 1080p (≥1080p sources) + 720p + 480p MP4s (x264 veryfast, CRF 23/24 with
  *      bitrate caps, keyframes every 4 s, CFR ≤30 fps, yuv420p, autorotate)
- *   3. remux each MP4 → HLS (MPEG-TS, 4 s segments, no re-encode) + master
+ *   3. remux each MP4 → HLS (fMP4, 4 s segments, no re-encode) + master
  *   4. poster JPG, scrub-preview sprites (1 frame / 5 s, 160 px, 10×10) + VTT
  *   5. audio → mono 16 kHz Opus in 20-min chunks → Infomaniak AI Whisper
  *      (async batch API) → WebVTT; skipped for silent/no-audio videos;
@@ -295,7 +295,7 @@ export async function processJob(job, { db, s3 }) {
       const vs = vprobe.streams[0]
       variants.push({
         name: r.name, width: r.width, height: r.height,
-        bandwidth: bw.peak, averageBandwidth: bw.average, // TS segments include the audio
+        bandwidth: bw.peak, averageBandwidth: bw.average, // segments include the audio
         codecs: info.hasAudio ? `${avc1Codec(vs.profile, vs.level)},mp4a.40.2` : avc1Codec(vs.profile, vs.level),
         fps: outputFps(info.fps),
       })
@@ -306,7 +306,10 @@ export async function processJob(job, { db, s3 }) {
     // 3. download MP4 (highest rendition), poster, scrub sprites
     const top = renditions[0]
     const topMp4 = path.join(work, `${top.name}.mp4`)
-    await copyFile(topMp4, path.join(out, 'download.mp4')) // already faststart
+    // Download/export: the 720p rendition (already faststart). 1080p would be
+    // free CPU-wise but roughly doubles the stored download file.
+    const dl = renditions.find(r => r.short <= 720) ?? top
+    await copyFile(path.join(work, `${dl.name}.mp4`), path.join(out, 'download.mp4'))
     const posterAt = Math.min(2, info.duration / 3)
     await run('ffmpeg', ['-hide_banner', '-nostdin', '-y', '-ss', posterAt.toFixed(2), '-i', topMp4, '-frames:v', '1', '-q:v', '3', path.join(out, 'poster.jpg')])
     const thumbs = path.join(out, 'thumbs')

@@ -30,11 +30,13 @@ Branch `self-video`.
    `videos/<uuid>/`) and links the video → status `queued`.
 4. The encoder (one job at a time, `nice 19` + `ionice -c3`, container
    capped at 2 CPUs with low CPU shares) re-validates with ffprobe, then:
-   one ffmpeg run → 720p (CRF 23, ≤3 Mbit/s) + 480p (CRF 24, ≤1.2 Mbit/s)
+   one ffmpeg run → 1080p (only for ≥1080p sources; CRF 23, ≤5 Mbit/s) +
+   720p (CRF 23, ≤3 Mbit/s) + 480p (CRF 24, ≤1.2 Mbit/s)
    MP4s, x264 `veryfast`, keyframes every 4 s, CFR ≤30 fps, yuv420p,
    autorotate (handles HEVC/VP9/AV1, 10-bit, rotation, VFR, odd sizes,
-   missing audio); each MP4 remuxed (no re-encode) into HLS (MPEG-TS, 4 s
-   segments) + master playlist; 720p MP4 = download; poster; scrub sprites
+   missing audio); each MP4 remuxed (no re-encode) into HLS (fMP4, 4 s
+   segments, identical keyframe grid in every rung) + master playlist; 720p
+   MP4 = download (1080p would cost no CPU but ~2× storage); poster; scrub sprites
    (1 frame / 5 s, 160 px, 10×10 sheets) + thumbnails VTT; audio → mono
    16 kHz Opus in 20-min chunks → Infomaniak AI Whisper (async batch API,
    word timestamps) → WebVTT (silent / no-audio videos get none; a
@@ -48,18 +50,27 @@ Branch `self-video`.
 
 Measurements (local Ryzen 9 9950X3D, `taskset -c 0,1` = 2 cores, `nice 19`):
 - 15.5 s 720p clip: encode 1.5 s, HLS/poster/sprites 0.2 s, Whisper 4.5 s.
-- 7:51 1080p (Marc's Mux video as a local file): full job without captions
-  (720p + 480p encode, HLS remux, MP4, poster, sprites) 55 s wall, 97 s CPU.
+- 7:51 1080p (Marc's Mux video as a local file), full job without captions
+  (encode, HLS remux, MP4, poster, sprites):
+  - 720p + 480p: 55 s wall, 97 s CPU;
+  - 1080p + 720p + 480p (current): 91 s wall, 172 s CPU (+65 %).
   A plain 720p-only veryfast encode of the same file takes 32 s here vs. 55 s
   on the VPS (Marc's measurement, 2 of 4 EPYC Genoa vCPUs) → factor ≈ 1.7 →
-  **≈ 95 s per 8 min of 1080p on the VPS** (≈ 0.2× real time; a 2-hour
-  lecture ≈ 25 min). Whisper adds 25–100 s of waiting (no local CPU); upload
-  of ~240 files took 43 s from a home line, much less from the VPS.
-- Read live from Mux HLS (migration): encode wall time is bounded by the
-  Mux download, ≈ 1–2 min for the same video.
+  **≈ 155 s per 8 min of 1080p on the VPS** (≈ 0.33× real time; a 2-hour
+  lecture ≈ 40 min). Whisper adds 5–100 s of waiting (no local CPU).
+- mop7 trailer (1:59, 1080p24, read live from Mux): 32 s encode at full
+  local CPU, 13 s upload of 102 files.
 
-Storage: ~45 MB per 8 min of 1080p source (720p HLS 13 MB, 480p 8 MB,
-download MP4 11 MB, sprites/poster < 1 MB) plus the original.
+Storage per 8 min of 1080p source: 1080p HLS 26 MB, 720p 18 MB, 480p 12 MB,
+download MP4 18 MB, sprites/poster < 1 MB, plus the original.
+
+Playback-smoothness check (2026-10-12, mop7 trailer, headless Chromium,
+full play-through at 480p / 720p / 1080p / Auto): 0 `waiting`, 0 `stalled`,
+0 hls.js errors, 0 dropped frames, every frame presented (rVFC), no media-time
+skips; segment analysis: keyframe at every segment start, PTS/DTS continuous
+across all segments for audio and video, EXTINF = real durations, all rungs on
+the same 4 s keyframe grid. Tools: scratch scripts hlscheck.py / dtscheck.py /
+playcheck.cjs (not in the repo).
 
 ## Rollout (Marc)
 
