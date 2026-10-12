@@ -66,16 +66,22 @@ export function MuxVideo({
     },
   })
 
-  // Resolve video metadata → provider-specific HLS source (self-hosted or legacy Mux)
+  // Resolve video metadata → self-hosted HLS source. Legacy provider 'mux'
+  // rows (and failed encodes) resolve to null → "unavailable" below.
   const videoInfo = files ? resolveVideo(files, src) : undefined
   const playback = videoInfo ? getVideoPlayback(videoInfo.provider, videoInfo.metadata) : null
 
   if (!playback) {
     const processing = isVideoPending(videoInfo?.metadata)
+    const message = processing
+      ? `Video is still processing: ${src}`
+      : videoInfo
+        ? `Video unavailable: ${src}`
+        : `Video not found: ${src}`
     return (
       <span className="block bg-muted rounded-lg p-4 text-center text-muted-foreground" style={{ aspectRatio: '16/9' }}>
-        <span className="block">{processing ? `Video is still processing: ${src}` : `Video not found: ${src}`}</span>
-        {!processing && <span className="block text-xs mt-1">Make sure the video has been uploaded</span>}
+        <span className="block">{message}</span>
+        {!processing && !videoInfo && <span className="block text-xs mt-1">Make sure the video has been uploaded</span>}
       </span>
     )
   }
@@ -84,7 +90,7 @@ export function MuxVideo({
   const poster = resolvePoster(posterOverride, files) ?? playback.poster
 
   // preload: nothing but the poster loads until the viewer presses play
-  // (see hls-video.tsx). The old Mux player pulled 4-6 segment
+  // (see hls-video.tsx). The previous player pulled 4-6 segment
   // requests on mount, which kept the page tab in "loading" state for seconds
   // on slow connections although most visitors never play the video. gif and
   // autoplay videos load on mount.

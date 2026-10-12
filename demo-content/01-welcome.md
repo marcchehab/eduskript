@@ -50,7 +50,7 @@ Each page is independent — pick what interests you:
 - **SQL Studio** — upload a `.db`, students query it in the browser
 - **Custom plugins** — build any interactive widget you can imagine
 - **Annotations & broadcasting** — shared whiteboard for the whole class
-- **Video** — Mux-hosted, no YouTube tax
+- **Video** — hosted in Switzerland, no YouTube tax
 - **AI co-pilot** — an assistant that knows your skript inside and out
 - **Exams & classes** — real digital exams with Safe Exam Browser lockdown
 

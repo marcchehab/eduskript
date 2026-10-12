@@ -58,9 +58,8 @@ The markdown transformation follows this **exact plugin order** (critical for pr
    - Falls back to `/missing-file/` URL with `?missing=` query param if variants not found
 
 4. **`remarkMuxVideo`** (`src/lib/remark-plugins/mux-video.ts`)
-   - **Hybrid plugin**: Queries DB on server (skriptId), uses fileList on client
-   - Transforms `.mp4`/`.mov` references to uploaded-video components (self-hosted HLS or legacy Mux)
-   - Looks up `{video}.json` metadata file for playback ID, poster, blur data
+   - AST-only: transforms `.mp4`/`.mov` references to uploaded-video components (self-hosted HLS on Infomaniak S3, CH)
+   - The component resolves the `Video` row (poster, HLS URL, captions) from the skript's files at render time
    - Creates a custom `<muxvideo>` element (historic name; provider-independent since 2026-10)
 
 5. **`remarkCodeEditor`** (`src/lib/remark-plugins/code-editor.ts`)

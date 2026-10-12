@@ -26,12 +26,10 @@ export async function DELETE(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // TODO: Mux rows still leave their asset on Mux (deleted manually after
-  // the migration, see MIGRATION-VIDEO.md).
   await prisma.video.delete({ where: { id } })
 
   // Self-hosted: drop job, encoded outputs and original once no other row
-  // (page copies, rows sharing a migrated Mux asset) uses the job.
+  // (page copies, rows of one migrated legacy video) uses the job.
   // After the response: Swift's bulk delete takes ~0.3 s per object, so a
   // long video's ~500 segments would otherwise hold the request for minutes.
   if (video.provider === 'self') {

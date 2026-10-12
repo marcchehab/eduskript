@@ -89,8 +89,8 @@ export const SKRIPT_FILES_TAG = 'skript-files'
  * Call with the skript id where it is known, without it where it is not. Every
  * writer of File or Video rows must call this — see the list in the callers:
  * upload confirm, file delete, files/import,
- * file-storage, videos upload-url, videos import, video delete, admin videos,
- * Mux webhook.
+ * file-storage, videos upload-url, videos import, video delete, video
+ * retry/uploaded, videos/revalidate (called by the encoder).
  */
 export function invalidateSkriptFiles(skriptId?: string | null): void {
   revalidateTag(SKRIPT_FILES_TAG, { expire: 0 })

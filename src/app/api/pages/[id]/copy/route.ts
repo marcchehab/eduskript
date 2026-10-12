@@ -17,7 +17,7 @@ interface RouteParams {
  * Creates a draft copy with provenance tracking (forkedFromPageId, forkedFromAuthorId).
  * Referenced files are duplicated as DB rows pointing to the same S3 objects (content-addressed).
  * Referenced videos are duplicated as Video rows pointing to the same hosted video
- * (same metadata and encodeJobId; null muxAssetId to avoid @unique collision).
+ * (same metadata and encodeJobId; the unique legacy muxAssetId/muxUploadId are not copied).
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Collect referenced videos from the source skript. Videos live in the
     // Video table (not File), so we duplicate a DB row pointing to the same
-    // Mux asset — mirrors how files are content-addressed and shared.
+    // encoded output — mirrors how files are content-addressed and shared.
     const referencedVideoFilenames = extractReferencedVideoFilenames(page.content)
 
     const sourceVideos =
@@ -172,9 +172,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // If the caller already owns a Video with the same filename (per the
       // @@unique([filename, provider, uploadedById]) constraint), connect
       // their existing row to the target skript. Otherwise create a new row
-      // pointing at the same Mux asset via the shared playbackId in metadata.
-      // muxAssetId / muxUploadId are NOT copied — they're globally unique
-      // webhook-lookup handles, not content references.
+      // pointing at the same encoded output (shared metadata + encodeJobId).
+      // The legacy muxAssetId / muxUploadId columns are @unique and not copied.
       for (const src of sourceVideos) {
         const existing = await tx.video.findFirst({
           where: {

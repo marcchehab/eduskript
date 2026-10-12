@@ -17,10 +17,9 @@ import type { VideoCaption } from '@/lib/video-playback'
  *    hls.js (~150 kB gz) and the first segments load after the click.
  *  - gif/autoplay: loads on mount, muted.
  *  - Safari/iOS without MSE: native HLS via video.src — no quality menu
- *    (Safari picks), captions still work (out-of-band <track> or in-manifest).
+ *    (Safari picks), captions still work (out-of-band <track>).
  *
- * Captions: out-of-band WebVTT <track>s (self-hosted) or in-manifest (Mux; hls.js
- * exposes them as text tracks and follows their mode). Not "default", so a
+ * Captions: out-of-band WebVTT <track>s. Not "default", so a
  * VTT is fetched only when the viewer turns captions on. crossOrigin
  * "anonymous" is required for cross-origin tracks (S3).
  */
@@ -179,7 +178,7 @@ export function HlsVideo({
     }
   }, [activated, hlsUrl])
 
-  // Text tracks appear late for in-manifest captions (Mux).
+  // Track list can change after mount (e.g. <track> elements added on re-render).
   useEffect(() => {
     const video = videoRef.current
     if (!video) return

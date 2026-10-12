@@ -1,6 +1,6 @@
 /**
- * <muxvideo> renders a <video> + custom controls for both providers: self-hosted
- * rows with their poster + WebVTT <track>, legacy Mux rows from stream.mux.com. With
+ * <muxvideo> renders a <video> + custom controls for self-hosted rows with their
+ * poster + WebVTT <track>; legacy provider 'mux' rows render as unavailable. With
  * preload "none" nothing but the poster is requested until the viewer
  * presses play (hls.js isn't even imported).
  */
@@ -71,13 +71,12 @@ describe('MuxVideo provider switch', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
   })
 
-  it('Mux (not yet migrated): plays from stream.mux.com', async () => {
+  it('legacy provider "mux" row: unavailable, no player, no request', () => {
     hlsInstances.length = 0
-    const files = filesWith('mux', { playbackId: 'PB', status: 'ready', poster: 'https://image.mux.com/PB/thumbnail.webp' })
-    render(<MuxVideo src="clip.mp4" files={files} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Play video' }))
-    await waitFor(() => expect(hlsInstances).toHaveLength(1))
-    expect(hlsInstances[0].url).toBe('https://stream.mux.com/PB.m3u8')
+    const { container } = render(<MuxVideo src="clip.mp4" files={filesWith('mux', { playbackId: 'PB', status: 'ready' })} />)
+    expect(screen.getByText(/Video unavailable: clip\.mp4/)).toBeTruthy()
+    expect(container.querySelector('video')).toBeNull()
+    expect(hlsInstances).toHaveLength(0)
   })
 
   it('gif mode loads at once, muted, looping, without controls', async () => {

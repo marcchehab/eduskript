@@ -557,13 +557,13 @@ export function createMarkdownComponents(
     )
   }
 
-  // Mux video component - passes files through
+  // <muxvideo> (uploaded, self-hosted video) - passes files through
   function MuxVideoComponent({ ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const src = (props['src'] as string) || ''
     const alt = (props['alt'] as string) || ''
     // poster: optional override — accepts a filename (resolved via files) or
     // an absolute URL. When omitted, the MuxVideo component falls back to the
-    // auto-generated Mux thumbnail (frame at time=0).
+    // encoder's poster (metadata.poster).
     const poster = (props['poster'] as string) || undefined
     // Valueless attributes (`<muxvideo src="x" gif />`) arrive as '' — and for
     // names property-information knows as boolean HTML properties (loop,

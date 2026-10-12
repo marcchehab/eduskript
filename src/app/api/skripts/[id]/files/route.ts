@@ -10,7 +10,7 @@ import { getSkriptFiles } from '@/lib/skript-files.server'
  *
  * Lists a skript's attachments and videos with direct download URLs, for the
  * client-side export flow (src/lib/skript-export-client.ts) — the browser
- * fetches file bytes straight from S3/Mux, no server-side buffering.
+ * fetches file bytes straight from S3, no server-side buffering.
  */
 export async function GET(
   request: NextRequest,
@@ -39,22 +39,12 @@ export async function GET(
   const { files, videos } = await getSkriptFiles(id)
   const videoList = Object.values(videos)
 
-  const muxAssets = videoList.length
-    ? await prisma.video.findMany({
-        where: { id: { in: videoList.map(v => v.id) } },
-        select: { id: true, muxAssetId: true }
-      })
-    : []
-  const muxAssetById = new Map(muxAssets.map(v => [v.id, v.muxAssetId]))
-
   return NextResponse.json({
     files: Object.values(files),
     videos: videoList.map(v => ({
       id: v.id,
       filename: v.filename,
       provider: v.provider,
-      playbackId: v.metadata.playbackId,
-      muxAssetId: muxAssetById.get(v.id) ?? null
     }))
   })
 }

@@ -2,25 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import Mux from '@mux/mux-node'
-
-const mux = new Mux({
-  tokenId: process.env.MUX_TOKEN_ID!,
-  tokenSecret: process.env.MUX_TOKEN_SECRET!,
-})
 
 /**
  * POST /api/videos/[id]/prepare-download
  *
- * Self-hosted rows: returns the 720p download MP4 the encoder wrote to S3
- * (metadata.mp4Url, public, CORS *) — ready as soon as the video is.
- *
- * Mux rows (until migrated): Mux assets only serve HLS streaming by default — there's no downloadable
- * original file. This enables (or checks progress of) a static MP4
- * rendition, so the export flow (src/lib/skript-export-client.ts) can fetch
- * the resulting public https://stream.mux.com/{playbackId}/{name} URL
- * directly from the browser. Static renditions take real processing time
- * (seconds to a couple of minutes), so the client polls this route.
+ * Returns the 720p download MP4 the encoder wrote to S3 (metadata.mp4Url,
+ * public, CORS *) once the video is ready; 'preparing' while it encodes (the
+ * export flow in src/lib/skript-export-client.ts polls). Legacy provider
+ * 'mux' rows have no download.
  */
 export async function POST(
   _request: NextRequest,
@@ -47,47 +36,15 @@ export async function POST(
     return NextResponse.json({ error: 'Video not found or access denied' }, { status: 404 })
   }
 
-  if (video.provider === 'self') {
-    const meta = video.metadata as Record<string, unknown>
-    if (meta?.status !== 'ready') {
-      return NextResponse.json({ status: 'preparing' })
-    }
-    if (typeof meta.mp4Url !== 'string') {
-      return NextResponse.json({ status: 'error', error: 'Video has no downloadable rendition' })
-    }
-    return NextResponse.json({ status: 'ready', url: meta.mp4Url })
+  if (video.provider !== 'self') {
+    return NextResponse.json({ status: 'error', error: 'Video is unavailable' })
   }
-
-  if (!video.muxAssetId) {
-    return NextResponse.json({ status: 'error', error: 'Video is not ready on Mux yet' })
-  }
-
-  const metadata = video.metadata as Record<string, unknown>
-  const playbackId = metadata?.playbackId as string | undefined
-  if (!playbackId) {
-    return NextResponse.json({ status: 'error', error: 'Video has no playback ID' })
-  }
-
-  const asset = await mux.video.assets.retrieve(video.muxAssetId)
-  const renditions = asset.static_renditions?.files ?? []
-  const highest = renditions.find(f => f.name?.startsWith('highest'))
-
-  if (!highest) {
-    // Not requested yet — kick it off, client polls again shortly.
-    await mux.video.assets.createStaticRendition(video.muxAssetId, { resolution: 'highest' })
+  const meta = video.metadata as Record<string, unknown>
+  if (meta?.status !== 'ready') {
     return NextResponse.json({ status: 'preparing' })
   }
-
-  if (highest.status === 'ready') {
-    return NextResponse.json({
-      status: 'ready',
-      url: `https://stream.mux.com/${playbackId}/${highest.name}`
-    })
+  if (typeof meta.mp4Url !== 'string') {
+    return NextResponse.json({ status: 'error', error: 'Video has no downloadable rendition' })
   }
-
-  if (highest.status === 'errored') {
-    return NextResponse.json({ status: 'error', error: 'Mux failed to prepare the download' })
-  }
-
-  return NextResponse.json({ status: 'preparing' })
+  return NextResponse.json({ status: 'ready', url: meta.mp4Url })
 }

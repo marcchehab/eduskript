@@ -1,17 +1,27 @@
-// One-off uploader for onboarding-quest tutorial clips (onboarding-videos/stepN.mp4).
+// Uploader for onboarding-quest and help clips (skript-less Video rows, see
+// src/app/api/onboarding-quest/step-videos/route.ts and src/lib/help-videos/store.ts).
 // Usage: node scripts/upload-onboarding-video.mjs <path-to-mp4> <logical-filename>
 // e.g.:  node scripts/upload-onboarding-video.mjs onboarding-videos/step1.mp4 onboarding-step1.mp4
 //
-// Creates a Mux direct upload, PUTs the local file to it, polls until the
-// asset is ready, then upserts a skript-less Video row (same shape as
-// POST /api/admin/videos) keyed by `filename` so re-running with the same
-// filename swaps the clip without any code change.
+// Same path as a dashboard upload (POST /api/videos/upload-url + /uploaded):
+// PUTs the file into the teacher bucket under video-uploads/, creates an encode
+// job ("s3:<key>") and points a provider "self" Video row at it (status
+// "queued"). The encoder (scripts/video-worker.mjs) does the rest; the clip
+// plays once the row is "ready". Keyed by `filename`, so re-running with the
+// same filename swaps the clip without any code change.
+//
+// Limitation: on a re-run the previous job's outputs and original upload stay
+// in S3 (no cleanup here; delete the old job's prefix by hand if it matters).
+//
+// Env: DATABASE_URL, SCW_TEACHER_BUCKET, S3_* / SCW_* (same as src/lib/s3.ts),
+// VIDEO_S3_PREFIX (optional).
 import 'dotenv/config'
+import { randomBytes, randomUUID } from 'crypto'
 import { readFileSync } from 'fs'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
-import Mux from '@mux/mux-node'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
 const [, , filePath, logicalFilename] = process.argv
 if (!filePath || !logicalFilename) {
@@ -26,95 +36,65 @@ const pool = new Pool({
 })
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) })
 
-const mux = new Mux({
-  tokenId: process.env.MUX_TOKEN_ID,
-  tokenSecret: process.env.MUX_TOKEN_SECRET,
-})
-
-async function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Same S3 config resolution as scripts/video-worker.mjs.
+function s3Client() {
+  const region = process.env.S3_REGION || process.env.SCW_REGION || 'fr-par'
+  return new S3Client({
+    region,
+    endpoint: process.env.S3_ENDPOINT || `https://s3.${region}.scw.cloud`,
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY || process.env.SCW_ACCESS_KEY,
+      secretAccessKey: process.env.S3_SECRET_KEY || process.env.SCW_SECRET_KEY,
+    },
+  })
 }
 
 async function main() {
-  const fileBuffer = readFileSync(filePath)
-  console.log(`Uploading ${filePath} (${(fileBuffer.length / 1024).toFixed(0)} KB)...`)
+  const bucket = process.env.SCW_TEACHER_BUCKET
+  if (!bucket) throw new Error('SCW_TEACHER_BUCKET not set')
+  const prefix = process.env.VIDEO_S3_PREFIX ?? ''
+  const ext = (filePath.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
+  // Mirrors newUploadKey / newOutputPrefix in src/lib/video-jobs.server.ts.
+  const uploadKey = `${prefix}video-uploads/${randomBytes(16).toString('hex')}.${ext}`
+  const outputPrefix = `${prefix}videos/${randomUUID()}/`
 
-  const upload = await mux.video.uploads.create({
-    new_asset_settings: { playback_policy: ['public'] },
-    cors_origin: '*',
-  })
-
-  const putRes = await fetch(upload.url, { method: 'PUT', body: fileBuffer })
-  if (!putRes.ok) {
-    throw new Error(`Upload PUT failed: ${putRes.status} ${await putRes.text()}`)
-  }
-
-  console.log('Uploaded, waiting for Mux to attach an asset...')
-  let assetId
-  for (let i = 0; i < 30; i++) {
-    const status = await mux.video.uploads.retrieve(upload.id)
-    if (status.asset_id) {
-      assetId = status.asset_id
-      break
-    }
-    if (status.status === 'errored') throw new Error(`Mux upload errored: ${JSON.stringify(status.error)}`)
-    await sleep(2000)
-  }
-  if (!assetId) throw new Error('Timed out waiting for asset_id')
-
-  console.log(`Asset ${assetId} created, waiting for it to be ready...`)
-  let asset
-  for (let i = 0; i < 60; i++) {
-    asset = await mux.video.assets.retrieve(assetId)
-    if (asset.status === 'ready') break
-    if (asset.status === 'errored') throw new Error(`Mux asset errored: ${JSON.stringify(asset.errors)}`)
-    await sleep(3000)
-  }
-  if (asset.status !== 'ready') throw new Error(`Timed out waiting for asset to be ready (status: ${asset.status})`)
-
-  const playbackId = asset.playback_ids?.[0]?.id
-  if (!playbackId) throw new Error('Ready asset has no playback_ids')
-
-  // Mux's asset.tracks video entry reports max_width/max_height, not width/height.
-  const track = asset.tracks?.find((t) => t.type === 'video')
-  const aspectRatio = track?.max_width && track?.max_height ? track.max_width / track.max_height : undefined
-
-  const metadata = {
-    playbackId,
-    status: 'ready',
-    poster: `https://image.mux.com/${playbackId}/thumbnail.webp?time=0`,
-    ...(aspectRatio ? { aspectRatio } : {}),
-  }
+  const body = readFileSync(filePath)
+  console.log(`Uploading ${filePath} (${(body.length / 1024).toFixed(0)} KB) → ${uploadKey}`)
+  await s3Client().send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: uploadKey,
+    Body: body,
+    ContentType: ext === 'mov' ? 'video/quicktime' : 'video/mp4',
+  }))
 
   const admin = await prisma.user.findFirst({ where: { isAdmin: true } })
   if (!admin) throw new Error('No admin user found to attribute the upload to')
 
-  const existing = await prisma.video.findFirst({
-    where: { filename: logicalFilename, provider: 'mux' },
-  })
-
-  let video
-  if (existing) {
-    video = await prisma.video.update({
-      where: { id: existing.id },
-      data: { metadata, muxAssetId: assetId, muxUploadId: upload.id },
+  const metadata = { status: 'queued', uploadKey }
+  const video = await prisma.$transaction(async (tx) => {
+    const job = await tx.videoEncodeJob.create({ data: { source: `s3:${uploadKey}`, outputPrefix } })
+    const existing = await tx.video.findFirst({
+      where: { filename: logicalFilename, provider: 'self' },
     })
-    console.log(`Updated existing Video row ${video.id} (${logicalFilename})`)
-  } else {
-    video = await prisma.video.create({
+    if (existing) {
+      return tx.video.update({
+        where: { id: existing.id },
+        data: { metadata, encodeJobId: job.id },
+      })
+    }
+    return tx.video.create({
       data: {
         filename: logicalFilename,
-        provider: 'mux',
+        provider: 'self',
         metadata,
         uploadedById: admin.id,
-        muxAssetId: assetId,
-        muxUploadId: upload.id,
+        encodeJobId: job.id,
       },
     })
-    console.log(`Created Video row ${video.id} (${logicalFilename})`)
-  }
+  })
 
-  console.log(`playbackId: ${playbackId}`)
+  console.log(`Video row ${video.id} (${logicalFilename}) queued as job ${video.encodeJobId}.`)
   await prisma.$disconnect()
 }
 

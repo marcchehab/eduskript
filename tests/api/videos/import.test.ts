@@ -38,7 +38,7 @@ const mockSession: Session = {
 const videoBase = {
   id: 'vid-1',
   filename: 'lecture.mp4',
-  provider: 'mux',
+  provider: 'self',
   metadata: { poster: 'https://img/p.jpg', status: 'ready' },
   skripts: [] as { id: string }[],
 }
@@ -110,7 +110,7 @@ describe('POST /api/videos/import', () => {
     expect(body.video).toMatchObject({
       id: 'vid-1',
       filename: 'lecture.mp4',
-      provider: 'mux',
+      provider: 'self',
       poster: 'https://img/p.jpg',
       status: 'ready',
     })

@@ -8,8 +8,7 @@
  * running → claim the oldest queued job → encode → upload → mark ready →
  * ask the app to drop its caches. Exactly one job at a time.
  *
- * Per job (sources: "s3:<key>" upload in the teacher bucket, or an HLS URL
- * for Mux migration):
+ * Per job (source: "s3:<key>", the upload in the teacher bucket):
  *   1. ffprobe + validate (≤1080p either orientation, has video, ≤2 h, ≤2 GB)
  *   2. one ffmpeg run → 1080p (≥1080p sources) + 720p + 480p MP4s (x264 veryfast, CRF 23/24 with
  *      bitrate caps, keyframes every 4 s, CFR ≤30 fps, yuv420p, autorotate)
@@ -38,7 +37,7 @@ import { pipeline } from 'stream/promises'
 import { pathToFileURL } from 'url'
 import {
   LIMITS, PermanentError, parseProbe, validateProbe, planRenditions, outputFps, buildEncodeArgs,
-  buildHlsArgs, avc1Codec, playlistBandwidth, buildMasterPlaylist, pickHlsVariant, thumbnailPlan,
+  buildHlsArgs, avc1Codec, playlistBandwidth, buildMasterPlaylist, thumbnailPlan,
   buildSpriteArgs, buildThumbnailsVtt, parseProgressLine, languageInfo, transcriptToCues, cuesToVtt,
   isSilent, contentTypeFor, AUDIO_CHUNK_SECONDS,
 } from './video-worker/lib.mjs'
@@ -238,15 +237,6 @@ async function resolveInput(job, s3, work) {
     await s3.download(key, file)
     return { input: file, inputArgs: [] }
   }
-  if (/^https?:\/\//.test(job.source)) {
-    // HLS master (Mux migration): read one variant ≤1080p instead of all.
-    const res = await fetch(job.source)
-    if (!res.ok) throw new PermanentError(`Source not reachable (${res.status}).`)
-    const text = await res.text()
-    if (!text.includes('#EXT-X-STREAM-INF')) return { input: job.source, inputArgs: [] }
-    const variant = pickHlsVariant(text, job.source)
-    return { input: variant.url, audioInput: variant.audioUrl, inputArgs: ['-protocol_whitelist', 'https,tls,tcp,http,crypto,file'] }
-  }
   throw new PermanentError(`Unknown source ${job.source}`)
 }
 
@@ -258,9 +248,8 @@ export async function processJob(job, { db, s3 }) {
   const work = await mkdtemp(path.join(tmpdir(), 'video-'))
   const t0 = Date.now()
   try {
-    const { input, inputArgs, audioInput = null } = await resolveInput(job, s3, work)
+    const { input, inputArgs } = await resolveInput(job, s3, work)
     const info = parseProbe(await probe(input, inputArgs))
-    if (audioInput) info.hasAudio = true
     validateProbe(info)
     const renditions = planRenditions(info.width, info.height)
     const out = path.join(work, 'out')
@@ -269,7 +258,7 @@ export async function processJob(job, { db, s3 }) {
     // 1. encode (≈85 % of the time) — progress from ffmpeg -progress
     let lastBeat = 0
     await run('ffmpeg', buildEncodeArgs({
-      input, inputArgs, audioInput, renditions, fps: info.fps, hasAudio: info.hasAudio, outDir: work,
+      input, inputArgs, renditions, fps: info.fps, hasAudio: info.hasAudio, outDir: work,
       threads: Number(process.env.VIDEO_FFMPEG_THREADS || 2), preset: process.env.VIDEO_FFMPEG_PRESET || 'veryfast',
     }), {
       onStdoutLine: line => {

@@ -78,7 +78,6 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@lezer/highlight": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@mux/mux-node": "^14.1.1",
     "@napi-rs/canvas": "^1.0.9",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",

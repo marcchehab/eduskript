@@ -25,8 +25,9 @@ export const metadata: Metadata = {
  * Re-check them before changing this section.
  */
 
-// Sources (checked 2026-10-05): config/deploy.yml (app + Postgres on one
-// Infomaniak VPS, Switzerland; files in Infomaniak Public Cloud object storage
+// Sources (checked 2026-10-12): config/deploy.yml (app + Postgres on one
+// Infomaniak VPS, Switzerland; videos encoded by the `encoder` role on the same
+// VPS into bucket eduskript-teacher-files, subtitles via Infomaniak AI Whisper; files in Infomaniak Public Cloud object storage
 // (S3_ENDPOINT in config/deploy.yml); backups via pgBackRest to Infomaniak object storage in
 // Winterthur (PGBACKREST_REPO2_* in config/deploy.yml, retention in
 // config/db/pgbackrest.conf)), src/lib/s3.ts, OpenRouter provider list
@@ -34,11 +35,10 @@ export const metadata: Metadata = {
 // training; copy in pr-audit/vertraege). AI providers must match DEFAULTS /
 // STUDENT_DATA in src/lib/ai/provider.ts.
 const SUBPROCESSORS: { name: string; purpose: string; location: string; studentData: string }[] = [
-  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (hochgeladene Dateien, Bilder), verschlüsselte Datenbank-Sicherungen (getrennter Standort), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen)', location: 'Schweiz', studentData: 'ja' },
+  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (hochgeladene Dateien, Bilder, Videos), verschlüsselte Datenbank-Sicherungen (getrennter Standort), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen), automatische Untertitel für Videos von Lehrpersonen (Whisper)', location: 'Schweiz', studentData: 'ja' },
   { name: 'Brevo / Sendinblue SAS (Frankreich)', purpose: 'E-Mail-Versand an Lehrpersonen (Bestätigung, Benachrichtigungen)', location: 'EU', studentData: 'nein' },
   { name: 'CloudMailin (Dynamic Edge Software Ltd, Grossbritannien)', purpose: 'Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes)', location: 'USA/EU', studentData: 'nein' },
   { name: 'Payrexx AG (Schweiz)', purpose: 'Zahlungsabwicklung', location: 'Schweiz', studentData: 'nein' },
-  { name: 'Mux, Inc. (USA)', purpose: 'Video-Hosting für von Lehrpersonen hochgeladene Videos', location: 'USA', studentData: 'nein' },
   { name: 'OpenRouter, Inc. (USA)', purpose: 'Vermittlung der KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten', location: 'USA', studentData: 'nein' },
   { name: 'Modellanbieter über OpenRouter (u. a. Google Vertex AI)', purpose: 'KI-Unterstützung der Lehrperson beim Schreiben (Chat, KI-Bearbeitung, Diagramme, Plugins)', location: 'USA u. a.', studentData: 'nein' },
 ]
@@ -47,6 +47,7 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'September 2026', change: 'Erste veröffentlichte Liste.' },
   { date: 'Oktober 2026', change: 'Umzug in die Schweiz: Server, Datenbank, Dateien, Sicherungen und die KI für Schülerdaten laufen bei Infomaniak. Koyeb, Neon/AWS, Scaleway und Google für Schülerdaten entfernt; OpenRouter nur noch für Inhalte der Lehrpersonen. CloudMailin ergänzt (war bereits im Einsatz, fehlte in der Liste).' },
   { date: 'Oktober 2026', change: 'Formeln, Schriften und Python werden nicht mehr von einem CDN (jsDelivr) geladen, sondern von unseren Servern in der Schweiz. Abschnitt «Eingebettete Inhalte» ergänzt.' },
+  { date: 'Oktober 2026', change: 'Videos werden auf unseren Servern in der Schweiz aufbereitet und gespeichert, Untertitel von der KI bei Infomaniak erstellt. Mux (USA) entfernt.' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -263,9 +264,8 @@ export default function DatenschutzPage() {
               Ausgenommen ist, was der Browser beim Öffnen eingebetteter
               Inhalte anderer Anbieter selbst abruft (siehe{' '}
               <a href="#eingebettete-inhalte">Eingebettete Inhalte</a>).
-              In die USA gehen nur Inhalte der Lehrpersonen: Videos
-              (Mux) und KI-Anfragen zum Bearbeiten eigener Inhalte (siehe
-              Abschnitt 4).
+              In die USA gehen nur Inhalte der Lehrpersonen: KI-Anfragen zum
+              Bearbeiten eigener Inhalte (siehe Abschnitt 4).
             </p>
             <div className="not-prose overflow-x-auto">
               <table className="w-full text-sm border-collapse">
@@ -297,7 +297,7 @@ export default function DatenschutzPage() {
             <h3 id="eingebettete-inhalte" className={h3}>Eingebettete Inhalte</h3>
             <p>
               Lehrpersonen können Inhalte anderer Anbieter in ihre Seiten
-              einbetten, etwa Videos (YouTube, Mux), Simulationen (PhET),
+              einbetten, etwa Videos (YouTube), Simulationen (PhET),
               GeoGebra-Applets, Plugins, die Bibliotheken von öffentlichen
               Servern laden, oder Python-Programme, die Daten aus dem Internet
               abrufen. Das funktioniert wie überall im Web: Öffnet jemand eine

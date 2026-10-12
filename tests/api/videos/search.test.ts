@@ -85,7 +85,7 @@ describe('GET /api/videos/search', () => {
       {
         id: 'v1',
         filename: 'lecture.mp4',
-        provider: 'mux',
+        provider: 'self',
         metadata: { poster: 'https://img/poster.jpg', status: 'ready' },
         skripts: [{ title: 'Skript A' }, { title: 'Skript B' }],
       },
@@ -98,7 +98,7 @@ describe('GET /api/videos/search', () => {
       {
         id: 'v1',
         filename: 'lecture.mp4',
-        provider: 'mux',
+        provider: 'self',
         poster: 'https://img/poster.jpg',
         status: 'ready',
         skriptTitles: ['Skript A', 'Skript B'],
@@ -112,7 +112,7 @@ describe('GET /api/videos/search', () => {
       {
         id: 'v1',
         filename: 'raw.mp4',
-        provider: 'mux',
+        provider: 'self',
         metadata: {},
         skripts: [],
       },

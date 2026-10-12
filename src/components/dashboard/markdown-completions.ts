@@ -60,7 +60,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'ai-feedback', info: 'Button: send pen strokes/section content to a vision model for feedback. Reference solution: "Provide solution" below it in the preview', apply: '<ai-feedback prompt="" />', cursorOffset: 21 },
   { label: 'ping', info: 'Interactive ping terminal', apply: '<ping />' },
   { label: 'next-stage', info: 'One-way divider that hands in the previous stage and reveals the next', apply: '<next-stage label="" />', cursorOffset: 19 },
-  { label: 'muxvideo', info: 'Mux video with playback options (gif, autoplay, loop, pin, poster)', apply: '<muxvideo src="" />', cursorOffset: 15 },
+  { label: 'muxvideo', info: 'Uploaded video with playback options (gif, autoplay, loop, pin, poster)', apply: '<muxvideo src="" />', cursorOffset: 15 },
   { label: 'left', info: 'Left-align block content', apply: '<left>\n\n</left>' },
   { label: 'center', info: 'Center-align block content', apply: '<center>\n\n</center>' },
   { label: 'right', info: 'Right-align block content', apply: '<right>\n\n</right>' },

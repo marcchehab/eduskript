@@ -126,8 +126,12 @@ playcheck.cjs (not in the repo).
    `@mux/mux-node`, the Mux fallback in `video-playback.ts`, the admin
    "Mux Playback ID" form, `scripts/upload-onboarding-video.mjs` (uploads help
    clips to Mux — upload them through the dashboard instead).
+   Code part done 2026-10-12: all of the above removed from the repo, the
+   worker no longer reads http(s) sources, `upload-onboarding-video.mjs` now
+   uploads to S3 + queues a job. Still open: delete assets in the Mux
+   dashboard, drop `MUX_*` from prod.env.
 
-Rollback of a migrated row (Mux asset still exists):
+Rollback of a migrated row (obsolete since the app no longer plays Mux rows):
 ```sql
 UPDATE videos SET provider = 'mux', encode_job_id = NULL,
   metadata = jsonb_build_object('playbackId', metadata->>'muxPlaybackId', 'status', 'ready',

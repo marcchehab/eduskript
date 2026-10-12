@@ -15,7 +15,7 @@ export interface ImportTargetsCheck {
 /**
  * Read-only dedupe check for the client-side importer's preview step.
  * Attachments/videos aren't checked here — those go straight through
- * saveFile()'s / the Mux upload route's own existence checks per-file.
+ * saveFile()'s / the video upload route's own existence checks per-file.
  */
 export async function checkImportTargets(collectionTitles: string[], skriptSlugs: string[]): Promise<ImportTargetsCheck> {
   const session = await getServerSession(authOptions)
@@ -67,7 +67,7 @@ export interface ImportStructureResult {
 /**
  * Client-side importer's write step for collections/skripts/pages — text
  * only, no binary. Attachments and videos are uploaded separately by the
- * browser directly to S3/Mux (see skript-import-client.ts) once this
+ * browser directly to S3 (see skript-import-client.ts) once this
  * returns the new skript ids to attach them to.
  */
 export async function createImportStructure(payload: ImportStructurePayload): Promise<ImportStructureResult> {

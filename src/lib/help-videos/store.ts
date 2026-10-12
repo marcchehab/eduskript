@@ -3,7 +3,7 @@
 // open across navigation until the viewer closes it with X — like the
 // onboarding quest widget, but for anyone, logged in or not.
 //
-// Clips are skript-less Mux `Video` rows with the filename `help-<topic>.mp4`,
+// Clips are skript-less self-hosted `Video` rows with the filename `help-<topic>.mp4`,
 // uploaded with scripts/upload-onboarding-video.mjs (same as the quest clips).
 // Topics are free-form slugs: a new clip needs no code change, only the
 // upload plus a link that names the topic. HELP_TOPIC_TITLES just supplies a

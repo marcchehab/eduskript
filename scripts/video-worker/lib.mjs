@@ -135,7 +135,7 @@ export function outputFps(fps) {
  * chain normalises pixel format (10-bit HEVC/AV1/VP9 → yuv420p), SAR and
  * frame rate (VFR → CFR); scale targets are even.
  */
-export function buildEncodeArgs({ input, renditions, fps, hasAudio, outDir, threads = 2, preset = 'veryfast', inputArgs = [], audioInput = null }) {
+export function buildEncodeArgs({ input, renditions, fps, hasAudio, outDir, threads = 2, preset = 'veryfast', inputArgs = [] }) {
   const n = renditions.length
   const rate = outputFps(fps)
   const fpsExpr = Number.isInteger(rate) ? String(rate) : rate === 30000 / 1001 ? '30000/1001' : '24000/1001'
@@ -143,13 +143,10 @@ export function buildEncodeArgs({ input, renditions, fps, hasAudio, outDir, thre
   const chains = renditions.map((r, i) => `[s${i}]scale=${r.width}:${r.height}:flags=bicubic[v${i}]`).join(';')
   const filter = `[0:v:0]fps=${fpsExpr},format=yuv420p,setsar=1,split=${n}${splitOuts};${chains}`
   const args = ['-hide_banner', '-nostdin', '-y', ...inputArgs, '-i', input]
-  // Separate audio rendition (HLS sources with an EXT-X-MEDIA audio group).
-  if (audioInput) args.push(...inputArgs, '-i', audioInput)
   args.push('-filter_complex', filter)
-  const audioMap = audioInput ? '1:a:0' : '0:a:0'
   renditions.forEach((r, i) => {
     args.push('-map', `[v${i}]`)
-    if (hasAudio) args.push('-map', audioMap)
+    if (hasAudio) args.push('-map', '0:a:0')
     args.push(
       '-c:v', 'libx264', '-preset', preset, '-profile:v', 'high',
       '-crf', String(r.crf), '-maxrate', `${r.maxrateK}k`, '-bufsize', `${r.bufsizeK}k`,
@@ -220,39 +217,6 @@ export function buildMasterPlaylist(variants) {
     )
   }
   return out.join('\n') + '\n'
-}
-
-/**
- * Pick the media playlist of the best variant ≤ 1080p from an HLS master
- * (used for Mux migration: ffmpeg then reads one variant instead of all).
- * Mux serves audio as a separate EXT-X-MEDIA rendition referenced by the
- * variant's AUDIO group → returned as audioUrl.
- */
-export function pickHlsVariant(masterText, baseUrl) {
-  const lines = masterText.split('\n').map(l => l.trim())
-  let best = null
-  for (let i = 0; i < lines.length; i++) {
-    if (!lines[i].startsWith('#EXT-X-STREAM-INF:')) continue
-    const attrs = lines[i]
-    const res = attrs.match(/RESOLUTION=(\d+)x(\d+)/)
-    const bw = Number(attrs.match(/[^-]BANDWIDTH=(\d+)/)?.[1] ?? 0)
-    const uri = lines.slice(i + 1).find(l => l && !l.startsWith('#'))
-    if (!uri) continue
-    const w = res ? Number(res[1]) : 0
-    const h = res ? Number(res[2]) : 0
-    if (dimensionProblem(w, h)) continue
-    const score = Math.min(w, h) * 1e9 + bw
-    const group = attrs.match(/AUDIO="([^"]+)"/)?.[1]
-    if (!best || score > best.score) best = { score, url: new URL(uri, baseUrl).toString(), width: w, height: h, group }
-  }
-  if (!best) throw new PermanentError('The source HLS playlist has no variant up to 1080p.')
-  let audioUrl = null
-  if (best.group) {
-    const media = lines.find(l => l.startsWith('#EXT-X-MEDIA:') && l.includes('TYPE=AUDIO') && l.includes(`GROUP-ID="${best.group}"`) && l.includes('URI="'))
-    const uri = media?.match(/URI="([^"]+)"/)?.[1]
-    if (uri) audioUrl = new URL(uri, baseUrl).toString()
-  }
-  return { url: best.url, width: best.width, height: best.height, audioUrl }
 }
 
 export function thumbnailPlan(duration, width, height) {

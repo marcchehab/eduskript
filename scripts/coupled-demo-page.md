@@ -45,18 +45,18 @@ Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 
-## 4) Mux video — non-16:9 (≈square)
+## 4) Uploaded video — non-16:9 (≈square)
 
 Tests that the pin handles a non-16:9 aspect (handle stays at the real corner).
 
-<muxvideo src="demo.mp4" alt="Mux (non-16:9)" pin="true" />
+<muxvideo src="demo.mp4" alt="Uploaded (non-16:9)" pin="true" />
 
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 
-## 5) Mux video — 16:9
+## 5) Uploaded video — 16:9
 
-<muxvideo src="wide.mp4" alt="Mux (16:9)" pin="true" />
+<muxvideo src="wide.mp4" alt="Uploaded (16:9)" pin="true" />
 
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.

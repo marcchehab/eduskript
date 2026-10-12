@@ -431,7 +431,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       }
     }
 
-    // Check if it's a Mux video dragged from the video browser
+    // Video dragged from the video browser
     const muxVideoData = e.dataTransfer.getData('application/Eduskript-mux-video')
     if (muxVideoData) {
       try {
@@ -449,7 +449,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         }
         return
       } catch (error) {
-        console.error('Error parsing mux video data:', error)
+        console.error('Error parsing video drag data:', error)
       }
     }
 
@@ -665,7 +665,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       // Excalidraw drawing - use image syntax with just filename
       insertText = `![](${fileName})`
     } else if (['mp4', 'mov'].includes(extension || '')) {
-      // Mux-hosted video reference, resolved at render time via remarkMuxVideo
+      // Uploaded video reference, resolved at render time via remarkMuxVideo
       // (same as editor-with-media's file panel).
       insertText = `![](${fileName})`
     } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {

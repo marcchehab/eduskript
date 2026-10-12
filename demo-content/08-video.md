@@ -1,12 +1,12 @@
 # Video
 
-Video without the YouTube tax — no ads, no recommendation rabbit hole, no regional blocks. Hosted via [Mux](https://mux.com): adaptive streaming on every device, auto-generated English subtitles.
+Video without the YouTube tax — no ads, no recommendation rabbit hole, no regional blocks. Encoded and hosted by Eduskript on servers in Switzerland: adaptive streaming on every device, auto-generated subtitles.
 
 ---
 
 ## Upload and embed
 
-Drop an `.mp4` or `.mov` into your skript's **Videos** drawer. Mux processes it (~1-2 min). Once ready, embed like an image:
+Drop an `.mp4` or `.mov` into your skript's **Videos** drawer. It is encoded for streaming (the list shows progress until it is ready). Once ready, embed like an image:
 
 ```markdown
 ![A short caption](my-lecture.mp4)

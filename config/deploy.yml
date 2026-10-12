@@ -125,9 +125,6 @@ env:
     - CLOUDMAILIN_SECRET
     - CRON_SECRET
     - EMAIL_FROM
-    - MUX_TOKEN_ID
-    - MUX_TOKEN_SECRET
-    - MUX_WEBHOOK_SECRET
     - OPENROUTER_API_KEY
     - INFOMANIAK_AI_TOKEN       # AI for student data (Infomaniak AI Services, CH)
     - PAYREXX_API_SECRET

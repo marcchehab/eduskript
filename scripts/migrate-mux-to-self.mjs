@@ -2,6 +2,9 @@
 /**
  * Move Mux-hosted videos to the self-hosted pipeline. See MIGRATION-VIDEO.md.
  *
+ * HISTORICAL: ran on prod 2026-10 (all rows migrated). The worker no longer
+ * reads http(s) sources, so jobs this script creates would now fail.
+ *
  * For each Video row with provider "mux" and a metadata.playbackId:
  *  1. create an encode job whose source is https://stream.mux.com/{id}.m3u8
  *     (the worker picks the best variant ≤1080p plus Mux's separate audio

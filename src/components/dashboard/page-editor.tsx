@@ -1035,7 +1035,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           await loadVersions()
           router.refresh()
         }}
-        isAdmin={session?.user?.isAdmin}
         fullscreen={isFullscreen}
         pageLabel={pageLabelContent}
         layoutRibbonExtra={pageType !== 'exam' && !isFrontPage && (

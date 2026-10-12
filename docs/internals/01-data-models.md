@@ -140,30 +140,32 @@ Content-addressed by `hash`. See the **File Storage** chapter for the S3 storage
 
 ---
 
-## Video (self-hosted HLS; legacy Mux)
+## Video (self-hosted HLS)
 
 ```prisma
 model Video {
   id           String  @id @default(cuid())
   filename     String
-  provider     String  @default("mux")  // "self" | "mux" (not yet migrated)
+  provider     String  @default("mux")  // "self"; legacy "mux" rows render as unavailable
   metadata     Json                     // provider-specific, see src/lib/video-playback.ts
   uploadedById String?
-  muxUploadId  String? @unique          // legacy Mux webhook lookup
-  muxAssetId   String? @unique          // legacy Mux webhook lookup / static MP4
+  muxUploadId  String? @unique          // legacy, history only (Mux removed 2026-10)
+  muxAssetId   String? @unique          // legacy, history only
   encodeJobId  String?                  // → VideoEncodeJob (shared by page copies)
   skripts      Skript[]                 // M2M via _SkriptVideos
 }
 
 model VideoEncodeJob {                  // queue for scripts/video-worker.mjs
   status       String                   // queued | running | done | failed
-  source       String                   // "s3:<key>" or Mux HLS URL
+  source       String                   // "s3:<key>" (old migration jobs: http URL, not processed)
   outputPrefix String                   // videos/<uuid>/ in the teacher bucket
   attempts, availableAt, lockedAt, progress, error
 }
 ```
 
-Videos are separate from the `File` table. Uploads go browser → S3
+Videos are separate from the `File` table and hosted entirely in Switzerland
+(Infomaniak S3 + the encoder role on the CH VPS; no third-party video service).
+Uploads go browser → S3
 (`video-uploads/`, original kept) → job → encoder role (ffmpeg: 1080p/720p/480p
 HLS in fMP4 segments, 720p MP4, poster, scrub sprites, Whisper captions) → S3 `videos/<uuid>/`.
 The worker mirrors status/progress into `Video.metadata` and pings

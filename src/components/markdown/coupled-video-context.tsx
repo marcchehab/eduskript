@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 /**
  * CoupledVideoContext — the page-level glue for the "gated video" format.
  *
- * A video (YouTube or Mux) auto-pauses at author-defined marks and resumes
+ * A video (YouTube or uploaded) auto-pauses at author-defined marks and resumes
  * when the student clears a check. The gate lives on the *check*, not the
  * video: a `<question gate-at="1:30">` or a code-editor stage carries its own
  * timestamp and calls `markPassed` when it transitions to passing.
@@ -193,7 +193,7 @@ export function useGate(key: string, timeSeconds: number | undefined) {
 const GATE_LEAD_SECONDS = 0.35
 
 /**
- * Playback-gating logic shared by the YouTube and Mux video components.
+ * Playback-gating logic shared by the YouTube and uploaded-video (<muxvideo>) components.
  *
  * The video owns its player; this hook tells it *when* to pause and resume.
  * Call `onTimeUpdate(currentTimeSeconds)` from the player's time callback and

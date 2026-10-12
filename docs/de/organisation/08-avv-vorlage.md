@@ -79,7 +79,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Die KI-Verarbeitung von Lösungen der Schülerinnen und Schüler (Ziffer 9) findet ebenfalls bei Infomaniak in der Schweiz statt. Verschlüsselte Datenbank-Sicherungen liegen ebenfalls bei Infomaniak in der Schweiz, in einem anderen Rechenzentrum als der Server. Der E-Mail-Versand an Lehrpersonen erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
 
-8.2 Personendaten von Schülerinnen und Schülern werden nicht in Staaten ohne angemessenen Datenschutz übermittelt. In die USA gehen nur Inhalte von Lehrpersonen: Videos (Mux) und KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten (OpenRouter; gestützt auf die Standardvertragsklauseln der EU im [Auftragsbearbeitungsvertrag von OpenRouter](https://openrouter.ai/data-processing-agreement), Stand 26. August 2026).
+8.2 Personendaten von Schülerinnen und Schülern werden nicht in Staaten ohne angemessenen Datenschutz übermittelt. In die USA gehen nur Inhalte von Lehrpersonen: KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten (OpenRouter; gestützt auf die Standardvertragsklauseln der EU im [Auftragsbearbeitungsvertrag von OpenRouter](https://openrouter.ai/data-processing-agreement), Stand 26. August 2026).
 
 8.3 Mit der Unterzeichnung bewilligt die Schule die Bearbeitung an den in Anhang 3 genannten Orten. Die aktuelle Liste der Orte und Anbieter ist in der Datenschutzerklärung dokumentiert.
 
@@ -178,11 +178,10 @@ Stand bei Unterzeichnung. Die jeweils aktuelle, datierte Liste steht in der [Dat
 
 | Anbieter | Zweck | Standort | Schülerdaten? |
 |---|---|---|---|
-| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher, verschlüsselte Datenbank-Sicherungen, KI-Verarbeitung (KI-Feedback, KI-Bewertung) mit offenen Modellen | Schweiz | ja |
+| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (inkl. Videos), verschlüsselte Datenbank-Sicherungen, KI-Verarbeitung (KI-Feedback, KI-Bewertung, automatische Video-Untertitel) mit offenen Modellen | Schweiz | ja |
 | Brevo (Sendinblue SAS) | E-Mail-Versand an Lehrpersonen | EU | nein |
 | CloudMailin (Dynamic Edge Software Ltd, UK) | Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes) | USA/EU | nein |
 | Payrexx AG | Zahlungsabwicklung | Schweiz | nein |
-| Mux, Inc. | Video-Hosting (von Lehrpersonen hochgeladene Videos) | USA | nein |
 | OpenRouter, Inc. | Vermittlung von KI-Anfragen der Lehrpersonen für eigene Inhalte | USA | nein |
 | Modellanbieter über OpenRouter, u. a. Google Vertex AI (nur ohne Datenspeicherung) | KI-Unterstützung der Lehrperson beim Schreiben | USA u. a. | nein |
 

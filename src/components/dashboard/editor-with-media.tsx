@@ -112,10 +112,6 @@ export interface EditorWithMediaProps {
   /** Page mode: an in-editor AI proposal was fully accepted (not yet saved). */
   onAIInlineAccepted?: () => void
 
-  // Permissions
-  /** Surfaces the admin-only "manual add video" form in the VideoBrowser. */
-  isAdmin?: boolean
-
   // Layout
   /** When true, the editor card grows to fill its container (height: 100%) and the
    *  resize handle/description are hidden. Parent is responsible for wrapping in a
@@ -182,7 +178,6 @@ export function EditorWithMedia({
   aiEdit,
   onAIEditApplied,
   onAIInlineAccepted,
-  isAdmin,
   fullscreen = false,
   metadataSlot,
   pageLabel,
@@ -335,7 +330,7 @@ export function EditorWithMedia({
       return
     }
     // Only show the skeleton on the first load. Later refreshes (upload, delete,
-    // and the video browser's 5s status poll while Mux is processing) keep the
+    // and the video browser's 5s status poll while a video encodes) keep the
     // current list on screen instead of flashing it away.
     if (!loadedOnceRef.current) setFileListLoading(true)
     try {
@@ -365,7 +360,7 @@ export function EditorWithMedia({
 
   // Insert file content at the current cursor position (or append to end).
   // Branches on extension and insertion type. Note that .mp4/.mov go through
-  // the Mux pipeline (`![](filename)`) — the markdown renderer resolves them
+  // the video pipeline (`![](filename)`) — the markdown renderer resolves them
   // via remarkMuxVideo. Raw <video> tags are not used.
   const handleFileInsert = useCallback((file: {
     id: string
@@ -400,7 +395,7 @@ export function EditorWithMedia({
     } else if (extension === 'excalidraw') {
       insertText = `![](${file.name})`
     } else if (['mp4', 'mov'].includes(extension || '')) {
-      // Mux-hosted video reference (resolved at render time via remarkMuxVideo)
+      // Uploaded video reference (resolved at render time via remarkMuxVideo)
       insertText = `![](${file.name})`
     } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
       // Bare filename; markdown-components' AudioComponent resolves it to the
@@ -702,7 +697,6 @@ export function EditorWithMedia({
               <VideoBrowser
                 videos={videoList}
                 loading={fileListLoading}
-                isAdmin={isAdmin}
                 skriptId={skriptId}
                 onVideoAdded={refreshFileList}
                 onUploadComplete={refreshFileList}

@@ -497,8 +497,8 @@ model Video {
   provider     String  @default("mux") // "mux" | "self"
   metadata     Json // Provider-specific, see src/lib/video-playback.ts
   uploadedById String? @map("uploaded_by_id")
-  muxUploadId  String? @unique @map("mux_upload_id") // For webhook lookup after direct upload
-  muxAssetId   String? @unique @map("mux_asset_id") // For webhook lookup when asset ready
+  muxUploadId  String? @unique @map("mux_upload_id") // Legacy (Mux, removed), history only
+  muxAssetId   String? @unique @map("mux_asset_id") // Legacy (Mux, removed), history only
   // Encode job producing this row's HLS output. Several rows can share one job
   // (page copies; migrated Mux rows with the same playback id).
   encodeJobId  String? @map("encode_job_id")
@@ -522,7 +522,8 @@ model Video {
 model VideoEncodeJob {
   id           String    @id @default(cuid())
   status       String    @default("queued") // "queued" | "running" | "done" | "failed"
-  // "s3:<key>" (teacher bucket upload) or an http(s) URL (Mux HLS for migration)
+  // "s3:<key>" (teacher bucket upload). Jobs from the finished Mux migration
+  // have an http(s) URL; the worker no longer processes those.
   source       String
   outputPrefix String    @map("output_prefix") // S3 key prefix, ends with "/"
   attempts     Int       @default(0)

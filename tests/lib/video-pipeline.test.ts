@@ -1,6 +1,6 @@
 /**
  * Self-hosted video pipeline: upload limits, ffmpeg argument building, HLS
- * master/variant handling, scrub sprites, transcript → VTT, retry policy,
+ * master playlist, scrub sprites, transcript → VTT, retry policy,
  * provider → playback switch, and the Mux migration planning (dry-run core).
  */
 import { describe, it, expect } from 'vitest'
@@ -9,7 +9,7 @@ import { getVideoPlayback, isVideoPending } from '@/lib/video-playback'
 import { parseThumbnailsVtt } from '@/components/markdown/hls-video'
 import {
   LIMITS, PermanentError, dimensionProblem, parseProbe, validateProbe, planRenditions, outputFps,
-  buildEncodeArgs, buildHlsArgs, avc1Codec, playlistBandwidth, buildMasterPlaylist, pickHlsVariant,
+  buildEncodeArgs, buildHlsArgs, avc1Codec, playlistBandwidth, buildMasterPlaylist,
   thumbnailPlan, buildThumbnailsVtt, transcriptToCues, cuesToVtt, languageInfo, isSilent,
   contentTypeFor, failureOutcome, parseProgressLine,
   // @ts-expect-error — plain .mjs without type declarations
@@ -102,13 +102,10 @@ describe('rendition planning + ffmpeg args', () => {
     expect(joined).toContain('-map 0:a:0')
   })
 
-  it('silent source → no audio streams; separate HLS audio rendition → second input', () => {
+  it('silent source → no audio streams', () => {
     const silent = buildEncodeArgs({ input: 'x', renditions: planRenditions(1280, 720), fps: 30, hasAudio: false, outDir: '/w' })
     expect(silent).toContain('-an')
     expect(silent).not.toContain('aac')
-    const two = buildEncodeArgs({ input: 'v.m3u8', audioInput: 'a.m3u8', renditions: planRenditions(1280, 720), fps: 30, hasAudio: true, outDir: '/w' })
-    expect(two.filter((a: string) => a === '-i')).toHaveLength(2)
-    expect(two.join(' ')).toContain('-map 1:a:0')
   })
 
   it('HLS remux copies streams into 4 s fMP4 segments (no transmux in the browser)', () => {
@@ -133,26 +130,6 @@ describe('rendition planning + ffmpeg args', () => {
   it('parses ffmpeg -progress lines', () => {
     expect(parseProgressLine('out_time_us=12500000')).toBe(12.5)
     expect(parseProgressLine('frame=12')).toBeNull()
-  })
-})
-
-describe('Mux HLS source', () => {
-  const master = `#EXTM3U
-#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-hi-0",NAME="Default",URI="https://m.example/audio.m3u8?x=1"
-#EXT-X-STREAM-INF:BANDWIDTH=9000000,AVERAGE-BANDWIDTH=9000000,RESOLUTION=3840x2160,AUDIO="audio-hi-0"
-https://m.example/4k.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=1390400,AVERAGE-BANDWIDTH=1390400,CODECS="mp4a.40.2,avc1.64002a",AUDIO="audio-hi-0",RESOLUTION=1920x1080
-https://m.example/1080.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=341000,AVERAGE-BANDWIDTH=341000,AUDIO="audio-hi-0",RESOLUTION=854x480
-480.m3u8
-`
-  it('picks the best variant ≤1080p and its separate audio rendition', () => {
-    expect(pickHlsVariant(master, 'https://stream.mux.com/P.m3u8')).toEqual({
-      url: 'https://m.example/1080.m3u8', width: 1920, height: 1080, audioUrl: 'https://m.example/audio.m3u8?x=1',
-    })
-  })
-  it('fails permanently when nothing ≤1080p exists', () => {
-    expect(() => pickHlsVariant('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=3840x2160\nx.m3u8\n', 'https://a/')).toThrow(PermanentError)
   })
 })
 
@@ -227,9 +204,8 @@ describe('retry policy', () => {
 describe('getVideoPlayback (provider switch)', () => {
   const HLS = 'https://s3.pub1.infomaniak.cloud/object/v1/AUTH_x/b/videos/u/master.m3u8'
 
-  it('plays Mux rows from stream.mux.com', () => {
-    const p = getVideoPlayback('mux', { playbackId: 'abc', poster: 'https://image.mux.com/abc/t.webp', status: 'ready' })
-    expect(p?.hlsUrl).toBe('https://stream.mux.com/abc.m3u8')
+  it('legacy provider "mux" rows are not playable', () => {
+    expect(getVideoPlayback('mux', { playbackId: 'abc', status: 'ready' })).toBeNull()
   })
 
   it('plays ready self-hosted rows from S3 with captions and scrub thumbnails', () => {
@@ -238,9 +214,9 @@ describe('getVideoPlayback (provider switch)', () => {
     expect(p).toEqual({ hlsUrl: HLS, poster: 'https://s3/p.jpg', aspectRatio: undefined, captions, thumbnailsVtt: 'https://s3/t.vtt' })
   })
 
-  it('nothing to play while an upload is queued/encoding; migrated rows fall back to Mux', () => {
+  it('nothing to play while an upload is queued/encoding (no fallback via muxPlaybackId)', () => {
     expect(getVideoPlayback('self', { status: 'encoding' })).toBeNull()
-    expect(getVideoPlayback('self', { status: 'queued', muxPlaybackId: 'abc' })?.hlsUrl).toBe('https://stream.mux.com/abc.m3u8')
+    expect(getVideoPlayback('self', { status: 'queued', muxPlaybackId: 'abc' })).toBeNull()
   })
 
   it('isVideoPending covers waiting/queued/encoding', () => {

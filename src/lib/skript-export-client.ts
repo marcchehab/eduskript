@@ -3,7 +3,7 @@
 /**
  * Client-side skript export. Runs entirely in the browser: fetches page
  * content + file/video metadata as JSON, downloads attachment and video
- * bytes directly from S3/Mux, then zips (JSZip) or writes to a picked
+ * bytes directly from S3, then zips (JSZip) or writes to a picked
  * folder (File System Access API — Chromium only). No server-side
  * buffering, unlike the old /api/export route it replaces (see
  * src/app/api/export/route.ts, no longer wired to any UI).
@@ -29,8 +29,6 @@ export interface ExportVideo {
   id: string
   filename: string
   provider?: string
-  playbackId?: string
-  muxAssetId: string | null
 }
 
 export interface ExportSkript {
@@ -220,11 +218,11 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
 }
 
 /**
- * Polls prepare-download until a video's MP4 is ready. Self-hosted rows answer
- * at once (stored 720p MP4); Mux rows need a static rendition first.
+ * Polls prepare-download until a video's stored 720p MP4 is ready (immediate
+ * for encoded videos; polls while one is still encoding).
  */
 async function resolveVideoUrl(video: ExportVideo): Promise<string> {
-  if (video.provider !== 'self' && !video.muxAssetId) throw new Error('Video is not ready on Mux yet')
+  if (video.provider !== 'self') throw new Error('Video is unavailable')
 
   for (let attempt = 0; attempt < VIDEO_POLL_ATTEMPTS; attempt++) {
     const res = await fetch(`/api/videos/${video.id}/prepare-download`, { method: 'POST' })

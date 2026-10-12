@@ -421,7 +421,6 @@ export function FrontPageEditor({
             setHasUnsavedChanges(true)
           }
         }}
-        isAdmin={(session?.user as { isAdmin?: boolean })?.isAdmin}
         fullscreen={isFullscreen}
         pageLabel={pageLabel}
         metadataSlot={titleRow}

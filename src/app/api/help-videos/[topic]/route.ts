@@ -4,7 +4,7 @@
  * Playback sources (src/lib/video-playback.ts) for one contextual help clip (see
  * src/lib/help-videos/store.ts). The clip is a skript-less `Video` row with
  * filename `help-<topic>.mp4`, uploaded via scripts/upload-onboarding-video.mjs.
- * 404 until that row exists and is ready (Infomaniak or legacy Mux). Public: help links also
+ * 404 until a self-hosted row exists and is ready. Public: help links also
  * appear on public pages for anonymous visitors.
  */
 import { NextResponse } from 'next/server'
@@ -21,14 +21,11 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid topic' }, { status: 400 })
   }
 
-  // Prefer a migrated/new self-hosted row over a leftover Mux one.
   const videos = await prisma.video.findMany({
-    where: { filename: helpVideoFilename(topic) },
+    where: { filename: helpVideoFilename(topic), provider: 'self' },
     select: { provider: true, metadata: true },
   })
-  videos.sort((a, b) => Number(b.provider === 'self') - Number(a.provider === 'self'))
   const playback = videos
-    .filter(v => (v.metadata as Record<string, unknown> | null)?.status === 'ready')
     .map(v => getVideoPlayback(v.provider, v.metadata as Record<string, unknown>))
     .find(p => p !== null)
   if (!playback) {

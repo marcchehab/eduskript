@@ -62,8 +62,8 @@ describe('getSkriptFiles caching', () => {
   })
 
   it('drops only the coarse tag when the caller cannot name a skript', async () => {
-    // The Mux webhook and admin video tools work from an asset id, and a video
-    // is M2M with skripts, so they cannot resolve one.
+    // A video is M2M with skripts, so video routes (delete, retry, the
+    // encoder's revalidate ping) cannot name one.
     const { invalidateSkriptFiles } = await import('@/lib/skript-files.server')
     invalidateSkriptFiles()
 
