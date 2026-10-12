@@ -46,6 +46,7 @@ const SUBPROCESSORS: { name: string; purpose: string; location: string; studentD
 const CHANGELOG: { date: string; change: string }[] = [
   { date: 'September 2026', change: 'Erste veröffentlichte Liste.' },
   { date: 'Oktober 2026', change: 'Umzug in die Schweiz: Server, Datenbank, Dateien, Sicherungen und die KI für Schülerdaten laufen bei Infomaniak. Koyeb, Neon/AWS, Scaleway und Google für Schülerdaten entfernt; OpenRouter nur noch für Inhalte der Lehrpersonen. CloudMailin ergänzt (war bereits im Einsatz, fehlte in der Liste).' },
+  { date: 'Oktober 2026', change: 'Formeln, Schriften und Python werden nicht mehr von einem CDN (jsDelivr) geladen, sondern von unseren Servern in der Schweiz. Abschnitt «Eingebettete Inhalte» ergänzt.' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -259,6 +260,9 @@ export default function DatenschutzPage() {
               E-Mail-Versand an Lehrpersonen liegt in der EU, die nach
               Schweizer Recht als Staat mit angemessenem Datenschutz gilt.
               Daten von Schülerinnen und Schülern verlassen die Schweiz nicht.
+              Ausgenommen ist, was der Browser beim Öffnen eingebetteter
+              Inhalte anderer Anbieter selbst abruft (siehe{' '}
+              <a href="#eingebettete-inhalte">Eingebettete Inhalte</a>).
               In die USA gehen nur Inhalte der Lehrpersonen: Videos
               (Mux) und KI-Anfragen zum Bearbeiten eigener Inhalte (siehe
               Abschnitt 4).
@@ -288,6 +292,30 @@ export default function DatenschutzPage() {
             <p>
               Die Anmeldung über Microsoft findet bei Microsoft statt
               und nur, wenn man diesen Weg wählt.
+            </p>
+
+            <h3 id="eingebettete-inhalte" className={h3}>Eingebettete Inhalte</h3>
+            <p>
+              Lehrpersonen können Inhalte anderer Anbieter in ihre Seiten
+              einbetten, etwa Videos (YouTube, Mux), Simulationen (PhET),
+              GeoGebra-Applets, Plugins, die Bibliotheken von öffentlichen
+              Servern laden, oder Python-Programme, die Daten aus dem Internet
+              abrufen. Das funktioniert wie überall im Web: Öffnet jemand eine
+              solche Seite, lädt der Browser diesen Inhalt direkt beim
+              jeweiligen Anbieter. Dieser erhält dabei die IP-Adresse und
+              technische Angaben zum Browser und kann eigene Cookies oder
+              Statistikdienste einsetzen; es gelten seine
+              Datenschutzbestimmungen.
+            </p>
+            <p>
+              Namen, Klassen oder Antworten übermittelt Eduskript nicht.
+              Arbeiten Schülerinnen und Schüler in einem eingebetteten Werkzeug
+              wie GeoGebra, läuft dessen Programmcode im Browser; Eduskript
+              speichert den Arbeitsstand auf seinen eigenen Servern, kann aber
+              nicht ausschliessen, dass der Code des Anbieters selbst Daten
+              sendet. Alle eigenen Bestandteile von Eduskript, wie Schriften,
+              Formeln und Python, kommen von unseren Servern in der Schweiz.
+              Wer keine externen Inhalte möchte, bettet keine ein.
             </p>
             <p className="text-sm text-muted-foreground">
               Änderungen dieser Liste:{' '}
