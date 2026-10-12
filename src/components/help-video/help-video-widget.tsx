@@ -8,7 +8,6 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import dynamic from "next/dynamic";
 import { DockedPanel } from "@/components/docked-panel";
 import {
   closeHelpVideo,
@@ -16,14 +15,10 @@ import {
   getServerHelpVideo,
   subscribeHelpVideo,
 } from "@/lib/help-videos/store";
+import type { VideoPlayback } from "@/lib/video-playback";
+import { HlsVideo } from "@/components/markdown/hls-video";
 
-// Same dynamic-import pattern as MuxVideo (src/components/markdown/mux-video.tsx).
-const MuxPlayer = dynamic(
-  () => import("@mux/mux-player-react").then((mod) => mod.default),
-  { ssr: false },
-);
-
-type Clip = { playbackId: string; poster?: string; aspectRatio?: number };
+type Clip = VideoPlayback;
 type Load =
   | { topic: string; status: "ready"; clip: Clip }
   | { topic: string; status: "missing" };
@@ -69,17 +64,15 @@ export function HelpVideoWidget() {
         <p className="text-xs text-muted-foreground">This video isn&apos;t available yet.</p>
       )}
       {current?.status === "ready" && (
-        <MuxPlayer
+        <HlsVideo
           // Re-mount per topic so switching clips restarts playback cleanly.
           key={open.topic}
-          playbackId={current.clip.playbackId}
+          hlsUrl={current.clip.hlsUrl}
           poster={current.clip.poster}
-          style={{ aspectRatio: current.clip.aspectRatio ?? 16 / 9 }}
-          className="w-full rounded-lg overflow-hidden"
-          autoPlay="muted"
-          muted
-          playsInline
-          disableTracking
+          captions={current.clip.captions}
+          aspectRatio={current.clip.aspectRatio}
+          className="w-full"
+          autoplay
         />
       )}
     </DockedPanel>

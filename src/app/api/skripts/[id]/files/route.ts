@@ -52,6 +52,7 @@ export async function GET(
     videos: videoList.map(v => ({
       id: v.id,
       filename: v.filename,
+      provider: v.provider,
       playbackId: v.metadata.playbackId,
       muxAssetId: muxAssetById.get(v.id) ?? null
     }))

@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateSkriptFiles } from '@/lib/skript-files.server'
+import { deleteFromS3, getTeacherBucketName } from '@/lib/s3'
+import { deleteMedia, getVodConfig } from '@/lib/infomaniak-vod'
+import { findVideosByMediaId } from '@/lib/video-sync.server'
 
 export async function DELETE(
   _request: NextRequest,
@@ -25,9 +28,28 @@ export async function DELETE(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // TODO: Also delete the asset on Mux (via Mux API) to avoid orphaned assets and billing.
-  // For now this only removes the database entry.
+  // TODO: Mux rows still leave their asset on Mux (deleted manually after
+  // the migration, see MIGRATION-VOD.md).
   await prisma.video.delete({ where: { id } })
+
+  // Infomaniak: drop the media once no other row (page-copy duplicates share
+  // it via metadata.mediaId) references it. Best effort — a failure leaves an
+  // orphan on Infomaniak, not a broken page.
+  const meta = (video.metadata ?? {}) as Record<string, unknown>
+  if (video.provider === 'infomaniak') {
+    try {
+      if (typeof meta.uploadKey === 'string') {
+        await deleteFromS3(meta.uploadKey, getTeacherBucketName())
+      }
+      const mediaId = typeof meta.mediaId === 'string' ? meta.mediaId : null
+      const config = getVodConfig()
+      if (mediaId && config && (await findVideosByMediaId(mediaId)).length === 0) {
+        await deleteMedia(config, mediaId)
+      }
+    } catch (error) {
+      console.warn('Video delete: provider cleanup failed:', error instanceof Error ? error.message : error)
+    }
+  }
   // A video is M2M with skripts, so drop every skript's file cache.
   invalidateSkriptFiles()
 

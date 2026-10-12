@@ -1,10 +1,11 @@
 'use client'
 
-import dynamic from 'next/dynamic'
 import { useRef, type ReactElement } from 'react'
 import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveUrl, resolveVideo } from '@/lib/skript-files'
+import { getVideoPlayback } from '@/lib/video-playback'
 import { useVideoGate, CouplingToggle } from './coupled-video-context'
+import { HlsVideo } from './hls-video'
 import { StickMe } from './stick-me'
 
 interface MuxVideoProps {
@@ -14,15 +15,15 @@ interface MuxVideoProps {
    * Optional poster override. Either:
    *   - a filename that exists in the skript's files (resolved via `files`), or
    *   - an absolute URL (`http(s)://` or `/...`) used as-is.
-   * When omitted, falls back to the auto-generated Mux thumbnail from the
-   * video's metadata (frame at time=0).
+   * When omitted, falls back to the provider's auto-generated poster from the
+   * video's metadata.
    */
   poster?: string
   className?: string
   /** Pin the player into a corner overlay once it scrolls off the top. */
   pin?: boolean
   /** Start playing on load. Unmuted autoplay is blocked by browsers — the
-   *  player therefore autoplays muted (mux-player's autoplay="muted"). */
+   *  player therefore autoplays muted. */
   autoplay?: boolean
   loop?: boolean
   /** Play it like an animated GIF: muted autoplay, looping, no controls, not
@@ -31,20 +32,6 @@ interface MuxVideoProps {
   // Files data for resolving video metadata (serializable)
   files?: SkriptFilesData
 }
-
-// Dynamic import with ssr: false ensures client-only rendering
-const MuxPlayer = dynamic(
-  () => import('@mux/mux-player-react').then((mod) => mod.default),
-  {
-    ssr: false,
-    loading: () => (
-      <span
-        className="block bg-muted animate-pulse rounded-lg"
-        style={{ aspectRatio: '16/9' }}
-      />
-    )
-  }
-)
 
 function resolvePoster(value: string | undefined, files: SkriptFilesData | undefined): string | undefined {
   if (!value) return undefined
@@ -67,9 +54,8 @@ export function MuxVideo({
   gif: gifProp,
   files,
 }: MuxVideoProps): ReactElement {
-  // Coupled-video gating. next/dynamic doesn't reliably forward refs, so we
-  // capture the underlying <mux-player> element (which implements the media
-  // element API: currentTime, pause(), play()) from the media events instead.
+  // Coupled-video gating: capture the <video> element from its media events
+  // (currentTime, pause(), play()).
   // Declared before the early return below so hook order stays stable.
   const playerElRef = useRef<HTMLMediaElement | null>(null)
   const { onTimeUpdate, onManualPlay } = useVideoGate({
@@ -80,31 +66,28 @@ export function MuxVideo({
     },
   })
 
-  // Resolve video metadata
+  // Resolve video metadata → provider-specific HLS source (Infomaniak or legacy Mux)
   const videoInfo = files ? resolveVideo(files, src) : undefined
-  const { playbackId, poster: defaultPoster, blurDataURL, aspectRatio } = videoInfo?.metadata ?? {}
+  const playback = videoInfo ? getVideoPlayback(videoInfo.provider, videoInfo.metadata) : null
 
-  // If no playback ID, show placeholder
-  if (!playbackId) {
+  if (!playback) {
+    const processing = videoInfo?.metadata.status === 'waiting' || videoInfo?.metadata.status === 'processing'
     return (
       <span className="block bg-muted rounded-lg p-4 text-center text-muted-foreground" style={{ aspectRatio: '16/9' }}>
-        <span className="block">Video not found: {src}</span>
-        <span className="block text-xs mt-1">Make sure the video has been uploaded to Mux</span>
+        <span className="block">{processing ? `Video is still processing: ${src}` : `Video not found: ${src}`}</span>
+        {!processing && <span className="block text-xs mt-1">Make sure the video has been uploaded</span>}
       </span>
     )
   }
 
-  // Author-supplied poster wins; fall back to Mux's auto-generated one.
-  const poster = resolvePoster(posterOverride, files) ?? defaultPoster
+  // Author-supplied poster wins; fall back to the provider's one.
+  const poster = resolvePoster(posterOverride, files) ?? playback.poster
 
-  // preload="none": don't fetch video manifest, audio/video chunks, or
-  // subtitle tracks until the user actually plays. Default Mux behaviour
-  // pulls 4-6 segment requests on mount, which kept the page tab in
-  // "loading" state for several seconds on slower connections even though
-  // most visitors never play the video. Trade-off: ~200-400 ms buffering
-  // pause when Play is first clicked. The poster image still preloads, so
-  // the player still looks ready. Pages that explicitly mark a video as
-  // autoplay opt back into preloading by setting preload="auto".
+  // preload: nothing but the poster loads until the viewer presses play
+  // (see hls-video.tsx). Before that, the old Mux player pulled 4-6 segment
+  // requests on mount, which kept the page tab in "loading" state for seconds
+  // on slow connections although most visitors never play the video. gif and
+  // autoplay videos load on mount.
   //
   // Playback flags come from the tag (`<muxvideo src="x.mp4" gif />`). Before
   // 2026-07-29 they were keywords in the alt text (`![gif loop](x.mp4)`); that
@@ -113,38 +96,25 @@ export function MuxVideo({
   const gif = gifProp || alt.includes('gif')
   const autoplay = autoplayProp || alt.includes('autoplay')
   const loop = loopProp || alt.includes('loop')
-  const preloadStrategy = gif || autoplay ? 'auto' : 'none'
 
   return (
     <span className="block">
       <StickMe enabled={pin} footer={<CouplingToggle />} storageKey={`coupled-video:${src}`}>
-      <MuxPlayer
-        playbackId={playbackId}
+      <HlsVideo
+        hlsUrl={playback.hlsUrl}
         poster={poster}
-        placeholder={blurDataURL ?? ''}
-        accentColor="hsl(var(--primary))"
-        className={`rounded-lg overflow-hidden ${className ?? ''}`}
-        style={{
-          aspectRatio: aspectRatio ?? 16 / 9,
-          // mux-player's own CSS var — hides the whole control bar incl. the
-          // centre play button.
-          ...(gif ? { '--controls': 'none', pointerEvents: 'none' as const } : {}),
-        }}
-        autoPlay={gif ? 'muted' : autoplay}
-        muted={gif}
-        playsInline={gif}
-        nohotkeys={gif}
-        loop={gif || loop}
-        preload={preloadStrategy}
-        disableTracking // Disable Mux analytics to avoid CORS issues
-        onTimeUpdate={(e: Event) => {
-          const el = e.target as HTMLMediaElement | null
-          if (!el) return
+        captions={playback.captions}
+        aspectRatio={playback.aspectRatio}
+        className={className}
+        gif={gif}
+        autoplay={autoplay}
+        loop={loop}
+        onTimeUpdate={el => {
           playerElRef.current = el
           onTimeUpdate(el.currentTime)
         }}
-        onPlay={(e: Event) => {
-          playerElRef.current = (e.target as HTMLMediaElement | null) ?? playerElRef.current
+        onPlay={el => {
+          playerElRef.current = el
           onManualPlay()
         }}
       />

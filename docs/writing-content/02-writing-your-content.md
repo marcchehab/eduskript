@@ -63,7 +63,7 @@ This is the fastest way to tweak a component once it's in the page — no need t
 | **Publish** | Toggle the page between draft / published / unlisted. |
 | **Manage** | Drawer with the skript's settings, page list, file/video panels. |
 | **Files** | File panel for uploads (images, PDFs, databases, code). |
-| **Videos** | Video panel for Mux-hosted video uploads. |
+| **Videos** | Video panel for uploaded videos (hosted in Switzerland). |
 | **AI ✨** | AI Edit — describe a change, the AI generates a diff for you to review. |
 | **Fullscreen** | Hide everything else; just editor + preview. |
 

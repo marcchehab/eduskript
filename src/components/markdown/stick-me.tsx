@@ -284,7 +284,7 @@ export function StickMe({
       // the hidden one in the inactive theme and fling the handle to the origin.
       const media =
         Array.from(
-          inner.querySelectorAll('iframe, video, img, canvas, mux-player'),
+          inner.querySelectorAll('iframe, video, img, canvas'),
         ).find((el) => el.getBoundingClientRect().width > 0) ?? null
       const ir = (media ?? inner).getBoundingClientRect()
 

@@ -24,6 +24,7 @@ export interface VideoInfo {
   id: string
   filename: string
   provider: string
+  /** Subset of Video.metadata; full shapes in src/lib/video-playback.ts. */
   metadata: {
     playbackId?: string
     poster?: string
@@ -31,6 +32,27 @@ export interface VideoInfo {
     aspectRatio?: number
     assetId?: string
     status?: string
+    // provider "infomaniak"
+    hlsUrl?: string
+    captions?: Array<{ src: string; lang: string; label: string }>
+    captionsStatus?: string
+  }
+}
+
+/** Pick the VideoInfo fields out of a Video.metadata JSON value. */
+export function toVideoInfoMetadata(raw: unknown, defaultStatus?: string): VideoInfo['metadata'] {
+  const m = (raw ?? {}) as Record<string, unknown>
+  const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
+  return {
+    playbackId: str(m.playbackId),
+    poster: str(m.poster),
+    blurDataURL: str(m.blurDataURL),
+    aspectRatio: typeof m.aspectRatio === 'number' ? m.aspectRatio : undefined,
+    assetId: str(m.assetId),
+    status: str(m.status) ?? defaultStatus,
+    hlsUrl: str(m.hlsUrl),
+    captions: Array.isArray(m.captions) ? (m.captions as NonNullable<VideoInfo['metadata']['captions']>) : undefined,
+    captionsStatus: str(m.captionsStatus),
   }
 }
 

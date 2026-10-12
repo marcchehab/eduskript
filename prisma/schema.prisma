@@ -487,16 +487,20 @@ model File {
   @@map("files")
 }
 
-// Video storage for hosted video files (Mux, etc.)
-// Uses JSONB for provider-specific metadata (flexible for future providers)
+// Video storage for hosted video files (Infomaniak VOD; Mux for rows not yet
+// migrated). Uses JSONB for provider-specific metadata — shapes documented in
+// src/lib/video-playback.ts.
 model Video {
   id           String  @id @default(cuid())
   filename     String // e.g., "lecture.mp4"
-  provider     String  @default("mux") // "mux", future: "bunny", "cloudflare"
-  metadata     Json // Provider-specific: { playbackId, poster, blurDataURL, aspectRatio, status }
+  provider     String  @default("mux") // "mux" | "infomaniak"
+  metadata     Json // Provider-specific, see src/lib/video-playback.ts
   uploadedById String? @map("uploaded_by_id")
   muxUploadId  String? @unique @map("mux_upload_id") // For webhook lookup after direct upload
   muxAssetId   String? @unique @map("mux_asset_id") // For webhook lookup when asset ready
+  // Infomaniak VOD media id, for callback lookup. Null on page-copy duplicates
+  // that share another row's media (same as muxAssetId).
+  vodMediaId   String? @unique @map("vod_media_id")
 
   uploadedBy User?    @relation("UploadedVideos", fields: [uploadedById], references: [id], onDelete: SetNull)
   skripts    Skript[] @relation("SkriptVideos") // Many-to-many

@@ -5,7 +5,7 @@
  * in the browser. The zip is unzipped and validated locally (no upload of
  * the raw zip to the server), page/collection/skript metadata goes to the
  * server as small JSON (createImportStructure), and attachment/video bytes
- * go straight from the browser to S3/Mux via the same presigned-upload
+ * go straight from the browser to S3 via the same presigned-upload
  * routes the dashboard's file/video upload UI already uses — the server
  * never buffers the zip or the media it contains.
  *
@@ -17,6 +17,7 @@ import type JSZip from 'jszip'
 import type { ExportManifest, ImportError } from '@/lib/import-shared'
 import { validateMarkdownSyntax, parseFrontmatter, attachmentContentType } from '@/lib/import-shared'
 import { checkImportTargets, createImportStructure } from '@/lib/import-actions'
+import { requestVideoUpload, finishVideoUpload } from '@/lib/video-upload-client'
 
 export interface ParsedPage {
   slug: string
@@ -253,27 +254,19 @@ async function uploadAttachment(skriptId: string, name: string, attachment: Pars
 async function uploadVideo(skriptId: string, video: ParsedVideo): Promise<void> {
   const bytes = await video.entry.async('arraybuffer')
 
-  const urlRes = await fetch('/api/videos/upload-url', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename: video.filename, skriptId })
-  })
-  if (!urlRes.ok) {
-    const err = await urlRes.json().catch(() => ({}))
-    throw new Error(err.error || `Could not get a video upload URL (${urlRes.status})`)
-  }
-  const { uploadUrl } = await urlRes.json()
+  const contentType = video.filename.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4'
+  const { uploadUrl, videoId, uploadHeaders } = await requestVideoUpload(video.filename, skriptId, contentType)
 
-  const putRes = await fetch(uploadUrl, { method: 'PUT', body: bytes })
-  if (!putRes.ok) throw new Error(`Upload to Mux failed (${putRes.status})`)
-  // Video row already exists (created by /api/videos/upload-url); Mux's
-  // webhook fills in muxAssetId/playbackId asynchronously once processed,
-  // same as a normal dashboard video upload.
+  const putRes = await fetch(uploadUrl, { method: 'PUT', body: bytes, headers: uploadHeaders })
+  if (!putRes.ok) throw new Error(`Video upload failed (${putRes.status})`)
+  // Infomaniak encodes asynchronously; the row turns ready via callback or
+  // the video browser's sync poll, same as a normal dashboard upload.
+  await finishVideoUpload(videoId)
 }
 
 /**
  * Creates the collection/skript/page structure, then uploads attachments
- * and videos directly to S3/Mux against the resulting skript ids. Each
+ * and videos directly to S3 (then Infomaniak VOD) against the resulting skript ids. Each
  * attachment/video failure is caught and reported rather than aborting
  * the rest of the import.
  */

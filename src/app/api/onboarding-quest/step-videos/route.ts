@@ -1,7 +1,7 @@
 /**
  * GET /api/onboarding-quest/step-videos
  *
- * Returns Mux playback metadata for the onboarding quest's tutorial clips,
+ * Returns playback sources (src/lib/video-playback.ts) for the onboarding quest's tutorial clips,
  * keyed by QuestStep. Videos are skript-less `Video` rows (see
  * POST /api/admin/videos) with the stable filename `onboarding-<step>.mp4` —
  * swapping a clip later is just re-running scripts/upload-onboarding-video.mjs
@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { QUEST_STEPS, type QuestStep } from '@/lib/onboarding-quest/types'
+import { getVideoPlayback, type VideoPlayback } from '@/lib/video-playback'
 
 function filenameForStep(step: QuestStep): string {
   return `onboarding-${step.replaceAll('_', '-')}.mp4`
@@ -20,21 +21,22 @@ export async function GET() {
   const filenames = QUEST_STEPS.map(filenameForStep)
 
   const videos = await prisma.video.findMany({
-    where: { filename: { in: filenames }, provider: 'mux' },
-    select: { filename: true, metadata: true },
+    where: { filename: { in: filenames } },
+    select: { filename: true, provider: true, metadata: true },
   })
+  // Infomaniak rows first so they win over a leftover Mux row of the same name.
+  videos.sort((a, b) => Number(b.provider === 'infomaniak') - Number(a.provider === 'infomaniak'))
 
-  const byFilename = new Map(videos.map((v) => [v.filename, v.metadata as Record<string, unknown>]))
-
-  const result: Partial<Record<QuestStep, { playbackId: string; poster?: string; aspectRatio?: number }>> = {}
+  const result: Partial<Record<QuestStep, VideoPlayback>> = {}
   for (const step of QUEST_STEPS) {
-    const metadata = byFilename.get(filenameForStep(step))
-    const playbackId = metadata?.playbackId
-    if (typeof playbackId === 'string' && metadata?.status === 'ready') {
-      result[step] = {
-        playbackId,
-        poster: typeof metadata.poster === 'string' ? metadata.poster : undefined,
-        aspectRatio: typeof metadata.aspectRatio === 'number' ? metadata.aspectRatio : undefined,
+    for (const v of videos) {
+      if (v.filename !== filenameForStep(step)) continue
+      const metadata = v.metadata as Record<string, unknown>
+      if (metadata?.status !== 'ready') continue
+      const playback = getVideoPlayback(v.provider, metadata)
+      if (playback) {
+        result[step] = playback
+        break
       }
     }
   }

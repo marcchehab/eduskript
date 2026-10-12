@@ -105,6 +105,10 @@ env:
     - MUX_TOKEN_ID
     - MUX_TOKEN_SECRET
     - MUX_WEBHOOK_SECRET
+    - INFOMANIAK_VOD_TOKEN            # video hosting (Infomaniak VOD, CH), see MIGRATION-VOD.md
+    - INFOMANIAK_VOD_CHANNEL
+    - INFOMANIAK_VOD_FOLDER
+    - INFOMANIAK_VOD_CALLBACK_SECRET  # bearer token of the VOD callback
     - OPENROUTER_API_KEY
     - INFOMANIAK_AI_TOKEN       # AI for student data (Infomaniak AI Services, CH)
     - PAYREXX_API_SECRET

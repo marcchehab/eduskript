@@ -63,7 +63,7 @@ Das ist der schnellste Weg, eine Komponente anzupassen, sobald sie auf der Seite
 | **Publish** | Die Seite zwischen Entwurf / veröffentlicht / nicht gelistet umschalten. |
 | **Manage** | Seitenpanel mit den Einstellungen des Skripts, Seitenliste, Datei-/Video-Panels. |
 | **Files** | Datei-Panel für Uploads (Bilder, PDFs, Datenbanken, Code). |
-| **Videos** | Video-Panel für Video-Uploads, die über Mux gehostet werden. |
+| **Videos** | Video-Panel für Video-Uploads (gehostet in der Schweiz). |
 | **AI ✨** | AI Edit — beschreibe eine Änderung, die KI erzeugt einen Diff, den du prüfst. |
 | **Fullscreen** | Alles andere ausblenden; nur Editor + Vorschau. |
 

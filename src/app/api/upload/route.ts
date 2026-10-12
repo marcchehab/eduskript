@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { saveFile, MAX_FILE_SIZE, validateFile, sanitizeFilename, getFileExtension, getS3Key } from '@/lib/file-storage'
 import { getTeacherFileUrl } from '@/lib/s3'
+import { toVideoInfoMetadata } from '@/lib/skript-files'
 import sharp from 'sharp'
 
 // Increase function timeout for large uploads
@@ -250,21 +251,12 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const mappedVideos = videos.map(video => {
-      const metadata = video.metadata as Record<string, unknown>
-      return {
-        id: video.id,
-        filename: video.filename,
-        provider: video.provider,
-        metadata: {
-          playbackId: metadata?.playbackId as string | undefined,
-          poster: metadata?.poster as string | undefined,
-          blurDataURL: metadata?.blurDataURL as string | undefined,
-          aspectRatio: typeof metadata?.aspectRatio === 'number' ? metadata.aspectRatio : undefined,
-          status: (metadata?.status as string | undefined) ?? 'ready',
-        },
-      }
-    })
+    const mappedVideos = videos.map(video => ({
+      id: video.id,
+      filename: video.filename,
+      provider: video.provider,
+      metadata: toVideoInfoMetadata(video.metadata, 'ready'),
+    }))
 
     return NextResponse.json({ files: mappedFiles, videos: mappedVideos })
   } catch (error) {

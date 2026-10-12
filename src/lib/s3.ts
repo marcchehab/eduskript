@@ -225,16 +225,18 @@ export async function generatePresignedUploadUrl(
  *
  * @param key - The S3 object key (path)
  * @param expiresIn - URL expiry time in seconds (default: 3600 = 1 hour)
+ * @param bucket - Optional bucket name (defaults to main bucket)
  * @returns Presigned download URL
  */
 export async function generatePresignedDownloadUrl(
   key: string,
-  expiresIn: number = 3600
+  expiresIn: number = 3600,
+  bucket?: string
 ): Promise<string> {
   const client = getS3Client()
 
   const command = new GetObjectCommand({
-    Bucket: SCALEWAY_BUCKET,
+    Bucket: bucket || SCALEWAY_BUCKET,
     Key: key,
   })
 

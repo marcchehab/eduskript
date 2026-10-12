@@ -166,7 +166,7 @@ Im Dunkelmodus wird das Bild automatisch invertiert (Weiss wird dunkel, Schwarz 
 | **GIF** | Kurze Animationen |
 | **Excalidraw** (`.excalidraw.light.svg` + `.excalidraw.dark.svg`) | Themenabhängige, bearbeitbare Diagramme |
 
-Für Videos siehe das Kapitel **Video** — sie werden separat über Mux abgewickelt.
+Für Videos siehe das Kapitel **Video** — sie werden separat abgewickelt (gehostet bei Infomaniak VOD in der Schweiz).
 
 ---
 

@@ -166,7 +166,7 @@ In dark mode, the image is auto-inverted (white becomes dark, black becomes ligh
 | **GIF** | Short animations |
 | **Excalidraw** (`.excalidraw.light.svg` + `.excalidraw.dark.svg`) | Theme-aware editable diagrams |
 
-For videos, see the **Video** chapter — they're handled separately via Mux.
+For videos, see the **Video** chapter — they’re handled separately (hosted on Infomaniak VOD in Switzerland).
 
 ---
 

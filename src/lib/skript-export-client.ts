@@ -28,6 +28,7 @@ export interface ExportFile {
 export interface ExportVideo {
   id: string
   filename: string
+  provider?: string
   playbackId?: string
   muxAssetId: string | null
 }
@@ -218,15 +219,18 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer())
 }
 
-/** Polls prepare-download until a video's static MP4 rendition is ready. */
+/**
+ * Polls prepare-download until a video's MP4 is ready. Infomaniak rows answer
+ * at once (highest stored rendition); Mux rows need a static rendition first.
+ */
 async function resolveVideoUrl(video: ExportVideo): Promise<string> {
-  if (!video.muxAssetId) throw new Error('Video is not ready on Mux yet')
+  if (video.provider !== 'infomaniak' && !video.muxAssetId) throw new Error('Video is not ready on Mux yet')
 
   for (let attempt = 0; attempt < VIDEO_POLL_ATTEMPTS; attempt++) {
     const res = await fetch(`/api/videos/${video.id}/prepare-download`, { method: 'POST' })
     const data = await res.json()
     if (data.status === 'ready') return data.url
-    if (data.status === 'error') throw new Error(data.error || 'Mux error')
+    if (data.status === 'error') throw new Error(data.error || 'Video provider error')
     await sleep(VIDEO_POLL_INTERVAL_MS)
   }
   throw new Error('Timed out preparing the video')

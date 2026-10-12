@@ -122,7 +122,7 @@ export function VideoImportDialog({ open, onOpenChange, targetSkriptId, onImport
           <DialogTitle>Import a video from another skript</DialogTitle>
           <DialogDescription>
             Search videos across your skripts. Importing links the video to this skript without
-            re-uploading it to Mux.
+            re-uploading it.
           </DialogDescription>
         </DialogHeader>
 

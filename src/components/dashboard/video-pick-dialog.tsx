@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Film, Upload } from 'lucide-react'
 import { VideoUploadModal } from './video-upload-modal'
 import type { VideoInfo } from '@/lib/skript-files'
+import { getVideoPlayback } from '@/lib/video-playback'
 
 interface VideoPickDialogProps {
   open: boolean
@@ -23,7 +24,7 @@ interface VideoPickDialogProps {
 
 /**
  * Ribbon "Video" dialog: paste a YouTube/video URL, pick one of the skript's
- * uploaded videos, or drop a file — the file goes through the existing Mux
+ * uploaded videos, or drop a file — the file goes through the existing video
  * upload modal (video-upload-modal.tsx) and is embedded by filename.
  * Both URL and filename insert as `![](…)` — the markdown pipeline recognizes
  * YouTube URLs and uploaded video filenames there.
@@ -86,7 +87,7 @@ export function VideoPickDialog({ open, onOpenChange, skriptId, videos, onInsert
                 <div className="text-xs text-muted-foreground uppercase mb-2">Uploaded videos</div>
                 <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto">
                   {videos.map(video => {
-                    const ready = Boolean(video.metadata.playbackId)
+                    const ready = getVideoPlayback(video.provider, video.metadata) !== null
                     return (
                       <button
                         key={video.filename}
@@ -97,7 +98,7 @@ export function VideoPickDialog({ open, onOpenChange, skriptId, videos, onInsert
                         className="flex items-center gap-2 p-2 rounded-md border border-border hover:border-primary/60 hover:bg-accent/40 disabled:opacity-50 text-left"
                       >
                         {video.metadata.poster ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- tiny Mux poster thumbnail, not worth next/image
+                          // eslint-disable-next-line @next/next/no-img-element -- tiny poster thumbnail, not worth next/image
                           <img src={video.metadata.poster} alt="" className="w-12 h-8 object-cover rounded shrink-0" />
                         ) : (
                           <Film className="w-5 h-5 text-muted-foreground shrink-0" />

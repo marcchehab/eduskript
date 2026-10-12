@@ -59,9 +59,9 @@ The markdown transformation follows this **exact plugin order** (critical for pr
 
 4. **`remarkMuxVideo`** (`src/lib/remark-plugins/mux-video.ts`)
    - **Hybrid plugin**: Queries DB on server (skriptId), uses fileList on client
-   - Transforms `.mp4`/`.mov` references to Mux video components
+   - Transforms `.mp4`/`.mov` references to uploaded-video components (Infomaniak VOD or legacy Mux)
    - Looks up `{video}.json` metadata file for playback ID, poster, blur data
-   - Creates custom `<muxvideo>` element with Mux-specific data attributes
+   - Creates a custom `<muxvideo>` element (historic name; provider-independent since 2026-10)
 
 5. **`remarkCodeEditor`** (`src/lib/remark-plugins/code-editor.ts`)
    - Converts code blocks with `editor` keyword to interactive editors

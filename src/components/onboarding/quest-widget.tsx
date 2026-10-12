@@ -14,13 +14,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Check, PartyPopper } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DockedPanel, DOCKED_PANEL_BORDER } from "@/components/docked-panel";
+import { HlsVideo } from "@/components/markdown/hls-video";
+import type { VideoPlayback } from "@/lib/video-playback";
 import { UiLocaleSwitcher, useUiLocale } from "@/lib/i18n/client";
 import { useIsFreeTeacher } from "@/hooks/use-billing";
 import type { UiLocale } from "@/lib/i18n/locale";
@@ -36,14 +37,7 @@ import {
   type QuestStep,
 } from "@/lib/onboarding-quest/types";
 
-// Same dynamic-import pattern as MuxVideo (src/components/markdown/mux-video.tsx)
-// — mux-player is a custom element and needs client-only rendering.
-const MuxPlayer = dynamic(
-  () => import("@mux/mux-player-react").then((mod) => mod.default),
-  { ssr: false },
-);
-
-type StepVideo = { playbackId: string; poster?: string; aspectRatio?: number };
+type StepVideo = VideoPlayback;
 
 // Bilingual (German default, flag switcher in the header) — one of the few
 // UI surfaces that is; see src/lib/i18n/locale.ts. Button names the steps
@@ -377,24 +371,13 @@ export function OnboardingQuestWidget() {
                 </p>
                 {stepVideos[step] && (
                   <div className="mt-1.5">
-                    <MuxPlayer
-                      playbackId={stepVideos[step]!.playbackId}
+                    {/* GIF-style, same as the markdown <muxvideo gif /> treatment. */}
+                    <HlsVideo
+                      hlsUrl={stepVideos[step]!.hlsUrl}
                       poster={stepVideos[step]!.poster}
-                      style={{
-                        aspectRatio: stepVideos[step]!.aspectRatio ?? 16 / 9,
-                        // mux-player's own CSS var — hides the whole control bar, same as
-                        // the markdown <muxvideo gif /> treatment (mux-video.tsx).
-                        "--controls": "none",
-                        pointerEvents: "none" as const,
-                      }}
-                      className="w-full rounded-lg overflow-hidden"
-                      autoPlay="muted"
-                      muted
-                      loop
-                      playsInline
-                      nohotkeys
-                      preload="auto"
-                      disableTracking
+                      aspectRatio={stepVideos[step]!.aspectRatio}
+                      className="w-full"
+                      gif
                     />
                   </div>
                 )}

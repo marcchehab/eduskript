@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Upload, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { requestVideoUpload, finishVideoUpload } from '@/lib/video-upload-client'
 import {
   Dialog,
   DialogContent,
@@ -54,12 +55,17 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
     onOpenChange(isOpen)
   }, [state, reset, onOpenChange])
 
-  useEffect(() => {
-    if (!open || !initialFile) return
-    setFile(initialFile)
-    setFilename(initialFile.name)
-    setError('')
-  }, [open, initialFile])
+  // Adopt initialFile each time the modal opens with one (state adjusted
+  // during render — React's pattern for reacting to a prop change).
+  const [adopted, setAdopted] = useState<{ open: boolean; file: File | null | undefined }>({ open: false, file: null })
+  if (adopted.open !== open || adopted.file !== initialFile) {
+    setAdopted({ open, file: initialFile })
+    if (open && initialFile) {
+      setFile(initialFile)
+      setFilename(initialFile.name)
+      setError('')
+    }
+  }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0]
@@ -97,21 +103,14 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
     setState('preparing')
 
     try {
-      // Step 1: Get signed upload URL
-      const res = await fetch('/api/videos/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: filename.trim(), skriptId }),
-      })
+      // Step 1: Video row + presigned S3 PUT
+      const { uploadUrl, videoId, uploadHeaders } = await requestVideoUpload(
+        filename.trim(),
+        skriptId,
+        file.type
+      )
 
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to get upload URL')
-      }
-
-      const { uploadUrl } = await res.json()
-
-      // Step 2: Upload directly to Mux via PUT
+      // Step 2: Upload directly to S3 via PUT (XHR for progress events)
       setState('uploading')
       setProgress(0)
 
@@ -145,11 +144,16 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
         })
 
         xhr.open('PUT', uploadUrl)
+        for (const [k, v] of Object.entries(uploadHeaders)) xhr.setRequestHeader(k, v)
         xhr.send(file)
       })
 
-      // Upload complete — close modal and notify parent
-      // Mux will process the video asynchronously; the webhook updates status
+      // Step 3: hand the upload to Infomaniak VOD for encoding.
+      setState('preparing')
+      await finishVideoUpload(videoId)
+
+      // Close modal and notify parent. Encoding runs asynchronously; the
+      // video browser shows the processing state and polls /api/videos/sync.
       const uploadedName = filename.trim()
       reset()
       onOpenChange(false)
@@ -273,7 +277,7 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
                 />
               </div>
               <p className="text-xs text-center text-muted-foreground">
-                Uploading directly to Mux
+                Video hosting in Switzerland (Infomaniak)
               </p>
             </div>
           )}

@@ -10,7 +10,7 @@ import { prisma } from './prisma'
 import { CACHE_TAGS } from './cached-queries'
 import { getS3Key } from './file-storage'
 import { getTeacherFileUrl } from './s3'
-import type { SkriptFilesData, SkriptFile, VideoInfo } from './skript-files'
+import { toVideoInfoMetadata, type SkriptFilesData, type SkriptFile, type VideoInfo } from './skript-files'
 
 /**
  * SSR: Query database for all files and videos associated with a skript.
@@ -63,19 +63,11 @@ async function fetchSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
   // Build videos record - include all videos for now (they're global)
   const videos: Record<string, VideoInfo> = {}
   for (const video of allVideos) {
-    const metadata = video.metadata as Record<string, unknown>
     videos[video.filename] = {
       id: video.id,
       filename: video.filename,
       provider: video.provider,
-      metadata: {
-        playbackId: metadata?.playbackId as string | undefined,
-        poster: metadata?.poster as string | undefined,
-        blurDataURL: metadata?.blurDataURL as string | undefined,
-        aspectRatio: typeof metadata?.aspectRatio === 'number' ? metadata.aspectRatio : undefined,
-        assetId: metadata?.assetId as string | undefined,
-        status: metadata?.status as string | undefined,
-      },
+      metadata: toVideoInfoMetadata(video.metadata),
     }
   }
 
@@ -83,7 +75,8 @@ async function fetchSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
 }
 
 /**
- * Coarse tag for callers that cannot name the affected skript — the Mux webhook
+ * Coarse tag for callers that cannot name the affected skript — the video
+ * provider callbacks/sync (src/lib/video-sync.server.ts)
  * and the admin video tools work from an asset or video id, and a video is M2M
  * with skripts. Dropping every skript's file cache is fine there: both are rare,
  * manual events, and the entries rebuild from two indexed queries.

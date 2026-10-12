@@ -450,9 +450,9 @@ Use \`<style>\` blocks to add scoped CSS for custom styling:
 Inline \`style="..."\` attributes also work on any element.`)
 
   // Videos
-  sections.push(`## Videos (Mux)
+  sections.push(`## Videos (uploaded)
 
-Reference video files by name. The system looks up the corresponding \`.json\` metadata file for Mux playback.
+Reference uploaded video files (Videos panel) by name.
 
 \`![Video description](lecture.mp4)\`
 
@@ -914,7 +914,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Text alignment:** wrap content in \`<left>\`, \`<center>\`, or \`<right>\` — markdown parses inside with or without surrounding blank lines. Closing tag required.
 
-**Videos (Mux):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`.
+**Videos (uploaded):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`.
 
 **Pinned content:** \`<stickme [id="x"] [width="800px|50%"]>…</stickme>\` — docks wrapped content to the right margin while scrolling; \`width\` = default pinned width (reader resize overrides), default one third of the page.
 

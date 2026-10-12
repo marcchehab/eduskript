@@ -8,10 +8,10 @@ const MAX_RESULTS = 50
 /**
  * GET /api/videos/search?q=<query>&excludeSkriptId=<id>
  *
- * Search Mux videos the current user can reuse — videos they uploaded, or
+ * Search uploaded videos the current user can reuse — videos they uploaded, or
  * videos linked (via SkriptVideos) to a skript they author. Backs the
  * cross-skript video import dialog: linking a video to another skript is
- * just a join-table row, since the Mux asset itself is shared (cf.
+ * just a join-table row, since the hosted video itself is shared (cf.
  * /api/files/search, the file equivalent).
  *
  *   q                case-insensitive substring on filename. Empty/missing

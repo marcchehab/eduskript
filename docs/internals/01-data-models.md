@@ -140,20 +140,27 @@ Content-addressed by `hash`. See the **File Storage** chapter for the S3 storage
 
 ---
 
-## Video (Mux-hosted)
+## Video (Infomaniak VOD; legacy Mux)
 
 ```prisma
 model Video {
   id           String  @id @default(cuid())
-  skriptId     String
   filename     String
-  playbackId   String            // Mux playback ID
-  metadata     Json              // { duration, posterUrl, aspectRatio, ... }
-  status       String            // "processing" | "ready" | "errored"
+  provider     String  @default("mux")  // "infomaniak" | "mux" (not yet migrated)
+  metadata     Json                     // provider-specific, see src/lib/video-playback.ts
+  uploadedById String?
+  muxUploadId  String? @unique          // legacy Mux webhook lookup
+  muxAssetId   String? @unique          // legacy Mux webhook lookup / static MP4
+  vodMediaId   String? @unique          // Infomaniak media id (callback lookup)
+  skripts      Skript[]                 // M2M via _SkriptVideos
 }
 ```
 
-Videos are separate from the `File` table — they use Mux for streaming, not S3.
+Videos are separate from the `File` table. Uploads go browser → S3
+(`video-uploads/`, deleted once encoded) → Infomaniak VOD import; state comes
+back via callback, dashboard poll and daily cron (`src/lib/video-sync.server.ts`).
+Playback is `<video>` + hls.js for both providers (`src/components/markdown/hls-video.tsx`).
+Rollout/migration: `MIGRATION-VOD.md`.
 
 ---
 

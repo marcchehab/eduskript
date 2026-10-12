@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Film, Copy, Check, Search, Plus, X, Loader2, Link, Upload, AlertCircle, Trash2, Import } from 'lucide-react'
 import type { VideoInfo } from '@/lib/skript-files'
+import { isVideoPending } from '@/lib/video-playback'
 import { VideoUploadModal } from './video-upload-modal'
 import { VideoImportDialog } from './video-import-dialog'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
@@ -19,9 +20,9 @@ interface VideoBrowserProps {
   skriptId?: string
 }
 
-// Status polling while Mux is still processing an upload (see the effect below).
+// Status polling while a video is still processing (see the effect below).
 const STATUS_POLL_MS = 5000
-const MAX_STATUS_POLLS = 60
+const MAX_STATUS_POLLS = 120
 
 export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded, onUploadComplete, skriptId }: VideoBrowserProps) {
   const [query, setQuery] = useState('')
@@ -45,12 +46,17 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
     ? videos.filter(v => v.filename.toLowerCase().includes(query.toLowerCase()))
     : videos
 
-  // Mux processes uploads asynchronously and reports back through the webhook,
-  // which writes the DB row — nothing pushes that to this list. Without a poll
-  // the spinner sits at "waiting" until the user reloads the page. Re-fetch
-  // every 5s while at least one video is unfinished, and give up after
-  // MAX_STATUS_POLLS (~5 min) so a stuck/errored upload doesn't poll forever.
-  const pending = videos.some(v => v.metadata.status === 'waiting' || v.metadata.status === 'processing')
+  // Infomaniak encodes uploads asynchronously and reports back through a
+  // callback — which never reaches localhost and may be missed in production.
+  // So while at least one video is unfinished (encoding, or captions still
+  // being transcribed), ask the server to pull the state from Infomaniak
+  // (/api/videos/sync) every 5s and re-fetch the list. Gives up after
+  // MAX_STATUS_POLLS (~10 min) so a stuck upload doesn't poll forever; the
+  // daily cron syncs whatever is left. Legacy Mux rows still rely on the Mux
+  // webhook; for them the poll is only the re-fetch.
+  const pendingIds = videos.filter(v => isVideoPending(v.metadata)).map(v => v.id)
+  const pendingKey = pendingIds.join(',')
+  const pending = pendingIds.length > 0
   const pollsRef = useRef(0)
   const onVideoAddedRef = useRef(onVideoAdded)
   onVideoAddedRef.current = onVideoAdded
@@ -60,16 +66,23 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
       pollsRef.current = 0
       return
     }
+    const ids = pendingKey.split(',')
     const timer = setInterval(() => {
       if (pollsRef.current >= MAX_STATUS_POLLS) {
         clearInterval(timer)
         return
       }
       pollsRef.current += 1
-      onVideoAddedRef.current?.()
+      fetch('/api/videos/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+        .catch(() => {})
+        .finally(() => onVideoAddedRef.current?.())
     }, STATUS_POLL_MS)
     return () => clearInterval(timer)
-  }, [pending])
+  }, [pending, pendingKey])
 
   const handleCopyFilename = async (filename: string) => {
     try {

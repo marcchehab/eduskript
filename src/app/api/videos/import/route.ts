@@ -9,7 +9,7 @@ import { invalidateSkriptFiles } from '@/lib/skript-files.server'
  * Body: { sourceVideoId: string, targetSkriptId: string }
  *
  * Cross-skript video import: links an existing Video to another skript via
- * the SkriptVideos join table. No Mux re-upload — the asset is shared, so
+ * the SkriptVideos join table. No re-upload — the hosted video is shared, so
  * this is purely a join-table row (cf. /api/files/import, which clones a
  * File row that points at the same content-addressed S3 object).
  *

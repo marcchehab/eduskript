@@ -1,12 +1,12 @@
 # Video
 
-Video ohne die YouTube-Steuer — keine Werbung, kein Versinken in Empfehlungen, kein «Dieses Video ist in deiner Region nicht verfügbar». Eduskript hostet deine Videos über [Mux](https://mux.com), das heisst adaptives Streaming auf jedem Gerät plus automatisch generierte Untertitel.
+Video ohne die YouTube-Steuer — keine Werbung, kein Versinken in Empfehlungen, kein «Dieses Video ist in deiner Region nicht verfügbar». Eduskript hostet deine Videos in der Schweiz über [Infomaniak VOD](https://www.infomaniak.com/de/hosting/video-streaming), das heisst adaptives Streaming auf jedem Gerät plus automatisch generierte Untertitel — und die Browser der Schülerinnen und Schüler sprechen beim Abspielen nur mit Schweizer Servern.
 
 ---
 
 ## Hochladen und einbetten
 
-Lege eine `.mp4`- oder `.mov`-Datei in der **Videos**-Schublade deines Skripts ab. Mux verarbeitet sie für adaptives Streaming (das dauert beim ersten Ansehen ein bis zwei Minuten — die Datei erscheint in der Videoliste mit einer «processing»-Anzeige, bis sie bereit ist).
+Lege eine `.mp4`- oder `.mov`-Datei in der **Videos**-Schublade deines Skripts ab. Sie wird für adaptives Streaming aufbereitet (das dauert ein bis zwei Minuten — die Datei erscheint in der Videoliste mit einer «processing»-Anzeige, bis sie bereit ist).
 
 Sobald sie bereit ist, bette sie in Markdown wie ein Bild ein:
 
@@ -44,15 +44,13 @@ Dasselbe in HTML:
 <muxvideo src="lecture.mp4" poster="thumbnail.jpg" />
 ```
 
-Beide Syntaxen führen zum selben Player. Gibst du kein Poster an, wird das automatisch generierte Mux-Vorschaubild (Frame bei `time=0`) als Fallback verwendet.
+Beide Syntaxen führen zum selben Player. Gibst du kein Poster an, wird das automatisch generierte Vorschaubild als Fallback verwendet.
 
 ---
 
 ## Automatisch generierte Untertitel
 
-Jedes hochgeladene Video erhält während der Verarbeitung automatisch von Mux generierte englische Untertitel. Schülerinnen und Schüler schalten sie über den Untertitel-Button des Players ein. Mehrsprachige Untertitel stehen auf der Roadmap.
-
-Wenn die automatisch generierten Untertitel falsch sind (Fachjargon, Akzente), kannst du sie überschreiben, indem du über die Einstellungen des Video-Panels (pro Video) eine eigene `.vtt`-Datei hochlädst.
+Jedes hochgeladene Video wird nach der Aufbereitung automatisch transkribiert (die gesprochene Sprache wird erkannt, z. B. Deutsch oder Englisch). Die Untertitel erscheinen kurz nachdem das Video selbst bereit ist. Schülerinnen und Schüler schalten sie über den Untertitel-Button des Players ein. Videos ohne Sprache erhalten keine Untertitel.
 
 ---
 
@@ -73,13 +71,7 @@ Nützlich für kurze Demo-Loops im Seitenhintergrund, Intro-Animationen oder vis
 
 ## Adaptives Streaming, jedes Gerät
 
-Mux erzeugt automatisch mehrere Qualitätsstufen (240p, 480p, 720p, 1080p, 4K je nach Quelle). Der Player wählt die passende Qualität anhand der Verbindung und des Geräts des Schülers:
-
-- Handy im Mobilfunknetz → 480p, ~1 MB / Minute
-- Laptop im WLAN → 1080p, ~10 MB / Minute
-- TV im schnellen WLAN → 4K, ~30 MB / Minute
-
-Schüler können das über das Qualitätsmenü des Players überschreiben, wenn sie eine bestimmte Auflösung erzwingen wollen.
+Jeder Upload wird in mehreren Qualitätsstufen aufbereitet (360p, 480p, 720p, 1080p, je nach Quelle). Der Player wählt die passende Stufe anhand der Verbindung und der Playergrösse — ein Handy im Mobilfunknetz erhält eine kleine Stufe, ein Laptop im WLAN die volle.
 
 ---
 
@@ -100,9 +92,7 @@ Schüler können das über das Qualitätsmenü des Players überschreiben, wenn 
 
 ## Kosten und Speicher
 
-Videos zählen zu deiner Mux-Nutzung (Speicher + gestreamte Minuten). Die Gratis-Stufe deckt eine ordentliche Menge Unterrichtsinhalt ab. Für institutionelle Nutzung mit Hunderten von Videos sprich mit deinem Org-Admin über die Mux-Abrechnungsstufe.
-
-Videos nutzen dieselbe inhaltsadressierte Deduplizierung wie Dateien — lädst du dasselbe Video in zwei Skripts hoch, wird es nur einmal gespeichert.
+Video-Hosting ist in den bezahlten Plänen enthalten. Ein Video aus einem anderen Skript zu importieren (Button **Import** in der Videos-Schublade) verwendet das gespeicherte Video wieder, statt es erneut hochzuladen.
 
 ---
 
@@ -110,7 +100,7 @@ Videos nutzen dieselbe inhaltsadressierte Deduplizierung wie Dateien — lädst 
 
 | Ziel | Syntax |
 |------|--------|
-| Ein Mux-Video einbetten | `![Caption](filename.mp4)` |
+| Ein hochgeladenes Video einbetten | `![Caption](filename.mp4)` |
 | Eigenes Poster aus Skript-Dateien | `![](filename.mp4 "thumbnail.jpg")` |
 | Eigenes Poster von URL | `![](filename.mp4 "https://example.com/thumb.jpg")` |
 | Autoplay + Loop (stummer Hintergrund) | `![autoplay loop](bg.mp4 "preview.jpg")` |
