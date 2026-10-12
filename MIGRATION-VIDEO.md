@@ -128,8 +128,9 @@ playcheck.cjs (not in the repo).
    clips to Mux — upload them through the dashboard instead).
    Code part done 2026-10-12: all of the above removed from the repo, the
    worker no longer reads http(s) sources, `upload-onboarding-video.mjs` now
-   uploads to S3 + queues a job. Still open: delete assets in the Mux
-   dashboard, drop `MUX_*` from prod.env.
+   uploads to S3 + queues a job. 2026-10-12: all 101 Mux assets deleted
+   after downloading their masters (local archive, not in S3). `MUX_*` stays
+   only in the local prod.env.
 
 Rollback of a migrated row (obsolete since the app no longer plays Mux rows):
 ```sql

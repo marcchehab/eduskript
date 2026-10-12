@@ -9,7 +9,7 @@
  *       captions: [{src, lang, label}], width, height, aspectRatio, duration,
  *       renditions: [720, 480], muxPlaybackId? (history only, never used) }
  *
- *   provider "mux" (legacy, all migrated by scripts/migrate-mux-to-self.mjs):
+ *   provider "mux" (legacy, all migrated to "self" in Oct 2026, see MIGRATION-VIDEO.md):
  *     not playable — returns null, the player shows "unavailable".
  *
  * Every URL for a ready "self" row points at our S3 (s3.pub1.infomaniak.cloud,

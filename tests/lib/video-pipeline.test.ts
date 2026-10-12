@@ -15,7 +15,6 @@ import {
   // @ts-expect-error — plain .mjs without type declarations
 } from '../../scripts/video-worker/lib.mjs'
 // @ts-expect-error — plain .mjs without type declarations
-import { planMigration, flippedMetadata, parseArgs, muxSourceUrl } from '../../scripts/migrate-mux-to-self.mjs'
 
 describe('resolution / size guard', () => {
   it('app and worker use the same limits', () => {
@@ -224,38 +223,5 @@ describe('getVideoPlayback (provider switch)', () => {
     expect(isVideoPending({ status: 'encoding', progress: 0.5 })).toBe(true)
     expect(isVideoPending({ status: 'errored' })).toBe(false)
     expect(isVideoPending({ status: 'ready' })).toBe(false)
-  })
-})
-
-describe('migrate-mux-to-self planning (dry-run core)', () => {
-  const mux = [
-    { id: 'v1', filename: 'a.mp4', metadata: { playbackId: 'P1', status: 'ready' } },
-    { id: 'v2', filename: 'a.mp4', metadata: { playbackId: 'P1', status: 'ready' } }, // page-copy duplicate
-    { id: 'v3', filename: 'b.mp4', metadata: { playbackId: 'P2', status: 'ready' } },
-    { id: 'v4', filename: 'c.mp4', metadata: { status: 'errored' } }, // no playback id
-  ]
-
-  it('one job per playbackId (page copies share the output), skips rows without one', () => {
-    const plan = planMigration(mux, [], {})
-    expect(plan.map((p: { playbackId: string }) => p.playbackId)).toEqual(['P1', 'P2'])
-    expect(plan[0].rows.map((r: { id: string }) => r.id)).toEqual(['v1', 'v2'])
-    expect(muxSourceUrl('P1')).toBe('https://stream.mux.com/P1.m3u8')
-  })
-
-  it('reuses the job of an earlier run (resumable); --limit counts new jobs only', () => {
-    const migrated = [{ id: 'v9', metadata: { muxPlaybackId: 'P1' }, encode_job_id: 'JOB1' }]
-    const plan = planMigration(mux, migrated, { limit: 0 })
-    expect(plan).toEqual([{ playbackId: 'P1', rows: mux.slice(0, 2), reuseJobId: 'JOB1' }])
-  })
-
-  it('--id targets a single video', () => {
-    expect(planMigration(mux, [], { id: 'v3' }).map((p: { rows: { id: string }[] }) => p.rows[0].id)).toEqual(['v3'])
-  })
-
-  it('flipped rows keep the Mux id (fallback/rollback) and are queued', () => {
-    expect(flippedMetadata({ playbackId: 'P1', poster: 'x', aspectRatio: 1.5, status: 'ready' })).toEqual({
-      poster: 'x', aspectRatio: 1.5, status: 'queued', muxPlaybackId: 'P1',
-    })
-    expect(parseArgs(['--dry-run', '--limit', '1', '--id', 'v3'])).toMatchObject({ dryRun: true, limit: 1, id: 'v3' })
   })
 })
