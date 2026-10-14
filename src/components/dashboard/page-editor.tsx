@@ -18,7 +18,7 @@ import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/edi
 import { AIEditChatModal } from '@/components/ai/ai-edit-chat-modal'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { RibbonGroup, RibbonBigButton } from '@/components/dashboard/editor-ribbon'
-import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, Check, Shield, Globe, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, Presentation, Link2, GraduationCap, Wand2, HardDriveDownload, Pencil } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, Check, Shield, Globe, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, Presentation, Link2, GraduationCap, Wand2, HardDriveDownload, Pencil, Eye } from 'lucide-react'
 import { PageCog } from '@/components/icons/settings-icons'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
@@ -897,6 +897,21 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // anchored here (opened from the Page settings tab).
   const titleRowActions = (
     <div className="flex shrink-0 items-center gap-1 md:gap-2">
+                  {/* Quick preview: open the public page when it's reachable. */}
+                  {page.isPublished && skript.isPublished && sessionPageSlug && (
+                    <QuestSpotlight step="view_via_eye_icon" label="Try this!">
+                    <a
+                      href={isFrontPage ? buildSkriptUrl(skript.slug) : buildPageUrl(skript.slug, page.slug)}
+                      target="_blank"
+                      rel="noopener"
+                      onClick={() => { if (!isFrontPage) completeStep('view_via_eye_icon') }}
+                      title="View page"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-foreground hover:bg-muted"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </a>
+                    </QuestSpotlight>
+                  )}
                   {isFrontPage ? (
                     <PublishToggle
                       type="frontpage"
@@ -907,9 +922,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       size="sm"
                       publicUrl={sessionPageSlug ? buildSkriptUrl(skript.slug) : null}
                       viewBlockedReason={skript.isPublished ? null : 'The skript is a draft, so its front page is not reachable yet. Publish the skript first.'}
+                      hideOpenLink
                     />
                   ) : (
-                  <QuestSpotlight step="view_via_eye_icon" label="Try this!">
                     <PublishToggle
                       type="page"
                       itemId={page.id}
@@ -919,9 +934,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       size="sm"
                       publicUrl={sessionPageSlug ? buildPageUrl(skript.slug, page.slug) : null}
                       viewBlockedReason={skript.isPublished ? null : 'The skript is a draft, so this page is not reachable yet. Publish the skript first.'}
-                      onOpenPublic={() => completeStep('view_via_eye_icon')}
+                      hideOpenLink
                     />
-                  </QuestSpotlight>
                   )}
                   {/* Page settings: same modal as the skript's settings. Saves
                       title/slug/description directly; the editor state follows. */}

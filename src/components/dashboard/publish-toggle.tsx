@@ -64,6 +64,8 @@ interface PublishToggleProps {
   /** Why the public link can't be opened even though this item is visible (e.g. skript is a draft). */
   viewBlockedReason?: string | null
   onOpenPublic?: () => void
+  /** Hide the "Open …" link (caller shows its own eye button next to the toggle). */
+  hideOpenLink?: boolean
 }
 
 /**
@@ -83,6 +85,7 @@ export function PublishToggle({
   publicUrl,
   viewBlockedReason,
   onOpenPublic,
+  hideOpenLink = false,
   endpoint: endpointProp,
 }: PublishToggleProps) {
   const [open, setOpen] = useState(false)
@@ -177,6 +180,7 @@ export function PublishToggle({
               label={`Open ${noun}`}
               blockedReason={viewBlockedReason}
               onOpen={onOpenPublic}
+              hideOpenLink={hideOpenLink}
             />
           </div>
         )}
@@ -194,11 +198,13 @@ export function PublicLinkRow({
   label,
   blockedReason,
   onOpen,
+  hideOpenLink = false,
 }: {
   publicUrl: string
   label: string
   blockedReason?: string | null
   onOpen?: () => void
+  hideOpenLink?: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const absoluteUrl = typeof window !== 'undefined'
@@ -232,7 +238,7 @@ export function PublicLinkRow({
           {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
-      <a
+      {!hideOpenLink && <a
         href={publicUrl}
         target="_blank"
         rel="noopener"
@@ -241,7 +247,7 @@ export function PublicLinkRow({
       >
         <ExternalLink className="h-3.5 w-3.5" />
         {label}
-      </a>
+      </a>}
     </>
   )
 }
