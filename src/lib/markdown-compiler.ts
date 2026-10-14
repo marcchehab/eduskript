@@ -124,6 +124,7 @@ export const sanitizeSchema = {
     'pdf', // PDF embed using browser's native PDF viewer
     'geogebra', // Interactive GeoGebra applet (deployggb.js) by material id
     'phet', // PhET simulation iframe by sim slug (phet-sim.tsx)
+    'importer', // Link-button to /import with the supported formats (importer-button.tsx)
     'pricing', // Public price table, live plans from /api/plans (pricing-table.tsx)
     'ping', // Server-side TCP-connect "ping" terminal (not ICMP)
     'ai-feedback', // Student-triggered AI feedback on annotation strokes / pasted screenshots
@@ -192,6 +193,7 @@ export const sanitizeSchema = {
     // PhET sim: slug + locale are validated in src/lib/phet.ts before the URL is built.
     'phet': ['sim', 'locale', 'height', 'title'],
     'pricing': ['lang'],
+    'importer': ['lang', 'label'],
     'cta': ['href', 'label', 'variant', 'size', 'align', 'external', 'font', 'weight', 'fontsize', 'fontSize', 'note', 'notehref', 'noteHref'],
     // list-id is honoured only if it matches the list the page's site owns —
     // enforced server-side in src/lib/newsletter.ts, not here.

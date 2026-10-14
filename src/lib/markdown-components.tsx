@@ -32,6 +32,7 @@ import { StickMe } from '@/components/markdown/stick-me'
 import { ColorTitleHeading } from '@/components/markdown/color-title-heading'
 import { YT } from '@/components/markdown/youtube'
 import { Flex, FlexItem } from '@/components/markdown/flex'
+import { ImporterButton } from '@/components/markdown/importer-button'
 import { CtaButton, type CtaVariant, type CtaSize, type CtaAlign } from '@/components/markdown/cta-button'
 import { NewsletterBox } from '@/components/markdown/newsletter-box'
 import { PageBanner } from '@/components/markdown/page-banner'
@@ -1233,6 +1234,13 @@ export function createMarkdownComponents(
     },
 
     // Public price table (live plans). See pricing-table.tsx.
+    // <importer>: link-button to /import (no upload here, see importer-button.tsx).
+    'importer': (props: Record<string, unknown>) => {
+      const str = (k: string): string | undefined =>
+        typeof props[k] === 'string' ? (props[k] as string) : undefined
+      return <ImporterButton lang={str('lang')} label={str('label')} />
+    },
+
     'pricing': (props: Record<string, unknown>) => {
       const str = (k: string): string | undefined =>
         typeof props[k] === 'string' ? (props[k] as string) : undefined

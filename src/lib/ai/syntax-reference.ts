@@ -567,6 +567,18 @@ A call-to-action link styled as a button, matching the site's own UI and theme. 
 
 **Attributes:** \`href\` (required); label from the children or from \`label\` when self-closing; \`variant\` — \`default\` (default) | \`secondary\` | \`outline\` | \`ghost\`; \`size\` — \`lg\` (default) | \`default\` | \`sm\`; \`align\` — \`center\` (default) | \`left\` | \`right\`; \`external\` — \`true\`/\`false\` to force or prevent opening in a new tab (absolute URLs open in a new tab by default).`)
 
+  // Import button
+  sections.push(`## Import button
+
+A button linking to the anonymous skript import (/import), where visitors convert their own Word/PDF file into an Eduskript skript. The supported formats are shown inside the button. It only links — the upload and its privacy/AI notice happen on /import.
+
+\`\`\`html
+<importer lang="de" />
+<importer label="Try it with your own worksheet" />
+\`\`\`
+
+**Attributes (all optional):** \`lang\` — \`de\` for German default text, anything else English; \`label\` — custom button text.`)
+
   // Newsletter signup
   sections.push(`## Newsletter signup
 
@@ -958,6 +970,8 @@ export function getCondensedSyntaxReference(): string {
 **Pricing:** \`<pricing lang="de" />\` — public price table (Free / Classroom / Supporter / School + "no traps" list) with live prices from the plan table; for landing pages. Put it on its own line; it has no signup button, add a \`<cta>\` after it if wanted.
 
 **Spacer:** \`<spacer [pattern="checkered|lines|dots|blank"] [height="200"] [id="sp1"] />\` — blank writing area students solve on by hand with the pens; \`checkered\` is graph paper. Editor gives drag-to-resize + a pattern/delete toolbar; publishes as a plain patterned box.
+
+**Import button:** \`<importer lang="de" />\` — button linking to the anonymous Word/PDF import (/import), shows the supported formats inside the button; optional \`label\`. Links only (the upload with its privacy notice happens on /import).
 
 **CTA button:** \`<cta href="/auth/signup">Create free account</cta>\` — a link styled as a button in the site's own theme; \`label\` instead of children when self-closing, plus \`variant\` (default|secondary|outline|ghost), \`size\` (lg|default|sm), \`align\` (center|left|right), and typography \`font\` (heading|body), \`weight\` (normal|medium|semibold|bold), \`fontsize\` (sm|base|lg|xl|2xl|3xl or a CSS length); \`note\` + \`notehref\` add a small muted link under the button (e.g. \`note="What does it cost?" notehref="#pricing"\`). Never draw a button as an image.
 
