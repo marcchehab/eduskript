@@ -193,7 +193,7 @@ export const sanitizeSchema = {
     // PhET sim: slug + locale are validated in src/lib/phet.ts before the URL is built.
     'phet': ['sim', 'locale', 'height', 'title'],
     'pricing': ['lang'],
-    'importer': ['lang', 'label'],
+    'importer': ['lang', 'label', 'sub'],
     'cta': ['href', 'label', 'variant', 'size', 'align', 'external', 'font', 'weight', 'fontsize', 'fontSize', 'note', 'notehref', 'noteHref'],
     // list-id is honoured only if it matches the list the page's site owns —
     // enforced server-side in src/lib/newsletter.ts, not here.

@@ -4,6 +4,7 @@
  *   <importer />
  *   <importer lang="de" />
  *   <importer lang="de" label="Eigenes Skript ausprobieren" />
+ *   <importer lang="de" sub="Word oder PDF · ohne Account · gratis" />
  *
  * Deliberately only a link, no upload: /import shows the student-data and
  * AI-processing notice that must be seen before a file is sent. The format list
@@ -22,9 +23,11 @@ const FORMATS = '.docx · .doc · .odt · .rtf · .pdf'
 interface ImporterButtonProps {
   lang?: string
   label?: string
+  /** Second line under the label; defaults to the format list. */
+  sub?: string
 }
 
-export function ImporterButton({ lang, label }: ImporterButtonProps) {
+export function ImporterButton({ lang, label, sub }: ImporterButtonProps) {
   const de = lang === 'de'
   const text = label || (de ? 'Word-Skript importieren' : 'Import a Word script')
 
@@ -40,9 +43,9 @@ export function ImporterButton({ lang, label }: ImporterButtonProps) {
         style={{ textDecoration: 'none', color: '#fff' }}
       >
         <Upload className="size-6! shrink-0" />
-        <span className="flex flex-col items-start gap-0.5 leading-tight">
+        <span className="flex flex-col items-center gap-0.5 leading-tight">
           <span className="text-base font-semibold">{text}</span>
-          <span className="text-xs opacity-80 font-normal">{FORMATS}</span>
+          <span className="text-xs opacity-80 font-normal">{sub || FORMATS}</span>
         </span>
       </Link>
     </span>

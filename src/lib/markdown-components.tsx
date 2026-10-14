@@ -1238,7 +1238,7 @@ export function createMarkdownComponents(
     'importer': (props: Record<string, unknown>) => {
       const str = (k: string): string | undefined =>
         typeof props[k] === 'string' ? (props[k] as string) : undefined
-      return <ImporterButton lang={str('lang')} label={str('label')} />
+      return <ImporterButton lang={str('lang')} label={str('label')} sub={str('sub')} />
     },
 
     'pricing': (props: Record<string, unknown>) => {
