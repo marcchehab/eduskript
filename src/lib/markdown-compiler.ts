@@ -34,7 +34,7 @@ import { remarkPlugins } from './markdown-plugins'
 import { rehypeSourceLine, rehypeMathBlockWrapper } from './rehype-plugins/source-line'
 import { rehypeColorTitle } from './rehype-plugins/color-title'
 import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
-import { rehypeMarkdownChildren } from './rehype-plugins/markdown-children'
+import { rehypeMarkdownChildren, rehypeCaptureRawRanges, rehypeMarkRawText } from './rehype-plugins/markdown-children'
 import { rehypeQuizFeedback } from './rehype-plugins/quiz-feedback'
 import { rehypeAllowPluginAttrs } from './rehype-plugins/plugin-attrs'
 import { rehypeColorClasses } from './rehype-plugins/color-classes'
@@ -556,7 +556,9 @@ export async function compileMarkdown(
       ...(footnoteLabel ? { footnoteLabel } : {}),
       footnoteLabelProperties: {},
     })
+    .use(rehypeCaptureRawRanges) // Source ranges of author HTML, so rehypeMarkdownChildren can tell its text from markdown text
     .use(rehypeRaw)
+    .use(rehypeMarkRawText)
     // <p><banner>…</banner></p> → <banner>…</banner> (single-line form). Before
     // rehypeMarkdownChildren so the banner's text is re-parsed as a block.
     .use(rehypeUnwrapBlockTags)

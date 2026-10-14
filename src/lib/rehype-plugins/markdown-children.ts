@@ -78,6 +78,69 @@ const PROMPT_WRAPPER = 'question-prompt'
 const MAX_REPARSE_GENERATIONS = 8
 
 /**
+ * Tags whose text is data or code, never markdown: the generic raw-HTML
+ * re-parse (see walk) does not enter them or their descendants. `plugin` and
+ * `kara-archive` read their children's text as config / fallback code.
+ */
+const VERBATIM_TAGS = new Set([
+  'code', 'pre', 'kbd', 'samp', 'script', 'style', 'textarea', 'title',
+  'svg', 'math', 'iframe',
+  'plugin', 'kara-archive', 'code-editor', 'mermaid-diagram', 'function-plot',
+  'ping', 'login-codes',
+])
+
+/** Offset ranges of `raw` (author HTML) nodes, captured before rehype-raw. */
+type RawRanges = Array<[number, number]>
+
+/**
+ * Run right BEFORE rehype-raw: records the source offsets of every `raw` node.
+ * rehype-raw rebuilds the tree with parse5 and keeps source positions, so a
+ * text node inside one of these ranges is literal text from author-written
+ * HTML (CommonMark never parsed it as markdown). Text outside them came from
+ * markdown and must NOT be re-parsed: its escapes and entities are already
+ * decoded (`\*` → `*`, `&lt;b&gt;` → `<b>`), so a second parse would change it.
+ */
+export function rehypeCaptureRawRanges() {
+  return (tree: Root, file: { data: Record<string, unknown> }) => {
+    const ranges: RawRanges = []
+    const visit = (node: any): void => {
+      if (node.type === 'raw') {
+        const start = node.position?.start?.offset
+        const end = node.position?.end?.offset
+        if (typeof start === 'number' && typeof end === 'number') ranges.push([start, end])
+      }
+      if (Array.isArray(node.children)) node.children.forEach(visit)
+    }
+    visit(tree)
+    file.data.rawRanges = ranges
+  }
+}
+
+/**
+ * Run right AFTER rehype-raw: flags text nodes that lie inside a captured raw
+ * range with `data.rawOrigin = true`. The flag survives stripPositions, so it
+ * still holds after a container's content is spliced into the outer tree.
+ * O(text nodes × raw nodes); both are small per page.
+ */
+export function rehypeMarkRawText() {
+  return (tree: Root, file: { data: Record<string, unknown> }) => {
+    const ranges = (file.data.rawRanges as RawRanges | undefined) ?? []
+    if (ranges.length === 0) return
+    const visit = (node: any): void => {
+      if (node.type === 'text') {
+        const start = node.position?.start?.offset
+        if (typeof start === 'number' && ranges.some(([a, b]) => start >= a && start < b)) {
+          node.data = { ...node.data, rawOrigin: true }
+        }
+        return
+      }
+      if (Array.isArray(node.children)) node.children.forEach(visit)
+    }
+    visit(tree)
+  }
+}
+
+/**
  * Rehype plugin to (re-)parse markdown inside specific custom container
  * elements. Runs after rehype-raw, so it sees a real element tree; it only
  * touches `text` children, so content already parsed via blank lines is left
@@ -93,7 +156,9 @@ export function rehypeMarkdownChildren() {
     .use(remarkParse)
     .use(remarkPlugins)
     .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeCaptureRawRanges)
     .use(rehypeRaw)
+    .use(rehypeMarkRawText)
 
   // Re-parse the combined literal-text children of `node` as markdown and
   // splice the parsed HAST in place of those text nodes. Element children
@@ -257,6 +322,25 @@ export function rehypeMarkdownChildren() {
       await reparseTextChildren(node)
       // Recurse into the freshly-parsed children at the next generation so
       // nested containers (e.g. <flex> inside a <flex-item>) also resolve.
+      for (const child of node.children) {
+        await walk(child, generation + 1)
+      }
+      return
+    }
+
+    if (VERBATIM_TAGS.has(tag)) return
+
+    // Any other tag (span, small, div, td, li, …): markdown in literal text
+    // from author-written HTML renders too. Only rawOrigin text qualifies —
+    // see rehypeCaptureRawRanges for why markdown-origin text must stay as is.
+    const hasRawText =
+      node.type === 'element' &&
+      node.children.some(
+        (c: any) => c.type === 'text' && c.data?.rawOrigin && c.value.trim() !== ''
+      )
+    if (hasRawText) {
+      if (generation >= MAX_REPARSE_GENERATIONS) return
+      node.children = await reparseOrdered(node.children)
       for (const child of node.children) {
         await walk(child, generation + 1)
       }

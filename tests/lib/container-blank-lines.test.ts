@@ -103,3 +103,16 @@ describe('container tags are blank-line independent', () => {
     expect(out).not.toContain('**')
   })
 })
+
+describe('markdown inside any raw HTML tag', () => {
+  it('renders a link inside <span> inside <center> (one raw HTML line)', async () => {
+    const out = await structure('<center><span style="color:grey">[Was](#was)</span></center>')
+    expect(out).toMatch(/<span style="color:grey"><a href="#was">Was<\/a><\/span>/)
+  })
+
+  it('leaves markdown-origin text alone (escapes, entities) and <code> verbatim', async () => {
+    const out = await html('Esc \\*no\\* &lt;b&gt;x&lt;/b&gt;\n\n<div>\n<code>**raw**</code>\n</div>')
+    expect(out).toContain('Esc *no* &lt;b&gt;x&lt;/b&gt;')
+    expect(out).toContain('<code>**raw**</code>')
+  })
+})
