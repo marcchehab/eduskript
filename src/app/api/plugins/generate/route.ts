@@ -11,6 +11,9 @@ import { templatePromptSection } from '@/lib/plugin-templates/server'
 // off) it was fastest (median 8 s) with the most polished results at
 // ~4.6 ¢/plugin; deepseek-v4.1-flash was close at 0.7 ¢ (13 s). Bench runner
 // was ad hoc (session scratchpad), results summarised in the commit message.
+// glm-5.3 since 2026-10-18: 2 prompts (projectile simulator, binary converter),
+// both rendered and worked like glm-5.2's, 4–9 s vs 7–16 s. Spot check only,
+// not a rerun of the 6×8 bench; runner was ad hoc too.
 
 // Upper bound on how long one Generate click may take, across all attempts.
 // Each OpenAI call gets the remaining budget as its timeout and no new attempt
@@ -169,12 +172,14 @@ export async function POST(request: NextRequest) {
             model: ai.model,
             max_tokens: 32000,
             stream: true,
-            // Reasoning off: deepseek-v4.1-flash ignores `effort: 'low'` and
-            // spent the whole budget thinking (2026-10-05, Europe-map prompt:
-            // effort low → 56k reasoning chars, 72 s, cut off; disabled → 15 s,
-            // 24k chars of finished HTML). Attempts truncated "at 0 chars" in
-            // the dev log were this.
-            ...(ai.provider === 'openrouter' ? { reasoning: { enabled: false } } : {}),
+            // Minimal reasoning. glm-5.3's ZDR endpoints refuse `enabled: false`
+            // ("Reasoning is mandatory for this endpoint", 2026-10-18); with
+            // effort minimal it finished two test plugins in 4–9 s via Fireworks
+            // (glm-5.2 with reasoning off: 7–16 s). Caveat for other models:
+            // deepseek-v4.1-flash ignored `effort: 'low'` and spent the whole
+            // budget thinking (2026-10-05: 56k reasoning chars, 72 s, cut off;
+            // disabled → 15 s), so it needs `{ enabled: false }` instead.
+            ...(ai.provider === 'openrouter' ? { reasoning: { effort: 'minimal' } } : {}),
             messages: [
               { role: 'system', content: system },
               { role: 'user', content: userMessage },

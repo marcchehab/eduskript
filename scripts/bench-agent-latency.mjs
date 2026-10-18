@@ -23,7 +23,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 
 const SKRIPT_ID = process.argv[2] ?? 'de4d3e51-4dc2-415b-870d-fba411e4200c'
 const TRIALS = parseInt(process.env.TRIALS ?? '5', 10)
-const MODELS = ['google/gemini-3.5-flash-lite', 'deepseek/deepseek-v4-flash']
+const MODELS = (process.env.MODELS ?? 'google/gemini-3.5-flash-lite,deepseek/deepseek-v4-flash').split(',').map(s => s.trim()).filter(Boolean)
 
 // Copied verbatim from the agent route.
 const TOOLS = [
@@ -53,12 +53,16 @@ ${pageLines || '(no pages yet)'}
 ${focused ? `\n## Currently open page "${focused.title}" content:\n${focused.content}` : ''}`
 }
 
-function openrouterProviderRouting() {
-  const raw = process.env.OPENROUTER_PROVIDERS
-  if (!raw) return {}
-  const providers = raw.split(',').map(s => s.trim()).filter(Boolean)
-  if (providers.length === 0) return {}
-  return { provider: { order: providers, allow_fallbacks: true } }
+// Mirrors openrouterRouting() in src/lib/ai/openrouter.ts (zdr everywhere,
+// Gemini pinned to Vertex). Kept in sync by hand; the .ts module can't be
+// imported from a plain .mjs script.
+function openrouterProviderRouting(model) {
+  if (model.startsWith('google/')) {
+    return { provider: { data_collection: 'deny', zdr: true, order: ['google-vertex/global', 'google-vertex/global/priority'], allow_fallbacks: false } }
+  }
+  const providers = (process.env.OPENROUTER_PROVIDERS ?? '').split(',').map(s => s.trim()).filter(Boolean)
+  const base = { data_collection: 'deny', zdr: true, sort: 'throughput' }
+  return { provider: providers.length ? { ...base, order: providers, allow_fallbacks: true } : base }
 }
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) })
@@ -96,7 +100,9 @@ async function once(model, scenario, stream) {
     messages: [{ role: 'system', content: systemPrompt }, ...scenario.messages],
     tools: TOOLS,
     tool_choice: 'auto',
-    ...openrouterProviderRouting(),
+    ...openrouterProviderRouting(model),
+    // REASONING=minimal|low|none → OpenRouter `reasoning` param (none = enabled:false).
+    ...(process.env.REASONING ? { reasoning: process.env.REASONING === 'none' ? { enabled: false } : { effort: process.env.REASONING } } : {}),
   }
   const t0 = performance.now()
   if (!stream) {

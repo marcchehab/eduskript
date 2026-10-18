@@ -47,7 +47,7 @@ const DEFAULTS: Record<AiPurpose, string> = {
   plan: 'openrouter:google/gemini-3.5-flash-lite',
   content: 'openrouter:deepseek/deepseek-v4.1-flash',
   diagram: 'openrouter:deepseek/deepseek-v4.1-flash',
-  plugin: 'openrouter:z-ai/glm-5.2',
+  plugin: 'openrouter:z-ai/glm-5.3',
   scriptImport: QWEN_CH,
 }
 
