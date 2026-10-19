@@ -55,9 +55,10 @@ export async function GET() {
           select: { pageAuthors: true },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: [
+        { lastLoginAt: { sort: 'desc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
     })
 
     // Expose URL slug under the legacy `pageSlug` field for the admin UI.
