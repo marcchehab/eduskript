@@ -32,6 +32,7 @@ import { extractFeedbackContext } from '@/lib/ai/feedback-context'
 import { loadSolutionImage } from '@/lib/ai/feedback-solution'
 import { recordMetric } from '@/lib/metrics/buffer'
 import { aiConfigured, aiModel } from '@/lib/ai/provider'
+import { locateMarks, marksBlockClosed, parseQuotedMarks } from '@/lib/ai/feedback-marks'
 import type OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
@@ -57,7 +58,15 @@ function checkRateLimit(key: string): boolean {
 
 // ~6MB of base64 ≈ 4.5MB image — far beyond a reasonable screenshot
 const MAX_IMAGE_CHARS = 6_000_000
-const IMAGE_DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/
+const IMAGE_DATA_URL_PREFIX_RE = /^data:image\/(png|jpeg|webp);base64,/
+// Checked as "contains a non-base64 char" rather than one anchored [..]+$
+// over the whole URL: that pattern threw "Maximum call stack size exceeded"
+// in V8 on a ~5M-char JPEG photo (2026-10-21).
+const NON_BASE64_RE = /[^A-Za-z0-9+/=]/
+function isImageDataUrl(url: string): boolean {
+  const prefix = url.match(IMAGE_DATA_URL_PREFIX_RE)
+  return !!prefix && url.length > prefix[0].length && !NON_BASE64_RE.test(url.slice(prefix[0].length))
+}
 
 const BASE_SYSTEM_PROMPT = `You are a patient tutor reviewing a student's handwritten or annotated work on an exercise.
 
@@ -73,6 +82,27 @@ Guidelines:
 - Use LaTeX ($...$) for mathematical expressions.
 - Respond in the language of the exercise content.
 - If the image contains no legible work, say so plainly and stop.`
+
+// Marks on the student's image, step 1 of 2 (see src/lib/ai/feedback-marks.ts):
+// the model quotes the writing, the locator model finds it. Appended after
+// the teacher's instructions so their length/format rules don't drop it.
+// Block LAST: written first, the marks came before the model's reasoning and
+// sometimes contradicted its own text (✗ on an answer the text called right,
+// 2 of 11 paste runs, 2026-10-21). Placeholders, not a concrete
+// example mark: with an example, Qwen3.5 copied it and wrote only that one.
+const MARKS_PROMPT = `After your feedback, always end with a block of marks on the student's work, even if the teacher limits the length of your feedback:
+
+\`\`\`marks
+{"quote": "<writing as on the image>", "kind": "correct|wrong|vague", "text": "<comment>"}
+{"quote": "...", ...}
+\`\`\`
+
+- One JSON object per line.
+- quote: the exact piece of the student's writing the mark refers to, copied as written: one line or less (one equation or step), never several lines joined. It is used to find the spot on the image, so copy it exactly, including wrong parts. For an error in a later step, quote that step.
+- kind: "correct" for a correct step or answer, "wrong" for an error, "vague" for something unclear, incomplete or hard to read.
+- text: a short comment addressed to the student, a few words, in the language of the exercise. The same rule about not revealing the solution applies.
+- One mark for every part and every result, usually 3-8 marks. Check each step yourself before marking it. If there is no legible work, leave the block empty.
+- Do not mention the marks in your feedback text.`
 
 export async function POST(request: Request) {
   try {
@@ -114,8 +144,11 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-    if (image.length > MAX_IMAGE_CHARS || !IMAGE_DATA_URL_RE.test(image)) {
-      return Response.json({ error: 'Invalid or oversized image' }, { status: 400 })
+    if (image.length > MAX_IMAGE_CHARS || !isImageDataUrl(image)) {
+      return Response.json(
+        { error: 'This image is too large or not a supported format. Try a smaller photo or a cropped screenshot.' },
+        { status: 400 }
+      )
     }
 
     // Resolve the content + site prompt behind `pageId`. Two kinds of id reach
@@ -224,6 +257,8 @@ export async function POST(request: Request) {
       systemPrompt += `\n\nTeacher's instructions for this exercise. These override the guidelines above wherever they conflict (length, format, whether to reveal answers). Any solution stated here is authoritative: compare the student's work against it, and if it matches, confirm it as correct.\n${context.prompt}`
     }
 
+    systemPrompt += `\n\n${MARKS_PROMPT}`
+
     // A missing/unreadable solution file degrades to plain feedback rather
     // than failing the student's request (logged in loadSolutionImage).
     const solutionImage =
@@ -260,9 +295,30 @@ export async function POST(request: Request) {
       { role: 'user', content: userContent },
     ]
 
+    // Step 2 of the marks: locate the quotes, started once per request as soon
+    // as the marks block is complete, in parallel with the rest of the text.
+    // A failure costs only the marks; the text feedback is unaffected.
+    let locating: Promise<void> | null = null
+    const startLocating = (answer: string) => {
+      if (locating || !marksBlockClosed(answer)) return
+      const quoted = parseQuotedMarks(answer)
+      // Sends a `marks` event (empty on failure).
+      locating = (async () => {
+        let marks: Awaited<ReturnType<typeof locateMarks>> = []
+        try {
+          const loc = aiModel('feedbackLocate')
+          marks = await locateMarks(loc.client, loc.model, loc.extra, image, quoted)
+        } catch (err) {
+          console.warn('[ai-feedback] locating marks failed:', err)
+        }
+        await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'marks', marks })}\n\n`))
+      })()
+    }
+
     // One streamed completion; forwards text as it arrives and returns it with
-    // the finish reason.
-    const streamAttempt = async (attemptMessages: typeof messages) => {
+    // the finish reason. `before` is text from an earlier attempt that this one
+    // continues, so the marks block is detected across both.
+    const streamAttempt = async (attemptMessages: typeof messages, before = '') => {
       const aiStream = await ai.client.chat.completions.create({
         model: ai.model,
         // Gemini's thinking tokens count against max_tokens. At 2048 a
@@ -288,6 +344,7 @@ export async function POST(request: Request) {
         if (delta) {
           text += delta
           await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'content', content: delta })}\n\n`))
+          startLocating(before + text)
         }
       }
       return { text, finishReason }
@@ -296,6 +353,7 @@ export async function POST(request: Request) {
     ;(async () => {
       try {
         const first = await streamAttempt(messages)
+        let answer = first.text
         if (first.finishReason === 'length') {
           // Cut off mid-answer. The student already sees the partial text, so
           // a retry would visibly start over; instead ask the model to carry
@@ -308,13 +366,20 @@ export async function POST(request: Request) {
             ...messages,
             { role: 'assistant', content: first.text },
             { role: 'user', content: 'Your reply was cut off. Continue exactly where it stopped, mid-sentence if needed. Do not repeat anything and do not add a preamble.' },
-          ])
+          ], first.text)
+          answer += second.text
           if (second.finishReason === 'length') {
             recordMetric('ai_feedback_truncated', 1)
             console.warn(`[ai-feedback] answer still truncated after continuation (${ai.spec})`)
             await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'truncated' })}\n\n`))
           }
         }
+        // Normally the block closed in the last chunks and locating runs; an
+        // unclosed block is located now. Without any block, an empty marks
+        // event is sent, so the client always gets one before 'done'.
+        startLocating(answer + '\n```')
+        if (locating) await locating
+        else await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'marks', marks: [] })}\n\n`))
         await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`))
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'

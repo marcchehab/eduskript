@@ -178,3 +178,26 @@ describe('solutionFilename', () => {
     expect(solutionFilename('diagram.svg')).toBe('diagram.svg')
   })
 })
+
+describe('extractFeedbackContext — example tags in callout code blocks', () => {
+  // "Quelltext anzeigen" callouts quote the markdown, incl. the tag, inside a
+  // "> ```" fence. That copy must not count as a tag, or the second real tag
+  // gets the first one's prompt.
+  const CALLOUT_PAGE = `## A
+
+<ai-feedback prompt="first" />
+
+> [!code]- Show source
+> \`\`\`markdown
+> <ai-feedback prompt="first" />
+> \`\`\`
+
+## B
+
+<ai-feedback prompt="second" />
+`
+
+  it('resolves index 1 to the second real tag', () => {
+    expect(extractFeedbackContext(CALLOUT_PAGE, null, 1)?.prompt).toBe('second')
+  })
+})

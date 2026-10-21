@@ -48,6 +48,8 @@ import {
   type RenderableStroke,
 } from '@/lib/annotations/render-strokes-to-png'
 import type { ChatStreamEvent } from '@/lib/ai/types'
+import { feedbackText, type FeedbackMark } from '@/lib/ai/feedback-marks'
+import { AIFeedbackMarks } from './ai-feedback-marks'
 
 interface AIFeedbackProps {
   pageId?: string
@@ -57,6 +59,9 @@ interface AIFeedbackProps {
 
 /** Cap pasted screenshots to this edge length (px) before upload. */
 const MAX_PASTE_EDGE = 2000
+
+/** Above this, pasted/photo images go as JPEG; the route caps at 6M chars. */
+const MAX_PNG_CHARS = 5_500_000
 
 /** Ignore images smaller than this (paper px) — inline icons, emoji. */
 const MIN_IMAGE_EDGE = 32
@@ -77,8 +82,11 @@ function loadCorsSafeImage(src: string): Promise<HTMLImageElement | null> {
   })
 }
 
-/** Max edge (px) of the persisted thumbnail; display is max-h-40 (160px). */
-const THUMB_EDGE = 480
+/**
+ * Max edge (px) of the persisted image. Large enough to read the work under
+ * the AI's marks (display is max-h-[32rem]); ~100–250 KB as JPEG q0.7.
+ */
+const THUMB_EDGE = 1200
 
 /**
  * Downscale the sent image to a small JPEG for persistence (the full PNG can
@@ -114,7 +122,10 @@ type Status = 'idle' | 'preparing' | 'streaming'
 
 export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const pasteArmedRef = useRef(false)
+  // Paste is armed while the paste box is hovered OR focused (two flags, so
+  // leaving with the mouse doesn't disarm a focused box).
+  const pasteHoverRef = useRef(false)
+  const pasteFocusRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [feedback, setFeedback] = useState('')
@@ -122,6 +133,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   // (route.ts sends `continuing`); cleared when text resumes.
   const [continuing, setContinuing] = useState(false)
   const [sentImage, setSentImage] = useState<string | null>(null)
+  const [liveMarks, setLiveMarks] = useState<FeedbackMark[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Storage key: the author's id, else this tag's DOM index (resolved after
@@ -162,6 +174,11 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   const showLive = busy || !!feedback
   const shownFeedback = showLive ? feedback : saved?.feedback ?? ''
   const shownImage = showLive ? sentImage : saved?.image ?? null
+  // The answer ends in a ```marks block of quotes (feedback-marks.ts); it is
+  // hidden here. The text streams as usual; the located marks arrive as a
+  // separate event about 1 s after it.
+  const shownText = feedbackText(shownFeedback, status !== 'streaming')
+  const marks = (showLive ? liveMarks : saved?.marks) ?? []
 
   const sendImage = async (image: string) => {
     if (!pageId) {
@@ -171,6 +188,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     setError(null)
     setFeedback('')
     setContinuing(false)
+    setLiveMarks(null)
     setSentImage(image)
     setStatus('streaming')
 
@@ -197,6 +215,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       const decoder = new TextDecoder()
       let buffer = ''
       let accumulated = ''
+      let located: FeedbackMark[] = []
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -215,6 +234,9 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
             accumulated += event.content
             setFeedback(accumulated)
             setContinuing(false)
+          } else if (event.type === 'marks' && event.marks) {
+            located = event.marks
+            setLiveMarks(located)
           } else if (event.type === 'continuing') {
             setContinuing(true)
           } else if (event.type === 'truncated') {
@@ -231,7 +253,10 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       } else if (storageKey && pageId) {
         try {
           const thumb = await makeThumbnail(image)
-          await saveFeedback({ feedback: accumulated, image: thumb, savedAt: Date.now() }, { immediate: true })
+          await saveFeedback(
+            { feedback: feedbackText(accumulated, true), image: thumb, marks: located, savedAt: Date.now() },
+            { immediate: true }
+          )
         } catch (saveErr) {
           // Feedback is on screen; losing persistence shouldn't surface as an error.
           console.warn('[ai-feedback] could not save feedback:', saveErr)
@@ -312,7 +337,9 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           included.push({
             points: stroke.points,
             mode: stroke.mode,
-            color: stroke.color,
+            // Theme ink: the capture is drawn on white (light paper), so
+            // ink is black there, also when the student sees it white.
+            color: stroke.color === 'currentColor' ? '#000000' : stroke.color,
             width: stroke.width,
             yShift,
           })
@@ -332,7 +359,15 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
         if (w < MIN_IMAGE_EDGE || h < MIN_IMAGE_EDGE) continue // hidden or icon-sized
         const centerY = toPaperY(r.top) + h / 2
         if (centerY < yTop || centerY >= yBottom) continue
-        imageCandidates.push({ src: el.currentSrc || el.src, x: toPaperX(r.left), y: toPaperY(r.top), w, h })
+        // The capture is drawn on white, so use the light variant of themed
+        // images (plot/molecule/excalidraw render a -light and a -dark <img>;
+        // in dark mode only the dark one has a size).
+        const darkClass = [...el.classList].find((c) => /^(plot|molecule|excalidraw)-dark$/.test(c))
+        const light = darkClass
+          ? el.parentElement?.querySelector<HTMLImageElement>(`img.${darkClass.replace(/-dark$/, '-light')}`)
+          : null
+        const src = light ? light.currentSrc || light.src : el.currentSrc || el.src
+        imageCandidates.push({ src, x: toPaperX(r.left), y: toPaperY(r.top), w, h })
       }
       const images: RenderableImage[] = []
       for (const cand of imageCandidates) {
@@ -400,30 +435,41 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       if (!ctx) throw new Error('Could not process the image')
       ctx.drawImage(source, 0, 0, canvas.width, canvas.height)
       if (source instanceof ImageBitmap) source.close()
-      await sendImage(canvas.toDataURL('image/png'))
+      // Photos with sensor noise compress badly as PNG (a 1500×2000 phone
+      // photo came to 7.3M chars, over the route's 6M cap); JPEG then.
+      let dataUrl = canvas.toDataURL('image/png')
+      if (dataUrl.length > MAX_PNG_CHARS) dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+      await sendImage(dataUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read the image')
     }
   }
 
   // Document-level paste listener, only active while the drop zone is
-  // hovered or focused (pasteArmedRef) — same scoping idea as the snap paste
+  // hovered or focused (pasteHoverRef/pasteFocusRef) — same scoping idea as the snap paste
   // handler, but per-component so multiple <ai-feedback> tags don't all fire.
+  // The listener is bound once and calls the latest render's handler through
+  // this ref; binding it with a stale closure lost the first paste's save
+  // (storageKey was still null in the first render).
+  const pasteRef = useRef<(blob: Blob) => void>(() => {})
+  useEffect(() => {
+    pasteRef.current = (blob) => { if (!busy) void handlePastedBlob(blob) }
+  })
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      if (!pasteArmedRef.current || busy) return
+      if (!pasteHoverRef.current && !pasteFocusRef.current) return
       const items = e.clipboardData?.items
       if (!items) return
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           const blob = item.getAsFile()
           if (blob) {
+            // Swallowed even while busy (then ignored): otherwise it reaches
+            // the snap paste handler (paste-snap-handler.tsx, document,
+            // bubble phase; we listen in capture) and opens the snap dialog.
             e.preventDefault()
-            // Keep the paste from also reaching the snap paste handler
-            // (paste-snap-handler.tsx listens on document in the bubble
-            // phase; we listen in capture, so this kills it reliably).
             e.stopImmediatePropagation()
-            void handlePastedBlob(blob)
+            pasteRef.current(blob)
             return
           }
         }
@@ -431,8 +477,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     }
     document.addEventListener('paste', onPaste, true)
     return () => document.removeEventListener('paste', onPaste, true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlePastedBlob is stable enough; re-binding on busy is all we need
-  }, [busy])
+  }, [])
 
   return (
     <div ref={containerRef} className="my-6 not-prose" data-ai-feedback={feedbackId || true}>
@@ -455,10 +500,10 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           tabIndex={0}
           role="button"
           aria-label="Paste a screenshot for AI feedback"
-          onMouseEnter={() => { pasteArmedRef.current = true }}
-          onMouseLeave={() => { pasteArmedRef.current = false }}
-          onFocus={() => { pasteArmedRef.current = true }}
-          onBlur={() => { pasteArmedRef.current = false }}
+          onMouseEnter={() => { pasteHoverRef.current = true }}
+          onMouseLeave={() => { pasteHoverRef.current = false }}
+          onFocus={() => { pasteFocusRef.current = true }}
+          onBlur={() => { pasteFocusRef.current = false }}
           className="inline-flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/40 px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <ClipboardPaste className="h-4 w-4" />
@@ -505,18 +550,12 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
             AI feedback
             {status === 'streaming' && <Loader2 className="h-3 w-3 animate-spin" />}
           </div>
-          {shownImage && (
-            // Show what was actually sent so transcription errors are visible
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={shownImage}
-              alt="Your work as sent to the AI"
-              className="mb-3 max-h-40 rounded border border-border bg-white"
-            />
-          )}
+          {/* What was actually sent, so misreadings are visible, with the
+              AI's marks on top */}
+          {shownImage && <AIFeedbackMarks image={shownImage} marks={marks} />}
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {shownFeedback}
+              {shownText}
             </ReactMarkdown>
           </div>
           {continuing && (

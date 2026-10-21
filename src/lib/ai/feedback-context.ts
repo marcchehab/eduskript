@@ -54,7 +54,9 @@ export function solutionFilename(name: string): string {
 }
 
 const HEADING_RE = /^#{1,2}\s+\S/
-const FENCE_RE = /^\s*(```|~~~)/
+// Fences inside blockquotes/callouts ("> ```") count too: the "show source"
+// callouts hold example <ai-feedback> tags that must not be counted as tags.
+const FENCE_RE = /^\s*(?:>\s*)*(```|~~~)/
 
 /** Line indices that are inside fenced code blocks (exclusive of fences). */
 function fencedLines(lines: string[]): boolean[] {

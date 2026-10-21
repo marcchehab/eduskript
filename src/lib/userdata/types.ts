@@ -5,6 +5,8 @@
  * with future support for remote sync.
  */
 
+import type { FeedbackMark } from '@/lib/ai/feedback-marks'
+
 /**
  * Primary key for user data records
  */
@@ -132,8 +134,9 @@ export interface QuizData {
  * `ai-feedback-<id>` / `ai-feedback-idx<n>`). Latest request overwrites.
  */
 export interface AIFeedbackData {
-  feedback: string       // Markdown answer as streamed
-  image: string | null   // Small JPEG data URL of what was sent (null if thumbnailing failed)
+  feedback: string       // Markdown answer as streamed, without the ```marks block
+  image: string | null   // JPEG data URL of what was sent, max 1200 px (null if thumbnailing failed)
+  marks?: FeedbackMark[] // Located marks on `image` (absent in feedback saved before 2026-10-21)
   savedAt: number        // Unix ms
 }
 

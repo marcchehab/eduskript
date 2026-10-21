@@ -28,6 +28,7 @@ import { openrouterRouting } from './openrouter'
 
 export type AiPurpose =
   | 'feedback'      // ai-feedback on student handwriting/drawings (vision)
+  | 'feedbackLocate' // ai-feedback marks: box around quoted writing (vision, see feedback-marks.ts)
   | 'scoring'       // AI scoring of exam answers + rubric generation from samples
   | 'chat'          // teacher AI chat
   | 'plan'          // AI Edit planning / agent (tool calling)
@@ -42,6 +43,7 @@ const QWEN_CH = 'infomaniak:Qwen/Qwen3.5-397B-A17B-FP8+nothink'
 
 const DEFAULTS: Record<AiPurpose, string> = {
   feedback: QWEN_CH,
+  feedbackLocate: 'infomaniak:Qwen/Qwen3.8-27B-FP8+nothink',
   scoring: QWEN_CH,
   chat: 'openrouter:google/gemini-3.5-flash-lite',
   plan: 'openrouter:google/gemini-3.5-flash-lite',
@@ -52,7 +54,7 @@ const DEFAULTS: Record<AiPurpose, string> = {
 }
 
 /** Purposes whose requests contain student work. Must stay on Infomaniak. */
-export const STUDENT_DATA: readonly AiPurpose[] = ['feedback', 'scoring', 'scriptImport']
+export const STUDENT_DATA: readonly AiPurpose[] = ['feedback', 'feedbackLocate', 'scoring', 'scriptImport']
 
 export interface AiModel {
   provider: AiProvider

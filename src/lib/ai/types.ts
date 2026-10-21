@@ -1,3 +1,5 @@
+import type { FeedbackMark } from './feedback-marks'
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
@@ -11,9 +13,11 @@ export interface ChatRequest {
 }
 
 export interface ChatStreamEvent {
-  type: 'content' | 'error' | 'done' | 'truncated' | 'continuing'
+  type: 'content' | 'error' | 'done' | 'truncated' | 'continuing' | 'marks'
   content?: string
   error?: string
+  /** type 'marks' (ai-feedback only): located marks, see src/lib/ai/feedback-marks.ts */
+  marks?: FeedbackMark[]
 }
 
 export interface SkriptContext {
