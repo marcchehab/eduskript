@@ -2,8 +2,11 @@
 # Install/refresh the backup + health timers on the VPS. Idempotent.
 #   scp -r scripts/ops eduskript-prod:/tmp/ && ssh eduskript-prod sudo bash /tmp/ops/install-ops.sh
 # Schedules (Europe/Zurich), kept clear of the 02:00–02:45 unattended-upgrades
-# window: full Sunday 01:15, diff Mon–Sat 01:15, health check hourly at :20,
-# app cron daily 03:00 UTC (was GitHub Actions until 2026-10-05).
+# window: full Sunday 01:15, diff Mon–Sat 01:15, health check hourly at :20
+# UTC, app cron daily 03:00 UTC (was GitHub Actions until 2026-10-05). The
+# health check is on UTC because in local time the autumn clock change skips
+# one run (02:20 exists twice, systemd runs it once): 2026-10-25 that missed
+# ping exceeded the 1 h + 30 min grace and raised a false alarm.
 set -euo pipefail
 SRC="$(cd "$(dirname "$0")" && pwd)"
 install -m 755 "$SRC/pgbackrest-backup.sh" /usr/local/sbin/eduskript-backup
@@ -50,7 +53,7 @@ unit eduskript-health.timer <<'U'
 [Unit]
 Description=Hourly eduskript ops health check
 [Timer]
-OnCalendar=*-*-* *:20
+OnCalendar=*-*-* *:20:00 UTC
 Persistent=true
 [Install]
 WantedBy=timers.target
