@@ -642,6 +642,8 @@ export function createMarkdownComponents(
     const playlist = (props['data-playlist'] as string) || (props['dataPlaylist'] as string) || ''
     const startTimeStr = (props['data-start-time'] as string) || (props['dataStartTime'] as string) || ''
     const startTime = startTimeStr ? parseInt(startTimeStr, 10) : undefined
+    const endTimeStr = (props['data-end-time'] as string) || (props['dataEndTime'] as string) || ''
+    const endTime = endTimeStr ? parseInt(endTimeStr, 10) : undefined
     const caption = (props['data-caption'] as string) || (props['dataCaption'] as string) || ''
     const thumbnail = (props['data-thumbnail'] as string) || (props['dataThumbnail'] as string) || ''
     const pin = (props['data-pin'] as string) === 'true' || (props['dataPin'] as string) === 'true'
@@ -656,6 +658,7 @@ export function createMarkdownComponents(
         id={id || undefined}
         playlist={playlist || undefined}
         startTime={startTime}
+        endTime={endTime}
         caption={caption || undefined}
         thumbnail={resolvedThumbnail}
         pin={pin}

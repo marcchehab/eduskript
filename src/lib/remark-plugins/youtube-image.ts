@@ -8,6 +8,7 @@ import { parseYoutubeUrl } from '@/lib/youtube-url'
  * Usage in markdown:
  *   ![](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
  *   ![Caption shown beneath the video](https://youtu.be/dQw4w9WgXcQ?t=120)
+ *   ![](https://youtu.be/dQw4w9WgXcQ?t=120&end=300)   (player stops at 300 s)
  *   ![](https://www.youtube.com/playlist?list=PLxyz)
  *
  * URL recognition lives in src/lib/youtube-url.ts so the paste-helper shares it.
@@ -32,6 +33,7 @@ export function remarkYoutubeImage() {
       if (ref.id) attrs.push(`data-id="${escapeAttr(ref.id)}"`)
       if (ref.playlist) attrs.push(`data-playlist="${escapeAttr(ref.playlist)}"`)
       if (ref.startTime) attrs.push(`data-start-time="${ref.startTime}"`)
+      if (ref.endTime) attrs.push(`data-end-time="${ref.endTime}"`)
       if (caption) attrs.push(`data-caption="${escapeAttr(caption)}"`)
 
       const mutableNode = node as unknown as Record<string, unknown>

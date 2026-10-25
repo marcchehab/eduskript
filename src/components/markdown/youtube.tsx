@@ -11,6 +11,8 @@ interface YoutubeProps {
   id?: string
   playlist?: string
   startTime?: number
+  /** Seconds; YouTube's `end` embed param stops playback there (the viewer can still seek past it). */
+  endTime?: number
   caption?: string
   /** Custom teaser image, pre-resolved to a URL by the caller (SkriptFiles or absolute). Overrides the YouTube-hosted thumbnail. */
   thumbnail?: string
@@ -25,7 +27,7 @@ const maxResThumb = (id: string) => `https://img.youtube.com/vi/${id}/maxresdefa
 /** 480x360. YouTube generates this for every video. */
 const fallbackThumb = (id: string) => `https://img.youtube.com/vi/${id}/hqdefault.jpg`
 
-export function Youtube({ id, playlist, startTime, caption, thumbnail, pin, onStartTimeChange }: YoutubeProps) {
+export function Youtube({ id, playlist, startTime, endTime, caption, thumbnail, pin, onStartTimeChange }: YoutubeProps) {
   const [isOpen, setIsOpen] = useState(false)
   // Last position from the player's infoDelivery events; read by the start-time gizmo.
   const currentTimeRef = useRef<number | null>(null)
@@ -56,10 +58,11 @@ export function Youtube({ id, playlist, startTime, caption, thumbnail, pin, onSt
       params.append('origin', window.location.origin)
     }
     if (startTime) params.append('start', startTime.toString())
+    if (endTime) params.append('end', endTime.toString())
     if (playlist) params.append('list', playlist)
 
     return `https://www.youtube.com/embed/${id}?${params.toString()}`
-  }, [id, startTime, playlist])
+  }, [id, startTime, endTime, playlist])
 
   // Listen for timestamp navigation events from YT components
   useEffect(() => {

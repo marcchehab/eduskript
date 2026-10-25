@@ -95,6 +95,9 @@ function parseYoutubeAttrs(attrs: string): string {
   const startTimeMatch = attrs.match(/\bstartTime=\{?["']?(\d+)["']?\}?/)
   const startTime = startTimeMatch ? startTimeMatch[1] : ''
 
+  const endTimeMatch = attrs.match(/\bendTime=\{?["']?(\d+)["']?\}?/)
+  const endTime = endTimeMatch ? endTimeMatch[1] : ''
+
   const captionMatch = attrs.match(/\bcaption=["']([^"']*)["']/)
   const caption = captionMatch ? captionMatch[1] : ''
 
@@ -109,6 +112,7 @@ function parseYoutubeAttrs(attrs: string): string {
   if (id) element += ` data-id="${id}"`
   if (playlist) element += ` data-playlist="${playlist}"`
   if (startTime) element += ` data-start-time="${startTime}"`
+  if (endTime) element += ` data-end-time="${endTime}"`
   if (caption) element += ` data-caption="${caption}"`
   if (thumbnail) element += ` data-thumbnail="${thumbnail}"`
   if (pin) element += ` data-pin="true"`

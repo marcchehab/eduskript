@@ -9,13 +9,14 @@
  *
  * Recognised hosts: youtube.com, www.youtube.com, m.youtube.com, youtu.be.
  * Recognised paths: /watch?v=ID, /embed/ID, /shorts/ID, /playlist?list=ID,
- * youtu.be/ID. Time params: ?t=90, ?t=90s, ?t=1m30s, ?start=90.
+ * youtu.be/ID. Time params: ?t=90, ?t=90s, ?t=1m30s, ?start=90; end: ?end=306 (same formats).
  */
 
 export interface YoutubeRef {
   id?: string
   playlist?: string
   startTime?: number
+  endTime?: number
 }
 
 export function parseYoutubeUrl(rawUrl: string): YoutubeRef | null {
@@ -50,7 +51,9 @@ export function parseYoutubeUrl(rawUrl: string): YoutubeRef | null {
 
   const startTime = parseStartTime(parsed.searchParams.get('t') || parsed.searchParams.get('start'))
 
-  return { id, playlist, startTime }
+  const endTime = parseStartTime(parsed.searchParams.get('end'))
+
+  return { id, playlist, startTime, endTime }
 }
 
 function parseStartTime(value: string | null): number | undefined {
