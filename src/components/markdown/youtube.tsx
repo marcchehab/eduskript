@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import { useVideoGate, CouplingToggle } from './coupled-video-context'
 import { StickMe } from './stick-me'
+import { YoutubeOptions } from './youtube-options'
 
 interface YoutubeProps {
   id?: string
@@ -15,6 +16,8 @@ interface YoutubeProps {
   thumbnail?: string
   /** Stick the video to the top of the viewport while scrolling. */
   pin?: boolean
+  /** Editor only: shows the start-time gizmo; null removes the start time. */
+  onStartTimeChange?: (startTime: number | null) => void
 }
 
 /** 1280x720. Missing for some older/low-res uploads — hence the fallback. */
@@ -22,8 +25,11 @@ const maxResThumb = (id: string) => `https://img.youtube.com/vi/${id}/maxresdefa
 /** 480x360. YouTube generates this for every video. */
 const fallbackThumb = (id: string) => `https://img.youtube.com/vi/${id}/hqdefault.jpg`
 
-export function Youtube({ id, playlist, startTime, caption, thumbnail, pin }: YoutubeProps) {
+export function Youtube({ id, playlist, startTime, caption, thumbnail, pin, onStartTimeChange }: YoutubeProps) {
   const [isOpen, setIsOpen] = useState(false)
+  // Last position from the player's infoDelivery events; read by the start-time gizmo.
+  const currentTimeRef = useRef<number | null>(null)
+  const getCurrentTime = useCallback(() => currentTimeRef.current, [])
   // Derived from the id, not fetched: the <img> is then part of the server-
   // rendered HTML and starts downloading with everything else on the page.
   // State only so onError can fall back; `thumbFor` tracks which id/thumbnail
@@ -119,7 +125,10 @@ export function Youtube({ id, playlist, startTime, caption, thumbnail, pin }: Yo
         return
       }
       if (data?.event === 'infoDelivery' && data.info) {
-        if (typeof data.info.currentTime === 'number') onTimeUpdate(data.info.currentTime)
+        if (typeof data.info.currentTime === 'number') {
+          currentTimeRef.current = data.info.currentTime
+          onTimeUpdate(data.info.currentTime)
+        }
         // playerState 1 = playing. Treat as a manual resume so a user override
         // past an unsatisfied gate isn't immediately re-paused (soft gating).
         if (data.info.playerState === 1) onManualPlay()
@@ -209,8 +218,16 @@ export function Youtube({ id, playlist, startTime, caption, thumbnail, pin }: Yo
   )
 
   return (
-    <span className="block my-6">
+    <span className="group relative block my-6">
       <StickMe enabled={pin} footer={<CouplingToggle />} storageKey={`coupled-video:${id ?? 'yt'}`}>{player}</StickMe>
+      {onStartTimeChange && (
+        <YoutubeOptions
+          startTime={startTime}
+          playerOpen={isOpen}
+          getCurrentTime={getCurrentTime}
+          onChange={onStartTimeChange}
+        />
+      )}
       {captionNode}
     </span>
   )

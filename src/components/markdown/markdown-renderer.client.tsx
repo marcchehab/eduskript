@@ -39,13 +39,14 @@ interface MarkdownRendererProps {
  * exists outside a fence (caller treats that as a no-op, same as a failed
  * `.test()` before).
  */
-function replaceOutsideFences(content: string, pattern: RegExp, replacement: string): string | null {
+function replaceOutsideFences(content: string, pattern: RegExp, replacement: string | ((match: string) => string)): string | null {
   const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g')
   const fences = fencedRanges(content)
   for (const match of content.matchAll(globalPattern)) {
     const start = match.index
     if (fences.some(([fs, fe]) => start >= fs && start < fe)) continue
-    return content.slice(0, start) + replacement + content.slice(start + match[0].length)
+    const text = typeof replacement === 'function' ? replacement(match[0]) : replacement
+    return content.slice(0, start) + text + content.slice(start + match[0].length)
   }
   return null
 }
@@ -160,6 +161,24 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
+  // Stable callback: set/remove startTime on the first <youtube …id="x"…> tag
+  // (start-time gizmo). Only the startTime attribute is touched; the rest of the
+  // tag stays as written. Two embeds of the same video both match the first one.
+  const stableOnYoutubeStartTimeChange = useCallback((id: string, startTime: number | null) => {
+    const currentContent = contentRef.current
+    const notify = onContentChangeRef.current
+    if (!notify || !currentContent || !id) return
+
+    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const tagPattern = new RegExp(`<youtube\\s[^>]*\\bid=["']${escapedId}["'][^>]*>`, 'i')
+    const newContent = replaceOutsideFences(currentContent, tagPattern, (tag) => {
+      // Accepts the same shapes remark-plugins/youtube.ts parses: {123}, "123", '123', 123
+      const stripped = tag.replace(/\s+startTime=(\{\d*\}|"\d*"|'\d*'|\d+)/, '')
+      return startTime ? stripped.replace(/\s*(\/?>)$/, (_, end: string) => ` startTime="${startTime}"${end === '/>' ? ' />' : '>'}`) : stripped
+    })
+    if (newContent !== null && newContent !== currentContent) notify(newContent)
+  }, [])
+
   // Stable callback: rewrite a <molecule> tag after a resize/align gizmo drag.
   // Keyed by the SMILES string, the same way image rewrites key on src — two
   // identical LIVE molecules on one page would both match the first-occurrence
@@ -209,10 +228,11 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       onExcalidrawEdit: stableOnExcalidrawEdit,
       onSpacerChange: stableOnSpacerChange,
       onMuxVideoChange: stableOnMuxVideoChange,
+      onYoutubeStartTimeChange: stableOnYoutubeStartTimeChange,
       onMoleculeChange: stableOnMoleculeChange,
       aiFeedbackSolution: isEditable ? aiFeedbackSolution : undefined,
     })
-  }, [files, pageId, skriptId, karaClues, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
+  }, [files, pageId, skriptId, karaClues, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnYoutubeStartTimeChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {

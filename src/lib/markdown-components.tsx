@@ -246,6 +246,7 @@ interface CreateMarkdownComponentsOptions {
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
   onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
   onMuxVideoChange?: (src: string, newMarkdown: string) => void  // Stable callback for the <muxvideo> options toolbar
+  onYoutubeStartTimeChange?: (id: string, startTime: number | null) => void  // Stable callback for the <youtube> start-time gizmo
   onMoleculeChange?: (smiles: string, newMarkdown: string) => void  // Stable callback for the <molecule> resize/align gizmos
   aiFeedbackSolution?: AiFeedbackSolutionApi  // Editor only: "Provide solution" gizmo on <ai-feedback>
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
@@ -262,7 +263,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -658,6 +659,7 @@ export function createMarkdownComponents(
         caption={caption || undefined}
         thumbnail={resolvedThumbnail}
         pin={pin}
+        onStartTimeChange={onYoutubeStartTimeChange && id ? (t) => onYoutubeStartTimeChange(id, t) : undefined}
       />
     )
   }
