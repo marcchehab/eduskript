@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { reorderSkriptPagesForUser } from '@/lib/services/skripts'
+import { NotFoundError, PermissionDeniedError, ValidationError } from '@/lib/services/pages'
 
 export async function PATCH(
   request: NextRequest,
@@ -14,63 +15,17 @@ export async function PATCH(
     }
 
     const { id } = await params
-    const body = await request.json()
-    const { pageIds } = body
-
-    if (!Array.isArray(pageIds)) {
-      return NextResponse.json(
-        { error: 'pageIds must be an array' },
-        { status: 400 }
-      )
-    }
-
-    // Check if skript exists and belongs to user (admins bypass author check)
-    const skript = await prisma.skript.findFirst({
-      where: {
-        id,
-        ...(session.user.isAdmin ? {} : {
-          authors: { some: { userId: session.user.id } }
-        }),
-      },
-      include: {
-        pages: true
-      }
-    })
-
-    if (!skript) {
-      return NextResponse.json(
-        { error: 'Skript not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify all page IDs belong to this skript
-    const skriptPageIds = skript.pages.map((p) => p.id)
-    const allPageIdsValid = pageIds.every((id: string) => skriptPageIds.includes(id))
-    
-    if (!allPageIdsValid || pageIds.length !== skript.pages.length) {
-      return NextResponse.json(
-        { error: 'Invalid page IDs provided' },
-        { status: 400 }
-      )
-    }
-
-    // Update page orders
-    const updates = pageIds.map((pageId: string, index: number) => 
-      prisma.page.update({
-        where: { id: pageId },
-        data: { order: index + 1 }
-      })
-    )
-
-    await prisma.$transaction(updates)
-
+    const { pageIds } = await request.json()
+    await reorderSkriptPagesForUser(session.user.id, id, pageIds, { isAdmin: session.user.isAdmin })
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    if (error instanceof NotFoundError || error instanceof PermissionDeniedError) {
+      return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
+    }
     console.error('Error reordering pages:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

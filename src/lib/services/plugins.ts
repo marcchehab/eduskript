@@ -214,3 +214,22 @@ export async function findPluginUsage(userId: string, pluginSlugs: string[]) {
   }
   return usage
 }
+
+/** The caller's own plugins, newest first, without entryHtml. */
+export async function listPluginsForUser(userId: string) {
+  return prisma.plugin.findMany({
+    where: { authorId: userId },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true, slug: true, name: true, description: true, updatedAt: true },
+  })
+}
+
+/** One of the caller's own plugins by slug, with its raw (unexpanded) entryHtml. */
+export async function getOwnPluginBySlug(userId: string, slug: string) {
+  const plugin = await prisma.plugin.findUnique({
+    where: { authorId_slug: { authorId: userId, slug } },
+    include: { author: authorInclude },
+  })
+  if (!plugin) throw new NotFoundError(`You have no plugin with slug "${slug}"`)
+  return { ...plugin, author: flattenAuthor(plugin.author) }
+}

@@ -13,6 +13,7 @@ import {
   getPageForEditor,
   invalidatePublicPageCaches,
   updatePageForUser,
+  deletePageForUser,
 } from '@/lib/services/pages'
 
 function errorToResponse(error: unknown): NextResponse {
@@ -100,47 +101,12 @@ export async function DELETE(
     }
 
     const { id } = await params
-
-    // Pages without their own PageAuthor rows inherit from the skript's
-    // authors (checkPagePermissions), so a page-authors-only filter would 404
-    // on those.
-    const existingPage = await prisma.page.findUnique({
-      where: { id },
-      include: {
-        authors: { include: { user: { select: { id: true, name: true } } } },
-        skript: {
-          include: {
-            authors: { include: { user: { select: { id: true, name: true } } } },
-            collectionSkripts: { include: { collection: true } },
-          },
-        },
-      },
-    })
-
-    if (!existingPage) {
-      return NextResponse.json({ error: 'Page not found' }, { status: 404 })
-    }
-
-    const perms = checkPagePermissions(
-      session.user.id,
-      existingPage.authors,
-      existingPage.skript.authors,
-      session.user.isAdmin
-    )
-    if (!perms.canEdit) {
-      return NextResponse.json({ error: 'Page not found' }, { status: 404 })
-    }
-
-    await prisma.page.delete({ where: { id } })
-
-    // Same set as an update: without the skript/teacher/org tags the sidebar
-    // keeps listing the deleted page and its URL can stay a cached 404 while
-    // the link to it is still shown.
-    await invalidatePublicPageCaches(existingPage, existingPage, session.user.id)
-    revalidatePath('/dashboard/site-builder')
-
+    await deletePageForUser(session.user.id, id, { isAdmin: session.user.isAdmin })
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof NotFoundError || error instanceof PermissionDeniedError) {
+      return errorToResponse(error)
+    }
     console.error('Error deleting page:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

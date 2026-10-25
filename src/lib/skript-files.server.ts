@@ -14,9 +14,11 @@ import { toVideoInfoMetadata, type SkriptFilesData, type SkriptFile, type VideoI
 
 /**
  * SSR: Query database for all files and videos associated with a skript.
- * Call this once at the start of rendering, not per-file.
+ * Call this once at the start of rendering, not per-file. Uncached — renders
+ * go through getSkriptFiles; list_skript_files (MCP) calls this directly so a
+ * list right after an upload is never stale.
  */
-async function fetchSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
+export async function fetchSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
   // Fetch all files for this skript
   const dbFiles = await prisma.file.findMany({
     where: {

@@ -15,12 +15,15 @@
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
-import { checkCollectionPermissions, checkSkriptPermissions } from '@/lib/permissions'
+import { canEditSite, checkCollectionPermissions, checkSkriptPermissions } from '@/lib/permissions'
 import { generateExcerpt, generateSlug, isReservedSlug } from '@/lib/markdown'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { ensurePageLayoutItem, revalidateSiteContent } from '@/lib/page-layout'
 import { canPlaceSkript } from '@/lib/site-access'
-import { revalidateSkriptOnPlacingSites } from '@/lib/site-revalidate'
+import { getPlacingSites, revalidateSkriptOnPlacingSites } from '@/lib/site-revalidate'
+import { fetchSkriptFiles } from '@/lib/skript-files.server'
+import { deleteFile } from '@/lib/file-storage'
+import { extractReferencedFilenames } from '@/lib/extract-file-references'
 import {
   ConflictError,
   NotFoundError,
@@ -522,4 +525,225 @@ export async function auditSkriptSeoForUser(userId: string, skriptId: string) {
       withIssues: pageRows.filter((r) => r.hasIssues).length,
     },
   }
+}
+
+/**
+ * Set the order of the pages inside a skript. `pageIds` must be exactly the
+ * skript's pages, once each (same contract as PATCH /api/skripts/[id]/
+ * reorder-pages, which calls this). Page.order = index. Requires skript edit
+ * permission. One UPDATE per page in one transaction: O(n).
+ */
+export async function reorderSkriptPagesForUser(
+  userId: string,
+  skriptId: string,
+  pageIds: string[],
+  ctx: ActorContext = {}
+) {
+  if (!Array.isArray(pageIds) || pageIds.length === 0) {
+    throw new ValidationError('pageIds must be a non-empty array')
+  }
+
+  const skript = await prisma.skript.findUnique({
+    where: { id: skriptId },
+    include: {
+      authors: { include: { user: { select: { id: true } } } },
+      pages: { select: { id: true, slug: true } },
+    },
+  })
+  if (!skript) throw new NotFoundError('Skript not found')
+  if (!checkSkriptPermissions(userId, skript.authors, ctx.isAdmin).canEdit) {
+    throw new PermissionDeniedError('Cannot edit this skript')
+  }
+
+  const memberIds = skript.pages.map(p => p.id)
+  const sameSet =
+    pageIds.length === memberIds.length &&
+    pageIds.every(id => memberIds.includes(id)) &&
+    new Set(pageIds).size === pageIds.length
+  if (!sameSet) {
+    throw new ValidationError('pageIds must list exactly the pages in this skript, once each')
+  }
+
+  await prisma.$transaction(
+    pageIds.map((id, index) => prisma.page.update({ where: { id }, data: { order: index } }))
+  )
+
+  // Sidebar page order is part of the cached skript render on every placing site.
+  await revalidateSkriptOnPlacingSites(skriptId, [skript.slug])
+  revalidatePath('/dashboard')
+  return { skriptId, order: pageIds }
+}
+
+export interface UnplaceSkriptInput {
+  skriptId: string
+  /** Remove from this collection. Omit → remove the root sidebar item. */
+  collectionId?: string
+  /** Root removal only: target site; defaults to the caller's primary site. */
+  siteId?: string
+}
+
+/**
+ * Inverse of placeSkriptForUser: remove a skript from one collection (and
+ * compact the remaining CollectionSkript.order) or drop its root PageLayout
+ * item on a site. Never deletes the skript or its pages. Requires edit on the
+ * collection / site, not on the skript.
+ *
+ * Known effect: hydratePageLayoutItems hides a root item whose skript is also
+ * in a collection, so removing it from its last collection can make a
+ * previously hidden root item visible again.
+ */
+export async function unplaceSkriptForUser(
+  userId: string,
+  input: UnplaceSkriptInput,
+  ctx: ActorContext = {}
+) {
+  const { skriptId, collectionId, siteId } = input
+  const skript = await prisma.skript.findUnique({ where: { id: skriptId }, select: { id: true, slug: true } })
+  if (!skript) throw new NotFoundError('Skript not found')
+
+  if (collectionId) {
+    const collection = await prisma.collection.findUnique({
+      where: { id: collectionId },
+      include: {
+        site: { select: { id: true, slug: true, userId: true, organizationId: true } },
+        collectionSkripts: { orderBy: { order: 'asc' }, select: { skriptId: true } },
+      },
+    })
+    if (!collection) throw new NotFoundError('Collection not found')
+    const orgRoles = await loadOrgRoles(userId, collection.site?.organizationId)
+    if (!checkCollectionPermissions(userId, collection, orgRoles, ctx.isAdmin).canEdit) {
+      throw new PermissionDeniedError('Cannot edit this collection')
+    }
+    if (!collection.collectionSkripts.some(cs => cs.skriptId === skriptId)) {
+      throw new NotFoundError('Skript is not in this collection')
+    }
+
+    const remaining = collection.collectionSkripts.filter(cs => cs.skriptId !== skriptId)
+    await prisma.$transaction([
+      prisma.collectionSkript.delete({ where: { collectionId_skriptId: { collectionId, skriptId } } }),
+      ...remaining.map((cs, index) =>
+        prisma.collectionSkript.update({
+          where: { collectionId_skriptId: { collectionId, skriptId: cs.skriptId } },
+          data: { order: index },
+        })
+      ),
+    ])
+
+    revalidateSiteContent(collection.site?.slug)
+    await revalidateSkriptOnPlacingSites(skriptId, [skript.slug])
+    return { skriptId, collectionId, removed: true }
+  }
+
+  const site = siteId
+    ? await prisma.site.findUnique({ where: { id: siteId }, select: { id: true, slug: true, userId: true, organizationId: true } })
+    : await prisma.site.findFirst({
+        where: { userId },
+        orderBy: PRIMARY_SITE_ORDER,
+        select: { id: true, slug: true, userId: true, organizationId: true },
+      })
+  if (!site) throw new NotFoundError('Site not found')
+  const orgRoles = await loadOrgRoles(userId, site.organizationId)
+  if (!canEditSite(userId, site, orgRoles, ctx.isAdmin)) {
+    throw new PermissionDeniedError('Cannot edit this site')
+  }
+
+  const { count } = await prisma.pageLayoutItem.deleteMany({
+    where: { pageLayout: { siteId: site.id }, type: 'skript', contentId: skriptId },
+  })
+  if (count === 0) throw new NotFoundError('Skript is not a root sidebar item on this site')
+
+  revalidateSiteContent(site.slug)
+  await revalidateSkriptOnPlacingSites(skriptId, [skript.slug], [], [{ slug: site.slug, organizationId: site.organizationId }])
+  return { skriptId, root: true, siteId: site.id, removed: true }
+}
+
+/**
+ * Delete a skript and (by cascade) its pages, versions, files rows and all
+ * student data attached to those pages. Irreversible. Requires skript edit
+ * permission. Used by DELETE /api/skripts/[id] and the MCP delete_skript tool
+ * (which additionally refuses when student work exists, see
+ * countStudentWorkOnPages in services/pages.ts).
+ *
+ * S3 objects of the skript's files are NOT removed here (same as before the
+ * service existed); content-addressed objects may be shared across skripts.
+ */
+export async function deleteSkriptForUser(userId: string, skriptId: string, ctx: ActorContext = {}) {
+  const skript = await prisma.skript.findUnique({
+    where: { id: skriptId },
+    include: { authors: { include: { user: { select: { id: true } } } } },
+  })
+  if (!skript) throw new NotFoundError('Skript not found')
+  if (!checkSkriptPermissions(userId, skript.authors, ctx.isAdmin).canEdit) {
+    throw new PermissionDeniedError('Cannot delete this skript')
+  }
+
+  // Placing sites must be read BEFORE the delete (collection memberships
+  // cascade away) so their cached pages stop rendering (bughunt #4).
+  const placingSites = await getPlacingSites(skriptId)
+  const pageSlugs = (await prisma.page.findMany({ where: { skriptId }, select: { slug: true } })).map(p => p.slug)
+
+  await prisma.skript.delete({ where: { id: skriptId } })
+  // Root PageLayoutItems reference the skript by plain contentId (no FK), so
+  // they don't cascade.
+  await prisma.pageLayoutItem.deleteMany({ where: { type: 'skript', contentId: skriptId } })
+
+  await revalidateSkriptOnPlacingSites(skriptId, [skript.slug], pageSlugs, placingSites)
+  for (const site of placingSites) revalidateSiteContent(site.slug)
+  revalidatePath('/dashboard')
+  return { skriptId, deleted: true, deletedPages: pageSlugs.length }
+}
+
+/**
+ * The skript's files (attachments, images, excalidraw + generated SVGs) and
+ * linked videos, as markdown references them. Requires view permission.
+ */
+export async function listSkriptFilesForUser(userId: string, skriptId: string, ctx: ActorContext = {}) {
+  const { skript } = await getSkriptForUser(userId, skriptId, ctx)
+  const { files, videos } = await fetchSkriptFiles(skript.id)
+  return {
+    skriptId: skript.id,
+    files: Object.values(files).map(f => ({ id: f.id, name: f.name, url: f.url, width: f.width, height: f.height })),
+    videos: Object.values(videos).map(v => ({ id: v.id, filename: v.filename, provider: v.provider })),
+  }
+}
+
+/**
+ * Delete one skript file (S3 object only when no other File row shares its
+ * hash; .excalidraw also drops its generated SVGs — see deleteFile in
+ * file-storage.ts). Refuses when a page of the skript references the file by
+ * name unless `force`, so an AI client can't silently break images. The
+ * reference scan is O(total content size of the skript's pages).
+ */
+export async function deleteSkriptFileForUser(
+  userId: string,
+  fileId: string,
+  options: { force?: boolean } = {},
+  ctx: ActorContext = {}
+) {
+  const file = await prisma.file.findUnique({
+    where: { id: fileId },
+    include: { skript: { include: { authors: { include: { user: { select: { id: true } } } } } } },
+  })
+  if (!file) throw new NotFoundError('File not found')
+  if (!checkSkriptPermissions(userId, file.skript.authors, ctx.isAdmin).canEdit) {
+    throw new PermissionDeniedError('Cannot edit files of this skript')
+  }
+
+  const pages = await prisma.page.findMany({
+    where: { skriptId: file.skriptId },
+    select: { id: true, title: true, content: true },
+  })
+  const referencedBy = pages
+    .filter(p => extractReferencedFilenames(p.content).includes(file.name))
+    .map(p => ({ pageId: p.id, title: p.title }))
+  if (referencedBy.length > 0 && !options.force) {
+    throw new ConflictError(
+      `"${file.name}" is referenced by ${referencedBy.map(p => `"${p.title}" (${p.pageId})`).join(', ')}. Remove the references first or pass force=true.`
+    )
+  }
+
+  // deleteFile re-checks authorship (any SkriptAuthor row) and calls
+  // invalidateSkriptFiles itself.
+  await deleteFile(fileId, userId)
+  return { fileId, name: file.name, deleted: true, referencedBy }
 }

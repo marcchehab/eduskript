@@ -9,6 +9,8 @@ import { checkSkriptPermissions } from '@/lib/permissions'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getPlacingSites, revalidateSkriptOnPlacingSites } from '@/lib/site-revalidate'
+import { deleteSkriptForUser } from '@/lib/services/skripts'
+import { NotFoundError, PermissionDeniedError } from '@/lib/services/pages'
 
 export async function GET(
   request: NextRequest,
@@ -197,63 +199,18 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
-
-    // Check if user is an author of this skript
-    const existingSkript = await prisma.skript.findFirst({
-      where: {
-        id,
-        authors: {
-          some: {
-            userId: session.user.id
-          }
-        }
-      }
-    })
-
-    if (!existingSkript) {
-      return NextResponse.json(
-        { error: 'Skript not found or access denied' },
-        { status: 404 }
-      )
-    }
-
-    // Placing sites must be read BEFORE the delete (collection memberships
-    // cascade away) so their cached pages stop rendering (bughunt #4).
-    const placingSites = await getPlacingSites(id)
-    const pageSlugs = (await prisma.page.findMany({ where: { skriptId: id }, select: { slug: true } })).map((p) => p.slug)
-
-    // Delete skript (cascading delete will handle pages)
-    await prisma.skript.delete({
-      where: { id }
-    })
-    await revalidateSkriptOnPlacingSites(id, [existingSkript.slug], pageSlugs, placingSites)
-
-    const userSite = await prisma.site.findFirst({
-      where: { userId: session.user.id },
-      orderBy: PRIMARY_SITE_ORDER,
-      select: { slug: true }
-    })
-
-    if (userSite?.slug) {
-      revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
-      revalidatePath('/dashboard')
-    }
-
+    await deleteSkriptForUser(session.user.id, id, { isAdmin: session.user.isAdmin })
     return NextResponse.json({ message: 'Skript deleted successfully' })
   } catch (error) {
+    if (error instanceof NotFoundError || error instanceof PermissionDeniedError) {
+      return NextResponse.json({ error: 'Skript not found or access denied' }, { status: 404 })
+    }
     console.error('Error deleting skript:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

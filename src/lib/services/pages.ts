@@ -20,7 +20,10 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { invalidateSitemaps } from '@/lib/sitemap-cache'
-import { checkPagePermissions } from '@/lib/permissions'
+import { checkPagePermissions, checkSkriptPermissions } from '@/lib/permissions'
+import { extractReferencedFilenames } from '@/lib/extract-file-references'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 import { generateSlug } from '@/lib/markdown'
 import { createLogger } from '@/lib/logger'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
@@ -758,5 +761,173 @@ export async function restorePageVersionForUser(
   return {
     page: updatedPage,
     restoredFromVersion: versionToRestore.version,
+  }
+}
+
+/**
+ * Count rows of student work attached to the given pages: progress,
+ * submissions, per-student exam state, exam submissions, component scores
+ * (all cascade-deleted with the page), plus UserData (code, annotations,
+ * answers) of users other than `exceptUserId` — UserData has no FK, so it is
+ * orphaned rather than deleted. Six COUNT queries regardless of page count.
+ * Used by the MCP delete tools to refuse destroying student work.
+ */
+export async function countStudentWorkOnPages(pageIds: string[], exceptUserId: string): Promise<number> {
+  if (pageIds.length === 0) return 0
+  const where = { pageId: { in: pageIds } }
+  const counts = await Promise.all([
+    prisma.studentProgress.count({ where }),
+    prisma.studentSubmission.count({ where }),
+    prisma.examState.count({ where: { ...where, studentId: { not: null } } }),
+    prisma.examSubmission.count({ where }),
+    prisma.componentScore.count({ where }),
+    prisma.userData.count({ where: { itemId: { in: pageIds }, userId: { not: exceptUserId } } }),
+  ])
+  return counts.reduce((a, b) => a + b, 0)
+}
+
+/**
+ * Delete a page (cascades versions + all page-attached student data).
+ * Irreversible. Requires page edit permission. Used by DELETE /api/pages/[id]
+ * and the MCP delete_page tool.
+ */
+export async function deletePageForUser(userId: string, pageId: string, ctx: ActorContext = {}) {
+  // Pages without their own PageAuthor rows inherit from the skript's
+  // authors (checkPagePermissions), so a page-authors-only filter would 404
+  // on those.
+  const existingPage = await prisma.page.findUnique({
+    where: { id: pageId },
+    include: {
+      authors: { include: { user: { select: { id: true, name: true } } } },
+      skript: {
+        include: {
+          authors: { include: { user: { select: { id: true, name: true } } } },
+          collectionSkripts: { include: { collection: true } },
+        },
+      },
+    },
+  })
+  if (!existingPage) throw new NotFoundError('Page not found')
+
+  const perms = checkPagePermissions(userId, existingPage.authors, existingPage.skript.authors, ctx.isAdmin)
+  if (!perms.canEdit) throw new NotFoundError('Page not found')
+
+  await prisma.page.delete({ where: { id: pageId } })
+
+  // Same set as an update: without the skript/teacher/org tags the sidebar
+  // keeps listing the deleted page and its URL can stay a cached 404 while
+  // the link to it is still shown.
+  await invalidatePublicPageCaches(existingPage, existingPage, userId)
+  revalidatePath('/dashboard/site-builder')
+  return { pageId, deleted: true }
+}
+
+/**
+ * Move a page to another skript, keeping its id (versions, student data and
+ * /p/{id} links survive). Copies the root-level files the page's markdown
+ * references into the target skript (same hash → no S3 copy), appends the
+ * page at the end of the target, renames the slug with -2, -3, … on conflict,
+ * and re-indexes the source skript's page order. Requires edit permission on
+ * BOTH skripts. Used by POST /api/pages/move and the MCP move_page tool.
+ *
+ * Slug-conflict resolution is one query per tried suffix: O(k) for k taken
+ * suffixes.
+ */
+export async function movePageForUser(
+  userId: string,
+  pageId: string,
+  targetSkriptId: string,
+  ctx: ActorContext = {}
+) {
+  const page = await prisma.page.findUnique({
+    where: { id: pageId },
+    include: { skript: { include: { authors: { include: { user: { select: { id: true } } } } } } },
+  })
+  if (!page) throw new NotFoundError('Page not found')
+  if (page.skriptId === targetSkriptId) throw new ValidationError('Page is already in this skript')
+  if (!checkSkriptPermissions(userId, page.skript.authors, ctx.isAdmin).canEdit) {
+    throw new PermissionDeniedError('You need edit permissions on the source skript')
+  }
+
+  const targetSkript = await prisma.skript.findUnique({
+    where: { id: targetSkriptId },
+    include: { authors: { include: { user: { select: { id: true } } } } },
+  })
+  if (!targetSkript) throw new NotFoundError('Target skript not found')
+  if (!checkSkriptPermissions(userId, targetSkript.authors, ctx.isAdmin).canEdit) {
+    throw new PermissionDeniedError('You need edit permissions on the target skript')
+  }
+
+  const referencedFilenames = extractReferencedFilenames(page.content)
+  const sourceFiles = referencedFilenames.length > 0
+    ? await prisma.file.findMany({
+        where: { skriptId: page.skriptId, name: { in: referencedFilenames }, parentId: null },
+      })
+    : []
+  const existingTargetFiles = sourceFiles.length > 0
+    ? await prisma.file.findMany({
+        where: { skriptId: targetSkriptId, name: { in: sourceFiles.map(f => f.name) }, parentId: null },
+        select: { name: true },
+      })
+    : []
+  const existingNames = new Set(existingTargetFiles.map(f => f.name))
+  const filesToCopy = sourceFiles.filter(f => !existingNames.has(f.name))
+
+  let finalSlug = page.slug
+  await prisma.$transaction(async (tx) => {
+    if (filesToCopy.length > 0) {
+      await tx.file.createMany({
+        data: filesToCopy.map(f => ({
+          name: f.name,
+          parentId: null,
+          isDirectory: f.isDirectory,
+          skriptId: targetSkriptId,
+          hash: f.hash,
+          contentType: f.contentType,
+          size: f.size,
+          width: f.width,
+          height: f.height,
+          createdBy: userId,
+        })),
+      })
+    }
+
+    let suffix = 2
+    while (await tx.page.findFirst({ where: { skriptId: targetSkriptId, slug: finalSlug }, select: { id: true } })) {
+      finalSlug = `${page.slug}-${suffix++}`
+    }
+
+    const maxOrder = await tx.page.aggregate({ where: { skriptId: targetSkriptId }, _max: { order: true } })
+    await tx.page.update({
+      where: { id: pageId },
+      data: { skriptId: targetSkriptId, slug: finalSlug, order: (maxOrder._max.order ?? -1) + 1 },
+    })
+
+    const remaining = await tx.page.findMany({
+      where: { skriptId: page.skriptId },
+      orderBy: { order: 'asc' },
+      select: { id: true },
+    })
+    for (let i = 0; i < remaining.length; i++) {
+      await tx.page.update({ where: { id: remaining[i].id }, data: { order: i } })
+    }
+  })
+
+  if (filesToCopy.length > 0) invalidateSkriptFiles(targetSkriptId)
+  // The page's canonical URL changed (/p/{id} caches it) and both skripts'
+  // sidebars changed on every site that places them.
+  invalidateStableLinks()
+  invalidateSitemaps()
+  await revalidateSkriptOnPlacingSites(page.skriptId, [page.skript.slug], [page.slug])
+  await revalidateSkriptOnPlacingSites(targetSkriptId, [targetSkript.slug], [finalSlug])
+  revalidateTag(CACHE_TAGS.page(pageId), { expire: 0 })
+  revalidatePath('/dashboard')
+
+  return {
+    pageId,
+    targetSkriptId,
+    targetSkriptSlug: targetSkript.slug,
+    pageSlug: finalSlug,
+    copiedFiles: filesToCopy.map(f => f.name),
   }
 }
