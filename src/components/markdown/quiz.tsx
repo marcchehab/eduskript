@@ -90,9 +90,10 @@ interface OptionProps {
 // Parse correct prop to boolean
 const isCorrect = (value: 'true' | 'false' | undefined): boolean => value === 'true'
 
-// The question prompt reads as the heading of the card: full-size foreground
-// text, not the muted small type used for helper text.
-const PROMPT_CLASS = 'text-base font-medium text-foreground'
+// The question prompt reads as the heading of the card: foreground text at the
+// page's own font size (same as the options, which inherit it), not the muted
+// small type used for helper text.
+const PROMPT_CLASS = 'font-medium text-foreground'
 
 // True for the `<answer>` children the option indices are built from. Everything
 // else a <question> can contain — the <question-prompt> wrapper, whitespace text
