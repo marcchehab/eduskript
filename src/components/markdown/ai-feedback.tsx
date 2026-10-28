@@ -159,14 +159,16 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   )
 
   // The "nothing written" error goes stale once the student draws; the
-  // annotation layer announces every stroke change.
+  // annotation layer announces every stroke change. Listens for the whole
+  // lifetime: attaching only while `error` is set left a gap between the error
+  // rendering and the effect running, in which a stroke event was lost.
+  // setError(null) without an error is a no-op re-render bail-out.
   // @see src/components/annotations/annotation-layer.tsx (eduskript:annotations-changed)
   useEffect(() => {
-    if (!error) return
     const clear = () => setError(null)
     window.addEventListener('eduskript:annotations-changed', clear)
     return () => window.removeEventListener('eduskript:annotations-changed', clear)
-  }, [error])
+  }, [])
 
   const busy = status !== 'idle'
 
