@@ -1,6 +1,8 @@
 # Kamal deployment: eduskript.org on the Infomaniak VPS (eduskript-prod).
 # Plan and rationale: MIGRATION-VPS.md. Run via bin/kamal (Kamal in Docker) or
-# bin/deploy (checks + deploy). Secrets: .kamal/secrets ← ~/.config/eduskript/prod.env.
+# bin/deploy (checks + deploy). Secrets live only on the VPS in
+# /etc/eduskript/{app,db,caddy}.env, read by Docker via env-file below; deploys
+# never carry them (scripts/ops/README.md#secrets).
 #
 # Traffic: Caddy (:80/:443, TLS incl. on-demand certs for custom domains)
 #   → kamal-proxy (127.0.0.1:8080, health-gated zero-downtime switch)
@@ -17,6 +19,7 @@ servers:
       # 2 × 2.5g during the deploy overlap + 2g db + 0.25g caddy < 8 GB host.
       # A leaking Node heap kills this container, not Postgres.
       memory: 2500m
+      env-file: /etc/eduskript/app.env
   # Video encoder (scripts/video-worker.mjs, MIGRATION-VIDEO.md): same image,
   # one ffmpeg job at a time. Capped at 2 of the 4 vCPUs and given low CPU
   # shares so the web role wins under contention; ffmpeg itself runs under
@@ -34,6 +37,7 @@ servers:
       cpus: 2
       cpu-shares: 128
       memory: 768m
+      env-file: /etc/eduskript/app.env
     env:
       clear:
         # Cache revalidation ping after each job (the app caches video rows).
@@ -110,28 +114,7 @@ env:
     # usually one public IP, so the per-IP cap is generous; the global daily
     # count + USD budget (code defaults 100 / $25) are the cost cap.
     SCRIPT_IMPORT_PER_IP_PER_DAY: "20"
-  secret:
-    - DATABASE_URL
-    - NEXTAUTH_SECRET
-    - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
-    - STUDENT_PSEUDONYM_SECRET
-    - AZURE_AD_CLIENT_ID
-    - AZURE_AD_CLIENT_SECRET
-    - AZURE_AD_TENANT_ID
-    - BREVO_API_KEY
-    - BREVO_TEACHER_LIST_DE
-    - BREVO_TEACHER_LIST_EN
-    - CLOUDMAILIN_INBOX_ADDRESS
-    - CLOUDMAILIN_SECRET
-    - CRON_SECRET
-    - EMAIL_FROM
-    - OPENROUTER_API_KEY
-    - INFOMANIAK_AI_TOKEN       # AI for student data (Infomaniak AI Services, CH)
-    - PAYREXX_API_SECRET
-    - PAYREXX_INSTANCE
-    - PAYREXX_WEBHOOK_SECRET
-    - S3_ACCESS_KEY            # Infomaniak EC2 credential
-    - S3_SECRET_KEY
+  # Secrets: /etc/eduskript/app.env on the VPS (env-file in each role's options).
 
 accessories:
   db:
@@ -157,13 +140,8 @@ accessories:
         PGBACKREST_REPO2_RETENTION_FULL: "26"
         PGBACKREST_REPO2_RETENTION_DIFF: "14"
         PGBACKREST_REPO2_RETENTION_ARCHIVE: "2"
-      secret:
-        - POSTGRES_PASSWORD
-        # The app's Infomaniak EC2 key (INFOMANIAK_S3_*). EC2 credentials are
-        # project-wide in OpenStack, so a second key would not be scoped any tighter.
-        - PGBACKREST_REPO2_S3_KEY
-        - PGBACKREST_REPO2_S3_KEY_SECRET
-        - PGBACKREST_REPO2_CIPHER_PASS
+      # Secrets (POSTGRES_PASSWORD, PGBACKREST_REPO2_S3_KEY[_SECRET] = the app's
+      # Infomaniak EC2 key, PGBACKREST_REPO2_CIPHER_PASS): /etc/eduskript/db.env.
     directories:
       - /var/lib/eduskript/pg:/var/lib/postgresql              # pg18 PGDATA = /var/lib/postgresql/18/docker
       - /var/lib/eduskript/pgbackrest:/var/lib/pgbackrest      # pgBackRest repo1 (local PITR)
@@ -171,6 +149,7 @@ accessories:
       memory: 2g
       shm-size: 256m
       stop-timeout: 60
+      env-file: /etc/eduskript/db.env
     cmd: >-
       postgres
       -c max_connections=100
@@ -192,11 +171,9 @@ accessories:
     image: eduskript-caddy:2.10
     host: 179.237.126.129
     network: host
-    env:
-      secret:
-        - CLOUDFLARE_API_TOKEN   # DNS-01 for our own domains; currently the broad local token
     options:
       memory: 256m
+      env-file: /etc/eduskript/caddy.env   # CLOUDFLARE_API_TOKEN: DNS-01 for our own domains
     files:
       - config/Caddyfile:/etc/caddy/Caddyfile
     directories:

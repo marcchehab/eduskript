@@ -2,20 +2,26 @@
 # Kamal without a local Ruby: runs the official image, pinned.
 # - host network: the local registry (localhost:5555) and Kamal's SSH port
 #   forward must see the same "localhost" as the host's Docker daemon
-# - SSH agent forwarded (Bitwarden agent holds the eduskript-prod key)
-# - prod.env mounted read-only for .kamal/secrets
+# - SSH agent forwarded (key: bin/lib/prod-ssh.sh)
+# - Secrets stay on the VPS (/etc/eduskript/*.env, read by Docker via
+#   env-file in config/deploy.yml). The one exception is the build secret
+#   NEXT_SERVER_ACTIONS_ENCRYPTION_KEY (the image is built here): it is read
+#   from /etc/eduskript/app.env over SSH for each run and passed to Kamal as
+#   an env var, never written to disk here.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-: "${SSH_AUTH_SOCK:?SSH agent not running (Bitwarden SSH agent?)}"
+source bin/lib/prod-ssh.sh
+NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$("${PROD_SSH[@]}" "grep -m1 '^NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=' /etc/eduskript/app.env | cut -d= -f2-")"
+: "${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?not found in /etc/eduskript/app.env on the VPS}"
+export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
 export GIT_SHA="$(git rev-parse HEAD)$(git diff --quiet HEAD -- . ':!MIGRATION-VPS.md' || echo -dirty)"
 export GIT_MESSAGE="$(git log -1 --format=%s)"
 export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 tty=(); [ -t 0 ] && tty=(-it)
-exec docker run --rm "${tty[@]}" \
+docker run --rm "${tty[@]}" \
   --network host \
   -v "$PWD:/workdir" \
   -v "$SSH_AUTH_SOCK:/ssh-agent" -e SSH_AUTH_SOCK=/ssh-agent \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$HOME/.config/eduskript:/secrets:ro" \
-  -e GIT_SHA -e GIT_MESSAGE -e BUILD_TIME \
+  -e GIT_SHA -e GIT_MESSAGE -e BUILD_TIME -e NEXT_SERVER_ACTIONS_ENCRYPTION_KEY \
   ghcr.io/basecamp/kamal:v2.12.0 "$@"

@@ -8,10 +8,11 @@ the site back up or at least keep the data safe. Don't delete anything.
 - Server: Infomaniak VPS "eduskript-prod" (ov-275f28.infomaniak.ch,
   179.237.126.129). Infomaniak login: Bitwarden item "Infomaniak".
 - SSH key: Bitwarden SSH item "eduskript-prod" (user `debian`, has sudo).
-- All app secrets: Bitwarden note "eduskript prod.env".
+- All app secrets: on the server in `/etc/eduskript/*.env`; backup in
+  Bitwarden note "eduskript server env".
 - Backups: on the server (`/var/lib/eduskript/pgbackrest`) and encrypted at
   Infomaniak object storage in Winterthur (region dc4-a, bucket `eduskript-backups`, passphrase = `PGBACKREST_REPO2_CIPHER_PASS`
-  in prod.env).
+  in /etc/eduskript/db.env).
 - Code + deploy config: GitHub repo eduskript, `config/deploy.yml`.
 
 ## 1. Look

@@ -4,6 +4,6 @@
 # Certificates persist in /var/lib/eduskript/caddy. ~5 s outage.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ssh -o IdentitiesOnly=yes -i ~/.ssh/eduskript-prod.pub deploy@179.237.126.129 \
-  'docker stop eduskript-caddy && docker rm eduskript-caddy'
-exec bin/kamal accessory boot caddy
+source bin/lib/prod-ssh.sh
+"${PROD_SSH[@]}" 'test -s /etc/eduskript/caddy.env && docker stop eduskript-caddy && docker rm eduskript-caddy'
+bin/kamal accessory boot caddy

@@ -8,6 +8,6 @@
 # Short DB outage; the app reconnects on its own.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ssh -o IdentitiesOnly=yes -i ~/.ssh/eduskript-prod.pub deploy@179.237.126.129 \
-  'docker stop -t 60 eduskript-db && docker rm eduskript-db'
-exec bin/kamal accessory boot db
+source bin/lib/prod-ssh.sh
+"${PROD_SSH[@]}" 'test -s /etc/eduskript/db.env && docker stop -t 60 eduskript-db && docker rm eduskript-db'
+bin/kamal accessory boot db
