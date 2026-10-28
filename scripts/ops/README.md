@@ -7,9 +7,11 @@ Plan and rationale: `MIGRATION-VPS.md`. Deployment config: `config/deploy.yml`.
 - `ssh eduskript-prod` → user `debian` (sudo). Kamal uses user `deploy`
   (docker group, no sudo — but docker access is root-equivalent).
 - SSH key for `deploy` (bin/kamal, bin/deploy, bin/reboot-*): paste the
-  private key into `EDUSKRIPT_DEPLOY_SSH_KEY`; the scripts load it into a
-  throwaway ssh-agent (bin/lib/prod-ssh.sh). Without it they use whatever
-  agent `SSH_AUTH_SOCK` points at.
+  private key into `EDUSKRIPT_DEPLOY_SSH_KEY`, or store it as
+  `~/.ssh/eduskript-prod` (chmod 600); the scripts load it into a throwaway
+  ssh-agent (bin/lib/prod-ssh.sh). Without either they use whatever agent
+  `SSH_AUTH_SOCK` points at. The same key file serves `ssh eduskript-prod`
+  (IdentityFile in ~/.ssh/config). Backup: Bitwarden SSH item "eduskript-prod".
 
 ## Secrets
 
