@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { compileMarkdown } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
@@ -34,5 +34,15 @@ describe('code block annotation section', () => {
     const { container } = await renderMd('Intro\n\n```\nplain\n```')
     const pre = container.querySelector('pre[data-section-id="pre-0"]')
     expect(pre).not.toBeNull()
+  })
+
+  it('colour tints survive sanitizing and become CodeMirror line classes', async () => {
+    const { container } = await renderMd('```sql red={2} green={3}\nSELECT *\nFROM a\nJOIN b ON x = y\nJOIN c ON y = z -- [!code blue]\n```')
+    await waitFor(() => expect(container.querySelectorAll('.cm-line-tint').length).toBe(3))
+    const lines = [...container.querySelectorAll('.cm-line')]
+    expect(lines[1].classList).toContain('cm-line-tint-red')
+    expect(lines[2].classList).toContain('cm-line-tint-green')
+    expect(lines[3].classList).toContain('cm-line-tint-blue')
+    expect(lines[1].textContent).toBe('FROM a')
   })
 })

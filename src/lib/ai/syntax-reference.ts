@@ -218,6 +218,7 @@ ship.setx(new_x)       # [!code focus]
 - A line whose only content is the marker becomes an empty added line.
 - Any comment token works (\`#\`, \`//\`, \`--\`, \`;\`, \`%\`, \`/* */\`, \`<!-- -->\`), and the comment is removed with the marker.
 - Without comments: line ranges in the info string — \`\`\`python {2,5-7} add={3-4} del={9} focus={1}\`\`\` (a bare \`{...}\` means highlight).
+- Colour tints for colour coding (no diff sign): \`red\`, \`green\`, \`blue\`, \`yellow\`, \`purple\` — \`\`\`sql red={2} green={3} blue={4}\`\`\` or \`-- [!code blue]\`. Use them to match coloured tables or diagrams (same tints as \`rgb(248 113 113 / .22)\`, \`rgb(74 222 128 / .22)\`, \`rgb(96 165 250 / .25)\`, \`rgb(250 204 21 / .25)\`, \`rgb(192 132 252 / .22)\`).
 - Only plain blocks; an \`editor\` block keeps its text verbatim (students edit it).
 
 ### Kara (grid world)
@@ -955,7 +956,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
 
-**Code-block line annotations:** in plain \`\`\`lang blocks, a trailing \`# [!code ++]\` marks a line as added (green), \`[!code --]\` removed (red), \`[!code highlight]\` highlighted, \`[!code focus]\` focused (rest blurred until hover). The marker and its comment are stripped from the rendered code. \`[!code ++:3]\` covers 3 lines; info-string ranges work too: \`\`\`python {2,5-7} add={3} del={9}\`\`\`. Not available in \`editor\` blocks.
+**Code-block line annotations:** in plain \`\`\`lang blocks, a trailing \`# [!code ++]\` marks a line as added (green), \`[!code --]\` removed (red), \`[!code highlight]\` highlighted, \`[!code focus]\` focused (rest blurred until hover), \`[!code red|green|blue|yellow|purple]\` colour-tinted (no diff sign, e.g. \`red={2} blue={4}\`). The marker and its comment are stripped from the rendered code. \`[!code ++:3]\` covers 3 lines; info-string ranges work too: \`\`\`python {2,5-7} add={3} del={9}\`\`\`. Not available in \`editor\` blocks.
 
 **Inline code with a language:** \`code\`{:python} — a language marker right after the closing backtick of inline code gets the same per-token color highlighting as a fenced block, without breaking it out of the sentence. Same language set as code editors/blocks (python, javascript/js, typescript/ts, sql, php, java, cpp, rust, go, html, css, json, xml, yaml). No marker → plain, uncolored inline code (the default).
 

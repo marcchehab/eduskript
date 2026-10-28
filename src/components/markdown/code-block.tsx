@@ -11,6 +11,8 @@ export interface CodeLineMarks {
   del?: number[]
   highlight?: number[]
   focus?: number[]
+  /** Line → colour name (red, green, …); rendered as .cm-line-tint-<colour>. */
+  tint?: Record<number, string>
 }
 
 interface CodeBlockProps {
@@ -117,7 +119,7 @@ function CodeBlockInner({ code, language, className, showCopy = true, marks }: C
         )
       }
 
-      // Line decorations for [!code ++/--/highlight/focus] marks. The document is
+      // Line decorations for [!code ++/--/highlight/focus/<colour>] marks. The document is
       // read-only, so the decoration set is built once from line offsets in the
       // source string — no update listener needed.
       const markExtensions: Extension[] = []
@@ -136,6 +138,9 @@ function CodeBlockInner({ code, language, className, showCopy = true, marks }: C
         addClass(stableMarks.del, 'cm-line-del')
         addClass(stableMarks.highlight, 'cm-line-highlight')
         addClass(stableMarks.focus, 'cm-line-focus')
+        for (const [n, color] of Object.entries(stableMarks.tint ?? {})) {
+          addClass([Number(n)], `cm-line-tint cm-line-tint-${color}`)
+        }
 
         const offsets: number[] = []
         let pos = 0

@@ -166,13 +166,25 @@ function CodeComponent({ children, className, isExam, ...props }: React.HTMLAttr
     const nums = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n >= 1)
     return nums.length ? nums : undefined
   }
+  // Colour tints as "2:red,3:green" → { 2: 'red', 3: 'green' }.
+  const tintList = (raw: string | undefined): Record<number, string> | undefined => {
+    if (!raw) return undefined
+    const out: Record<number, string> = {}
+    for (const part of raw.split(',')) {
+      const [n, color] = part.split(':')
+      const line = Number(n)
+      if (Number.isInteger(line) && line >= 1 && /^[a-z]+$/.test(color ?? '')) out[line] = color
+    }
+    return Object.keys(out).length ? out : undefined
+  }
   const marks = {
     add: lineList('dataAdd', 'data-add'),
     del: lineList('dataDel', 'data-del'),
     highlight: lineList('dataHighlight', 'data-highlight'),
     focus: lineList('dataFocus', 'data-focus'),
+    tint: tintList((dataProps['dataTint'] ?? dataProps['data-tint']) as string | undefined),
   }
-  const hasMarks = Boolean(marks.add || marks.del || marks.highlight || marks.focus)
+  const hasMarks = Boolean(marks.add || marks.del || marks.highlight || marks.focus || marks.tint)
 
   // Use CodeMirror-based CodeBlock for syntax highlighting
   return <CodeBlock code={code} language={language} showCopy={showCopy} marks={hasMarks ? marks : undefined} />

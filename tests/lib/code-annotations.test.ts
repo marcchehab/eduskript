@@ -78,6 +78,19 @@ describe('remarkCodeAnnotations', () => {
     expect(node.value).toBe('a\nb\nc\nd\ne')
   })
 
+  it('collects colour tints from the info string and inline markers', () => {
+    const node = firstCode(
+      ['```sql red={2} green={3}', 'SELECT *', 'FROM a', 'JOIN b ON x = y', 'JOIN c ON y = z; -- [!code blue]', '```'].join('\n'),
+    )
+    expect(props(node)).toEqual({ dataTint: '2:red,3:green,4:blue' })
+    expect(node.value).toBe('SELECT *\nFROM a\nJOIN b ON x = y\nJOIN c ON y = z;')
+  })
+
+  it('lets a later tint on the same line win and keeps diff marks separate', () => {
+    const node = firstCode(['```python red={1} add={1}', 'a # [!code purple:2]', 'b', '```'].join('\n'))
+    expect(props(node)).toEqual({ dataAdd: '1', dataTint: '1:purple,2:purple' })
+  })
+
   it('leaves untouched blocks without hProperties', () => {
     const node = firstCode(['```python', 'print("hi")', '```'].join('\n'))
     expect(node.data?.hProperties).toBeUndefined()
