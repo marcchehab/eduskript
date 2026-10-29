@@ -285,12 +285,17 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
   return {
     ...baseAdapter,
 
-    // Override linkAccount to capture OAuth info for students
+    // Override linkAccount to drop provider tokens and capture OAuth info for students.
+    // The provider's id_token is a readable JWT with email + real name, and the
+    // access/refresh tokens grant Microsoft Graph access. Nothing reads them from
+    // the DB (the Graph photo fetch in auth.ts uses the in-memory account during
+    // sign-in), so they are never stored. next-auth only calls linkAccount on the
+    // first sign-in with a provider; it doesn't update tokens on later sign-ins.
     // @ts-ignore - Type mismatch between next-auth and @auth/prisma-adapter versions
     async linkAccount(account: any) {
-      // Call base adapter to create Account record
+      const { id_token, access_token, refresh_token, session_state, ...stored } = account
       if (baseAdapter.linkAccount) {
-        const result = await baseAdapter.linkAccount(account as any)
+        const result = await baseAdapter.linkAccount(stored as any)
 
         // Update user with OAuth provider info if it's a student
         const user = await prisma.user.findUnique({
@@ -317,12 +322,14 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
     },
 
     async createUser(user: Omit<AdapterUser, 'id'>) {
+      // Masked email is only logged for teachers: student emails must never
+      // reach the server log (/datenschutz), not even partially.
       const maskedEmail = user.email?.replace(/(.{2}).*(@.*)/, '$1***$2') || 'none'
-      log.info(`Creating new user account for ${maskedEmail}`)
+      log.info('Creating new user account')
 
       // Get structured signup context (account type + org info)
       const signupContext = await isStudentSignup(user.email, user)
-      log.info(`Account type decision: ${signupContext.isStudent ? 'STUDENT' : 'TEACHER'} for ${maskedEmail}`, {
+      log.info(`Account type decision: ${signupContext.isStudent ? 'STUDENT' : `TEACHER for ${maskedEmail}`}`, {
         teacherSlug: signupContext.teacherSlug,
         orgSlug: signupContext.orgSlug,
       })
@@ -346,9 +353,9 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
             },
           })
 
-          log.info(`Student account created: id=${createdUser.id}, name="${anonymousName}", pseudonym=${emailPseudonym?.substring(0, 8)}...`)
+          log.info(`Student account created: id=${createdUser.id}, name="${anonymousName}"`)
         } catch (error: any) {
-          log.error(`Failed to create student account for ${maskedEmail}: ${error.message}`)
+          log.error(`Failed to create student account: ${error.message}`)
           throw error
         }
 

@@ -222,7 +222,9 @@ export const authOptions: NextAuthOptions = {
             tenantId: process.env.AZURE_AD_TENANT_ID || 'common',
             authorization: {
               params: {
-                scope: 'openid profile email User.Read offline_access',
+                // No offline_access: we don't keep a refresh token. User.Read is
+                // only used during sign-in to fetch the profile photo.
+                scope: 'openid profile email User.Read',
                 prompt: 'select_account' // Always show account selector
               }
             }

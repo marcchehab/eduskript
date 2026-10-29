@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PrivacyAdapter } from '@/lib/privacy-adapter'
 import { PrismaClient } from '@prisma/client'
+import { PrismaAdapter } from '@auth/prisma-adapter'
 
 /**
  * OAuth Signup Flow Tests
@@ -162,6 +163,31 @@ describe('OAuth Signup Flow', () => {
       // The pseudonym is derived from email but doesn't expose the actual email
       // It should be a hash, not contain the plain email
       expect(createCall.data.studentPseudonym).toBeDefined()
+    })
+
+    it('should NOT store provider tokens (id_token contains email + name)', async () => {
+      const adapter = PrivacyAdapter({ prisma: mockPrisma, isStudentSignup })
+      const base = (PrismaAdapter as any).mock.results.at(-1).value
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue({ accountType: 'student', oauthProvider: null })
+
+      await (adapter.linkAccount as any)({
+        userId: 'student-id',
+        type: 'oauth',
+        provider: 'azure-ad',
+        providerAccountId: 'oid-1',
+        id_token: 'header.payload.sig',
+        access_token: 'at',
+        refresh_token: 'rt',
+        session_state: 'ss',
+        expires_at: 123,
+      })
+
+      const stored = base.linkAccount.mock.calls[0][0]
+      expect(stored).toMatchObject({ userId: 'student-id', provider: 'azure-ad', providerAccountId: 'oid-1' })
+      expect(stored.id_token).toBeUndefined()
+      expect(stored.access_token).toBeUndefined()
+      expect(stored.refresh_token).toBeUndefined()
+      expect(stored.session_state).toBeUndefined()
     })
 
     it('should generate anonymous display name for students', async () => {

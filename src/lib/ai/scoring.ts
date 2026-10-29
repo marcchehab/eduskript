@@ -418,6 +418,9 @@ export interface ScorePromptInput {
   submission: string
   /** Teacher/org custom AI guidance (language, style) — see loadAiGuidance. */
   guidance?: string
+  /** Allow the raw model output (feedback on the student's work) in the server
+   *  log when DEBUG=ai:scoring is on. Only for test accounts, see log-privacy.ts. */
+  logRaw?: boolean
 }
 
 export function buildScoreUserPrompt(input: ScorePromptInput): string {
@@ -552,11 +555,12 @@ export async function scoreSubmission(
     const parsed = parseAiScore(text, aiCriteria)
     if ('error' in parsed) {
       const debug = aiDebug('score', text, diag)
-      // Server log without `raw`; the raw text only with DEBUG=ai:scoring.
-      // The full detail rides back to the browser console when the teacher
-      // enables the `ai:*` debug namespace (see the route + panel).
+      // Server log without `raw`; the raw text only with DEBUG=ai:scoring and
+      // only for test accounts (input.logRaw). The full detail rides back to the
+      // browser console when the teacher enables the `ai:*` debug namespace
+      // (see the route + panel).
       console.error('[scoring] parse failed', { ...debug, raw: undefined })
-      log('parse failed, raw model output', debug.raw)
+      if (input.logRaw) log('parse failed, raw model output', debug.raw)
       return { ...parsed, debug }
     }
     aiResult = parsed

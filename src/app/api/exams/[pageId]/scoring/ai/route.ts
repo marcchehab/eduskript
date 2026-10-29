@@ -27,6 +27,7 @@ import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 import { scoreSubmission, scoringModel, type RubricCriterion, type AiDebug } from '@/lib/ai/scoring'
 import { loadAiGuidance } from '@/lib/ai/guidance'
 import { mergedCriterionTotal, type OverrideCriterion } from '@/lib/scoring/merge-criteria'
+import { isLogTestUser } from '@/lib/log-privacy'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         criteria,
         submission: sub.text,
         guidance,
+        logRaw: isLogTestUser(sid),
       })
       if ('error' in res) {
         errors.push({ componentId: c.componentId, studentId: sid, error: res.error, debug: 'debug' in res ? res.debug : undefined })

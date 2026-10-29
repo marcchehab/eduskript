@@ -98,7 +98,6 @@ env:
     NEXTAUTH_URL: https://eduskript.org
     NEXT_PUBLIC_CUSTOM_DOMAIN_TARGET: sites.eduskript.org
     BUILTIN_PLUGIN_OWNER: informatikgarten
-    DEBUG: "auth:*,ai:*,mail:*"
     EMAIL_FROM_NAME: Eduskript Verification
     WARM_ON_BOOT: "0"
     # Object storage: Infomaniak Public Cloud (Swift + S3 API), see src/lib/s3.ts.
