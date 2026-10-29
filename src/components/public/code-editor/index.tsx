@@ -663,12 +663,13 @@ export const CodeEditor = memo(function CodeEditor({
   const [outputPanelHeight, setOutputPanelHeight] = useState(220) // default height in pixels
   const [isDraggingHorizontalSplitter, setIsDraggingHorizontalSplitter] = useState(false)
   const MIN_OUTPUT_HEIGHT = 0 // allow collapsing completely
-  const MAX_OUTPUT_HEIGHT = 800 // maximum output panel height (generous to allow large result sets)
   const SPLITTER_HEIGHT = 8 // actual rendered height of horizontal splitter (minHeight: 8px)
   // Drag start state for splitter/resize — delta-based to avoid scroll-induced feedback loops.
   // `zoom` captures any ancestor `transform: scale()` (e.g. annotation-layer page zoom)
   // so cursor-pixel deltas can be converted to logical-pixel heights.
-  const splitterDragStartRef = useRef<{ startY: number; startEditor: number; startOutput: number; zoom: number } | null>(null)
+  // `fullscreen`: the editor flexes to fill 100vh, so only the output height is
+  // set and it is bounded by the viewport instead of by editorHeight.
+  const splitterDragStartRef = useRef<{ startY: number; startEditor: number; startOutput: number; zoom: number; fullscreen: boolean } | null>(null)
   const resizeDragStartRef = useRef<{ startY: number; startHeight: number; zoom: number } | null>(null)
 
   // Live ancestor zoom (annotation-layer page zoom). Read at mousedown only.
@@ -1970,6 +1971,7 @@ export const CodeEditor = memo(function CodeEditor({
       startEditor: editorHeight,
       startOutput: outputPanelHeight,
       zoom: getZoom(),
+      fullscreen,
     }
     setIsDraggingHorizontalSplitter(true)
   }
@@ -1982,6 +1984,7 @@ export const CodeEditor = memo(function CodeEditor({
       startEditor: editorHeight,
       startOutput: outputPanelHeight,
       zoom: getZoom(),
+      fullscreen,
     }
     setIsDraggingHorizontalSplitter(true)
   }
@@ -1996,18 +1999,18 @@ export const CodeEditor = memo(function CodeEditor({
       // pixels. Divide by the captured zoom so the bar tracks the cursor 1:1
       // visually under any ancestor `transform: scale()`.
       const delta = (clientY - start.startY) / start.zoom
-      const newEditorHeight = start.startEditor + delta
-      const newOutputHeight = start.startOutput - delta
+      const newOutputHeight = Math.max(MIN_OUTPUT_HEIGHT, start.startOutput - delta)
 
-      // Clamp: both ends must stay within bounds simultaneously
-      if (
-        newEditorHeight >= MIN_EDITOR_HEIGHT &&
-        newOutputHeight >= MIN_OUTPUT_HEIGHT &&
-        newOutputHeight <= MAX_OUTPUT_HEIGHT
-      ) {
-        setUserEditorHeight(newEditorHeight)
-        setOutputPanelHeight(newOutputHeight)
+      if (start.fullscreen) {
+        const maxOutput = window.innerHeight - MIN_EDITOR_HEIGHT - SPLITTER_HEIGHT
+        setOutputPanelHeight(Math.min(maxOutput, newOutputHeight))
+        return
       }
+
+      // Total stays constant while the editor is above its minimum; past that
+      // the editor stays at MIN_EDITOR_HEIGHT and the output (and wrapper) grows.
+      setUserEditorHeight(Math.max(MIN_EDITOR_HEIGHT, start.startEditor + start.startOutput - newOutputHeight))
+      setOutputPanelHeight(newOutputHeight)
     }
 
     const handleMouseMove = (e: MouseEvent) => applyDelta(e.clientY)
