@@ -21,7 +21,7 @@ Datenbank, hochgeladene Dateien und verschlüsselte Sicherungen liegen in der Sc
 
 | Auftragsverarbeiter | Zweck | Standort | Unternehmen |
 |---------------|---------|----------|---------|
-| Infomaniak | Server für Anwendung und PostgreSQL-Datenbank, Objektspeicher (hochgeladene Dateien, Bilder), verschlüsselte Sicherungen von Datenbank und Dateien, E-Mail-Versand an Lehrpersonen (SMTP) | Schweiz | Infomaniak Network SA (Schweiz) |
+| Infomaniak | Server für Anwendung und PostgreSQL-Datenbank, Objektspeicher (hochgeladene Dateien, Bilder, Schnappschüsse), verschlüsselte Sicherungen von Datenbank und Dateien, E-Mail-Versand an Lehrpersonen (SMTP) | Schweiz | Infomaniak Network SA (Schweiz) |
 | CloudMailin | Empfang weitergeleiteter E-Mails (Mail-Hooks, z. B. Login-Codes) und von Entwürfen für Produkt-Updates | USA/EU | Dynamic Edge Software Ltd (Grossbritannien) |
 
 Die vollständige Liste inklusive Zahlungsabwicklung und KI-Anbietern steht in der [Datenschutzerklärung](https://eduskript.org/datenschutz#unterauftragsbearbeiter).

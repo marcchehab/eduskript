@@ -29,7 +29,7 @@
 # On success writes /var/lib/eduskript/files-backup.ok (checked by
 # health-check.sh) and pings FILES_BACKUP_HEARTBEAT_URL (+ /fail on error).
 set -uo pipefail
-BUCKETS="eduskript-teacher-files eduskript-imports"
+BUCKETS="eduskript-teacher-files eduskript-imports eduskript-user-data"
 DEST_CONTAINER="eduskript-files-backup"
 RETENTION_DAYS=30
 STAMP=/var/lib/eduskript/files-backup.ok

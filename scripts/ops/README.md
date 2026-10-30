@@ -123,8 +123,8 @@ encrypted). Since 2026-10-29.
 - The destination container was created like `eduskript-backups` (Keystone
   token, `PUT https://s3.pub2.infomaniak.cloud/object/v1/AUTH_<project>/eduskript-files-backup`),
   private (no `X-Container-Read`).
-- Not covered: snaps. Production has no `SCW_USER_BUCKET`, so snaps are
-  stored as data URLs in the database (in the DB backups). Dev buckets and
+- Snaps: bucket `eduskript-user-data` (private, since 2026-10-30). Snaps saved
+  before that are data URLs in the database (in the DB backups). Dev buckets and
   `eduskript-atlas-backup` (dc3-a) are not backed up.
 - Monitoring: heartbeat `FILES_BACKUP_HEARTBEAT_URL` in `/etc/eduskript-ops.env`
   (healthchecks.io check `eduskript-files-backup`, daily, 2 h grace; the ping

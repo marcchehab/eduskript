@@ -108,6 +108,8 @@ env:
     S3_FORCE_PATH_STYLE: "true"
     S3_PUBLIC_BASE_URL: https://s3.pub1.infomaniak.cloud/object/v1/AUTH_0545793e6966429094ae4a572cd0e156
     SCW_TEACHER_BUCKET: eduskript-teacher-files
+    # Private (no X-Container-Read): snaps, served via /api/snaps/image with access check.
+    SCW_USER_BUCKET: eduskript-user-data
     SCW_IMPORT_BUCKET: eduskript-imports
     # Anonymous script import (src/lib/script-import/limits.ts). A school is
     # usually one public IP, so the per-IP cap is generous; the global daily

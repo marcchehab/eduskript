@@ -162,7 +162,7 @@ Keine besonders schützenswerten Personendaten im Sinne von Art. 5 lit. c DSG vo
 ## Anhang 2 – Technische und organisatorische Massnahmen
 
 - Verschlüsselte Übertragung (TLS) für alle Verbindungen
-- Datenbank-Sicherungen am zweiten Standort verschlüsselt (AES-256); Datei-Sicherungen am zweiten Standort verschlüsselt (rclone crypt, XSalsa20-Poly1305); hochgeladene Dateien im Objektspeicher laut Infomaniak serverseitig verschlüsselt (Dateien von Lehrpersonen sind über ihre URL öffentlich abrufbar). Der Datenträger des Servers selbst ist nicht verschlüsselt (bietet Infomaniak für VPS nicht an); Zugriff nur per SSH-Schlüssel
+- Datenbank-Sicherungen am zweiten Standort verschlüsselt (AES-256); Datei-Sicherungen am zweiten Standort verschlüsselt (rclone crypt, XSalsa20-Poly1305); hochgeladene Dateien im Objektspeicher laut Infomaniak serverseitig verschlüsselt (Dateien von Lehrpersonen sind über ihre URL öffentlich abrufbar; Schnappschüsse liegen in einem nicht öffentlichen Bucket und werden nur nach Zugriffsprüfung ausgeliefert). Der Datenträger des Servers selbst ist nicht verschlüsselt (bietet Infomaniak für VPS nicht an); Zugriff nur per SSH-Schlüssel
 - Pseudonymisierung der Schülerinnen und Schüler bei der Anmeldung; keine Speicherung von Schüler-E-Mails
 - Rollen- und Berechtigungskonzept: Lehrpersonen sehen nur eigene Klassen; Schüler nur freigegebene Inhalte; Daten verschiedener Schulen und Lehrpersonen sind logisch getrennt
 - Zugriff auf Produktivsysteme nur durch Betreiber, mit Zwei-Faktor-Authentifizierung (Passkey bzw. TOTP)
