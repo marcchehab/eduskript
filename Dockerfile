@@ -6,6 +6,7 @@
 #   build   `pnpm build` → .next/standalone
 #   prod    prod-only node_modules for the start sequence (prisma CLI, seeds)
 #   pyodide self-hosted Python runtime + wheels (scripts/fetch-pyodide.mjs)
+#   excalidraw-assets  self-hosted Excalidraw fonts (scripts/copy-excalidraw-assets.mjs)
 # The runtime image carries both the standalone server (with its own traced
 # node_modules) and the prod node_modules — ~1 GB, but the node_modules layer
 # only changes with pnpm-lock.yaml, so most deploys push just the app layer.
@@ -43,6 +44,14 @@ COPY --from=deps /app/node_modules/pyodide ./node_modules/pyodide
 COPY scripts/fetch-pyodide.mjs ./scripts/
 COPY src/lib/pyodide-dist.json ./src/lib/
 RUN node scripts/fetch-pyodide.mjs /pyodide
+
+# Self-hosted Excalidraw fonts (~14 MB), served at /excalidraw/v<version>/ so
+# the editor never falls back to esm.sh. Own stage/layer like pyodide: only
+# changes when the @excalidraw/excalidraw version or the script changes.
+FROM base AS excalidraw-assets
+COPY --from=deps /app/node_modules/@excalidraw/excalidraw ./node_modules/@excalidraw/excalidraw
+COPY scripts/copy-excalidraw-assets.mjs ./scripts/
+RUN node scripts/copy-excalidraw-assets.mjs /excalidraw
 
 FROM base AS build
 # NEXT_PUBLIC_* are inlined at build time. NEXTAUTH_URL feeds
@@ -100,6 +109,7 @@ COPY --chown=node:node demo-content ./demo-content
 # Before the standalone copy: it is the rarely-changing layer. The standalone
 # COPY below merges into the same directory and leaves public/pyodide alone.
 COPY --from=pyodide --chown=node:node /pyodide ./.next/standalone/public/pyodide
+COPY --from=excalidraw-assets --chown=node:node /excalidraw ./.next/standalone/public/excalidraw
 COPY --from=build --chown=node:node /app/.next/standalone ./.next/standalone
 USER node
 EXPOSE 3000

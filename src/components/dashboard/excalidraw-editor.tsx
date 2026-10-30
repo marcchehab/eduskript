@@ -77,6 +77,17 @@ async function toWebp(file: BinaryFile): Promise<BinaryFile> {
   }
 }
 
+// Serve Excalidraw's fonts from our own origin instead of esm.sh (privacy:
+// /datenschutz). Must be set before @excalidraw/excalidraw evaluates — every
+// import of it lives in this module, below. Files come from
+// scripts/copy-excalidraw-assets.mjs; the path is set in next.config.ts.
+// Excalidraw still appends esm.sh as a last-resort fallback URL, so a missing
+// copy (404) would silently leak requests there.
+if (typeof window !== 'undefined') {
+  ;(window as Window & { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH =
+    process.env.NEXT_PUBLIC_EXCALIDRAW_ASSET_PATH
+}
+
 // Dynamically import Excalidraw to avoid SSR issues
 const Excalidraw = dynamic(
   () => import('@excalidraw/excalidraw').then(mod => mod.Excalidraw),

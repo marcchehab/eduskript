@@ -103,3 +103,5 @@ onboarding-videos/
 
 # Self-hosted Pyodide, assembled by scripts/fetch-pyodide.mjs (pnpm dev runs it).
 /public/pyodide/
+# Self-hosted Excalidraw fonts, copied by scripts/copy-excalidraw-assets.mjs (pnpm dev runs it).
+/public/excalidraw/

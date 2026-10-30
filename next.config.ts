@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { readFileSync } from 'node:fs'
 
 // Expose NEXTAUTH_URL hostname to client so auth-button can distinguish
 // the app's own domain from custom domains (e.g. when running via ngrok)
@@ -10,9 +11,17 @@ const appHostname = (() => {
   }
 })()
 
+// Self-hosted Excalidraw fonts (scripts/copy-excalidraw-assets.mjs). The
+// version in the path keeps the immutable cache header below safe across
+// upgrades. package.json isn't in the package's "exports" → read by path.
+const excalidrawVersion: string = JSON.parse(
+  readFileSync('node_modules/@excalidraw/excalidraw/package.json', 'utf8'),
+).version
+
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_HOSTNAME: appHostname,
+    NEXT_PUBLIC_EXCALIDRAW_ASSET_PATH: `/excalidraw/v${excalidrawVersion}/`,
   },
   // Dev-mode blocks cross-origin requests for _next assets/RSC by default.
   // Without this, tunneling `pnpm dev` through ngrok (or similar) serves the
@@ -84,6 +93,13 @@ const nextConfig: NextConfig = {
         // Self-hosted Pyodide (~70 MB incl. wheels). Path carries the version
         // (/pyodide/v<version>/), so its files never change in place.
         source: '/pyodide/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        // Self-hosted Excalidraw fonts, versioned path (/excalidraw/v<version>/).
+        source: '/excalidraw/:path*',
         headers: [
           { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],

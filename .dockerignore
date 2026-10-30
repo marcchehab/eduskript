@@ -76,3 +76,5 @@ MIGRATION-VPS.md
 # Self-hosted Pyodide: built in its own Dockerfile stage (cached layer), never
 # from the working tree — else ~70 MB would ride along in every app layer.
 public/pyodide
+# Same for the Excalidraw fonts (~14 MB, Dockerfile stage `excalidraw-assets`).
+public/excalidraw
