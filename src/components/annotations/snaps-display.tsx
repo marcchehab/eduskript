@@ -344,6 +344,11 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
         left: position.left,
         width: position.width,
         willChange: 'transform',
+        // Snaps can be portaled into 0-height section sentinels (paper-top,
+        // `<id>-end`, spacer ends) which carry `pointer-events:none`
+        // (heading-section-ids.ts, annotation-layer.tsx). pointer-events is
+        // inherited, so without this the card ignores every click/drag.
+        pointerEvents: 'auto',
       }}
     >
       {/* Drag handle */}
@@ -628,6 +633,11 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
         left: position.left - originX,
         width: position.width,
         willChange: 'transform',
+        // Snaps can be portaled into 0-height section sentinels (paper-top,
+        // `<id>-end`, spacer ends) which carry `pointer-events:none`
+        // (heading-section-ids.ts, annotation-layer.tsx). pointer-events is
+        // inherited, so without this the card ignores every click/drag.
+        pointerEvents: 'auto',
       }}
     >
       {/* Drag handle */}
@@ -1000,6 +1010,11 @@ const SnapItem = memo(function SnapItem({
         left: snap.left - originX,
         width: snap.minimized ? 'auto' : snap.width,
         willChange: 'transform',
+        // Snaps can be portaled into 0-height section sentinels (paper-top,
+        // `<id>-end`, spacer ends) which carry `pointer-events:none`
+        // (heading-section-ids.ts, annotation-layer.tsx). pointer-events is
+        // inherited, so without this the card ignores every click/drag.
+        pointerEvents: 'auto',
         animation: isNew ? 'snap-fade-in 0.05s ease-out forwards' : undefined,
         zIndex: zIndex,
       }}

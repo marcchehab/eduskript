@@ -242,6 +242,13 @@ export async function escapeToView(page: Page) {
 export async function settle(page: Page, timeout = 4000) {
   const start = Date.now()
   let prev = ''
+  // The hook is installed in an effect after hydration; on a cold dev server
+  // the first settle() can run before it exists.
+  await page.waitForFunction(
+    () => !!(window as unknown as { __eduTest?: EduTest }).__eduTest?.state,
+    null,
+    { timeout: 20_000 },
+  )
   while (Date.now() - start < timeout) {
     const { headingPositions } = await readAnnotationState(page)
     const snapshot = JSON.stringify(headingPositions)

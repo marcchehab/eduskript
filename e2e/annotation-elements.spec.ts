@@ -127,6 +127,33 @@ test('dragging a sticky note lands where it is dropped', async ({ page }) => {
   expect(Math.abs(after.y - (target.y - grabOffsetY)), 'note y lands at drop').toBeLessThan(25)
 })
 
+// `paper-top` is a 0-height sentinel with pointer-events:none (heading-section-
+// ids.ts). A snap portaled into it inherited that and ignored every pointer
+// event — titlebar drag, buttons, image — until the card set pointer-events:auto.
+for (const anchor of ['Section Two', 'paper-top'] as const) {
+  test(`dragging a snap by its titlebar moves it (anchored to ${anchor})`, async ({ page }) => {
+    const sid = anchor === 'paper-top' ? 'paper-top' : await sectionTwoId(page)
+    const id = await addSnapInSection(page, sid)
+    const snap = page.locator(`[data-snap-id="${id}"]`)
+    expect(await snap.evaluate((el) => el.parentElement?.getAttribute('data-section-id')), 'snap portaled into its anchor').toBe(sid)
+    await snap.scrollIntoViewIfNeeded()
+    await settle(page)
+
+    const before = await elementBox(page, 'data-snap-id', id)
+    // Grab the titlebar left of the name (grip icon area).
+    const grab = { x: before.x + 10, y: before.y + 10 }
+    await page.mouse.move(grab.x, grab.y)
+    await page.mouse.down()
+    await page.mouse.move(grab.x + 120, grab.y + 90, { steps: 10 })
+    await page.mouse.up()
+    await settle(page)
+
+    const after = await elementBox(page, 'data-snap-id', id)
+    expect(Math.abs(after.x - (before.x + 120)), 'snap x lands at drop').toBeLessThan(15)
+    expect(Math.abs(after.y - (before.y + 90)), 'snap y lands at drop').toBeLessThan(15)
+  })
+}
+
 test('all three annotation styles survive a reload', async ({ page }) => {
   const { sid, noteId, snapId } = await placeAllThree(page)
   const r0 = await ratios(page, sid, noteId, snapId)
