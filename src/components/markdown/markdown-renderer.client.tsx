@@ -224,6 +224,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       pageId,
       skriptId,
       karaClues,
+      pageLanguage,
       onImageWidthChange: stableOnImageWidthChange,
       onExcalidrawEdit: stableOnExcalidrawEdit,
       onSpacerChange: stableOnSpacerChange,
@@ -232,7 +233,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       onMoleculeChange: stableOnMoleculeChange,
       aiFeedbackSolution: isEditable ? aiFeedbackSolution : undefined,
     })
-  }, [files, pageId, skriptId, karaClues, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnYoutubeStartTimeChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
+  }, [files, pageId, skriptId, karaClues, pageLanguage, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnYoutubeStartTimeChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {

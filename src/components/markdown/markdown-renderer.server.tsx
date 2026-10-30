@@ -51,7 +51,7 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerP
   const pageNav = skriptId && pageId && /<page-nav\b/.test(content) ? await getPageNeighbours(skriptId, pageId) : undefined
   // <evidence-board> shows the clue definitions of this page's levels.
   const karaClues = /<evidence-board\b/.test(content) ? pageKaraClues(content) : undefined
-  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam, pageNav, karaClues })
+  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam, pageNav, karaClues, pageLanguage })
 
   // 3. Pre-resolve `/p/{id}` stable links to canonical URLs in one batched
   //    DB query so public HTML ships with real hrefs. Done here (server) so

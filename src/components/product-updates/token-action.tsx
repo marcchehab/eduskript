@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button'
 interface Props {
   action: 'subscribe' | 'unsubscribe'
   token: string
+  /** Subscriber without an account (<newsletter /> block): no settings to point to. */
+  guest?: boolean
 }
 
 const COPY = {
@@ -32,15 +34,28 @@ const COPY = {
   },
 }
 
-export function ProductUpdatesTokenAction({ action, token }: Props) {
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle')
-  const copy = COPY[action]
+// Guests: subscribe = confirming the double opt-in; no account settings.
+const GUEST_DONE = {
+  unsubscribe: {
+    done: 'You are unsubscribed and your address has been deleted.',
+    doneDe: 'Du bist abgemeldet, deine Adresse ist gelöscht.',
+  },
+  subscribe: {
+    done: 'Confirmed. You can unsubscribe any time via the link in each mail.',
+    doneDe: 'Bestätigt. Abmelden geht jederzeit über den Link in jeder Mail.',
+  },
+}
+
+export function ProductUpdatesTokenAction({ action, token, guest = false }: Props) {
+  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error' | 'expired'>('idle')
+  const copy = guest ? { ...COPY[action], ...GUEST_DONE[action] } : COPY[action]
 
   const submit = async () => {
     setState('busy')
     try {
       const res = await fetch(`/api/product-updates/${action}?token=${encodeURIComponent(token)}`, { method: 'POST' })
-      setState(res.ok ? 'done' : 'error')
+      // 410: guest confirmation older than 7 days, row already deleted.
+      setState(res.ok ? 'done' : res.status === 410 ? 'expired' : 'error')
     } catch {
       setState('error')
     }
@@ -55,6 +70,11 @@ export function ProductUpdatesTokenAction({ action, token }: Props) {
           <>
             <p>{copy.done}</p>
             <p className="text-muted-foreground">{copy.doneDe}</p>
+          </>
+        ) : state === 'expired' ? (
+          <>
+            <p>This link has expired. Please sign up again.</p>
+            <p className="text-muted-foreground">Dieser Link ist abgelaufen. Bitte melde dich erneut an.</p>
           </>
         ) : (
           <Button onClick={submit} disabled={state === 'busy'}>

@@ -6,12 +6,16 @@
  * - unsubscribe / subscribe: `<userId>.<sig>`, no expiry. Possession of the
  *   link is the only authorization, which is what one-click (un)subscribe
  *   needs. Purpose-separated, so an unsubscribe token can't subscribe.
+ * - guest-confirm / guest-unsubscribe: same shape over a
+ *   ProductUpdateSubscriber id (subscribers without an account). The token
+ *   doesn't expire; the 7-day limit on confirming is enforced against the
+ *   row's createdAt (service.ts), and a deleted row makes old links dead.
  * - approve: signature over draft id + expiresAt. Expiry and single use are
  *   enforced against the ProductUpdate row (service.ts), not by the token.
  */
 import { createHmac, timingSafeEqual } from 'crypto'
 
-export type UserTokenPurpose = 'unsubscribe' | 'subscribe'
+export type UserTokenPurpose = 'unsubscribe' | 'subscribe' | 'guest-confirm' | 'guest-unsubscribe'
 
 function secret(): string {
   const s = process.env.NEXTAUTH_SECRET
@@ -29,6 +33,7 @@ function safeEqual(a: string, b: string): boolean {
   return ba.length === bb.length && timingSafeEqual(ba, bb)
 }
 
+/** `userId` is a ProductUpdateSubscriber id for the guest-* purposes. */
 export function signUserToken(purpose: UserTokenPurpose, userId: string): string {
   return `${userId}.${hmac(`product-updates:${purpose}:${userId}`)}`
 }

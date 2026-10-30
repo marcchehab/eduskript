@@ -41,13 +41,13 @@ function footer(lang: MailLanguage, unsubscribeUrl: string): { html: string; tex
   const style = 'margin-top:32px;padding-top:12px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-family:Arial,sans-serif;'
   if (lang === 'de') {
     return {
-      html: `<p style="${style}">Du erhältst diese Mail, weil du Produkt-Updates von Eduskript abonniert hast. <a href="${url}" style="color:#6b7280;">Abmelden</a></p>`,
-      text: `Du erhältst diese Mail, weil du Produkt-Updates von Eduskript abonniert hast. Abmelden: ${unsubscribeUrl}`,
+      html: `<p style="${style}">Produkt-Updates von Eduskript. Du kannst dich jederzeit <a href="${url}" style="color:#6b7280;">abmelden</a>.</p>`,
+      text: `Produkt-Updates von Eduskript. Du kannst dich jederzeit abmelden: ${unsubscribeUrl}`,
     }
   }
   return {
-    html: `<p style="${style}">You get this mail because you signed up for Eduskript product updates. <a href="${url}" style="color:#6b7280;">Unsubscribe</a></p>`,
-    text: `You get this mail because you signed up for Eduskript product updates. Unsubscribe: ${unsubscribeUrl}`,
+    html: `<p style="${style}">Eduskript product updates. You can <a href="${url}" style="color:#6b7280;">unsubscribe</a> at any time.</p>`,
+    text: `Eduskript product updates. You can unsubscribe at any time: ${unsubscribeUrl}`,
   }
 }
 

@@ -51,7 +51,7 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'Oktober 2026', change: 'Videos werden auf unseren Servern in der Schweiz aufbereitet und gespeichert, Untertitel von der KI bei Infomaniak erstellt. Mux (USA) entfernt.' },
   { date: 'Oktober 2026', change: 'Abschnitt «Technische Daten»: IP-Hash beim Import von Dokumenten ohne Konto ergänzt.' },
   { date: 'Oktober 2026', change: 'Sicherungen genauer beschrieben: Dateien werden neu jede Nacht verschlüsselt in Winterthur gesichert, gelöschte Dateien bleiben dort höchstens 30 Tage. Aufbewahrung der Datenbank-Sicherungen präzisiert (auf dem Server rund 14 Tage, verschlüsselt in Winterthur höchstens 6 Monate).' },
-  { date: 'Oktober 2026', change: 'Brevo entfernt. E-Mails an Lehrpersonen gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates nur mit Einwilligung.' },
+  { date: 'Oktober 2026', change: 'Brevo entfernt. E-Mails an Lehrpersonen gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates für neue Lehrpersonen nur mit Einwilligung; bestehende können sich jederzeit abmelden. Besucherinnen und Besucher ohne Konto können Produkt-Updates mit ihrer E-Mail-Adresse abonnieren (mit Bestätigung per Mail).' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -140,10 +140,22 @@ export default function DatenschutzPage() {
               <li>Erstellte Inhalte (Skripts, Seiten, Dateien) und Einstellungen</li>
               <li>Abo-Status. Kartendaten liegen nur bei Payrexx, nicht bei uns.</li>
               <li>
-                Ob du Produkt-Updates per E-Mail erhalten willst, und wann du
-                eingewilligt hast (nur mit Einwilligung, standardmässig aus)
+                Ob du Produkt-Updates per E-Mail erhältst, und wann du
+                eingewilligt hast (für Registrierungen seit dem 30. Oktober
+                2026 standardmässig aus)
               </li>
             </ul>
+
+            <h3 className={h3}>Produkt-Updates ohne Konto</h3>
+            <p>
+              Auf manchen Seiten kann man Produkt-Updates auch ohne Konto
+              abonnieren. Dafür speichern wir die E-Mail-Adresse, die Sprache
+              der Seite, auf der du dich angemeldet hast, sowie den Zeitpunkt
+              der Anmeldung und der Bestätigung. Updates erhältst du erst,
+              nachdem du die Anmeldung über den Link in der Bestätigungsmail
+              bestätigt hast. Gehört die Adresse zu einem Lehrpersonen-Konto,
+              wird stattdessen dort die Einwilligung gespeichert.
+            </p>
 
             <h3 className={h3}>Schülerinnen und Schüler</h3>
             <ul className="list-disc pl-6 space-y-1">
@@ -200,10 +212,12 @@ export default function DatenschutzPage() {
             <h2 className={h2}>3. Zweck</h2>
             <p>
               Wir bearbeiten Personendaten ausschliesslich, um die Plattform zu
-              betreiben und Zahlungen abzuwickeln, sowie, wenn du eingewilligt
-              hast, um dir Produkt-Updates per E-Mail zu senden. Jede dieser
+              betreiben und Zahlungen abzuwickeln, sowie um dir Produkt-Updates
+              per E-Mail zu senden: wenn du eingewilligt hast oder dich vor dem
+              30. Oktober 2026 registriert hast. Jede dieser
               E-Mails enthält einen Link zum Abmelden; abmelden kannst du
-              dich auch in den Kontoeinstellungen. Wir verkaufen keine Daten,
+              dich auch in den Kontoeinstellungen. Ohne Konto erhältst du
+              Produkt-Updates nur, wenn du sie abonniert und bestätigt hast. Wir verkaufen keine Daten,
               bilden keine Profile, zeigen keine Werbung und verwenden keine
               Inhalte zum Training von KI-Modellen.
             </p>
@@ -360,6 +374,10 @@ export default function DatenschutzPage() {
                 Konten und ihre Daten bleiben gespeichert, bis sie gelöscht
                 werden. Konten lassen sich in den Einstellungen selbst löschen
                 oder auf Anfrage.
+              </li>
+              <li>
+                Abonnements von Produkt-Updates ohne Konto werden beim
+                Abmelden gelöscht, unbestätigte nach 7 Tagen.
               </li>
               <li>
                 Löscht eine Schülerin oder ein Schüler das Konto, werden auch

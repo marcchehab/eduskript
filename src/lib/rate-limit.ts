@@ -216,6 +216,20 @@ export const mailWebhookRateLimiter = new RateLimiter('mail-webhook', {
 })
 
 /**
+ * Product-update guest signup (<newsletter /> block, no login): 10 per hour
+ * per IP, and 3 per day per address so the form can't be used to flood
+ * somebody's inbox with confirmation mails.
+ */
+export const productUpdateSignupIpRateLimiter = new RateLimiter('product-update-signup-ip', {
+  interval: 60 * 60 * 1000, // 1 hour
+  maxRequests: 10
+})
+export const productUpdateSignupAddressRateLimiter = new RateLimiter('product-update-signup-address', {
+  interval: 24 * 60 * 60 * 1000, // 1 day
+  maxRequests: 3
+})
+
+/**
  * Extracts client identifier from request headers
  * Tries multiple headers to get the real IP address
  * @param request - The incoming request

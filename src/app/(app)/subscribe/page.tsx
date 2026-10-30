@@ -8,6 +8,8 @@ export const metadata: Metadata = { title: 'Product updates', robots: { index: f
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { token } = await searchParams
-  if (!token || !verifyUserToken('subscribe', token)) return <InvalidProductUpdatesLink />
-  return <ProductUpdatesTokenAction action="subscribe" token={token} />
+  if (token && verifyUserToken('subscribe', token)) return <ProductUpdatesTokenAction action="subscribe" token={token} />
+  // Subscribers without an account (<newsletter /> block, double opt-in).
+  if (token && verifyUserToken('guest-confirm', token)) return <ProductUpdatesTokenAction action="subscribe" token={token} guest />
+  return <InvalidProductUpdatesLink />
 }

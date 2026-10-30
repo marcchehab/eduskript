@@ -1661,3 +1661,19 @@ model ProductUpdate {
   @@index([createdAt])
   @@map("product_updates")
 }
+
+/// Product-update subscriber without an account, from the <newsletter />
+/// block. Double opt-in: the row is created unconfirmed, the mailed link's
+/// button sets confirmedAt. Unconfirmed rows older than 7 days are deleted
+/// lazily (service.ts purgeUnconfirmedGuests). Unsubscribe deletes the row.
+/// email is stored lowercased. lang ("de" | "en") comes from the page the
+/// block was on and picks the footer language.
+model ProductUpdateSubscriber {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  lang        String
+  confirmedAt DateTime? @map("confirmed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("product_update_subscribers")
+}

@@ -34,6 +34,7 @@ import { YT } from '@/components/markdown/youtube'
 import { Flex, FlexItem } from '@/components/markdown/flex'
 import { ImporterButton } from '@/components/markdown/importer-button'
 import { CtaButton, type CtaVariant, type CtaSize, type CtaAlign } from '@/components/markdown/cta-button'
+import { NewsletterBox } from '@/components/markdown/newsletter-box'
 import { PageBanner } from '@/components/markdown/page-banner'
 import { HelpVideoLink } from '@/components/help-video/help-video-link'
 import { PluginContainer } from '@/components/markdown/plugin-container'
@@ -262,6 +263,7 @@ interface CreateMarkdownComponentsOptions {
   aiFeedbackSolution?: AiFeedbackSolutionApi  // Editor only: "Provide solution" gizmo on <ai-feedback>
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
   isExam?: boolean  // Exam page: hide code-block copy buttons by default
+  pageLanguage?: string | null  // Site language (e.g. "de-CH"); default language of <newsletter>
 }
 
 /**
@@ -274,7 +276,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues, pageLanguage } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -1146,11 +1148,21 @@ export function createMarkdownComponents(
       )
     },
 
-    // <newsletter /> — retired (Oktober 2026). The per-site email capture
-    // lived in Brevo, which is gone; nobody had subscribed. The tag stays
-    // whitelisted (markdown-compiler.ts) and renders nothing, so pages that
-    // still contain it don't break or show raw markup.
-    'newsletter': () => null,
+    // <newsletter /> — sign-up for Eduskript product updates (guests: double
+    // opt-in; teachers: one-click enable). Variant picked client-side from the
+    // session, see newsletter-box.tsx. Old Brevo attrs (list-id) are ignored.
+    'newsletter': (props: Record<string, unknown>) => {
+      const str = (k: string): string | undefined =>
+        typeof props[k] === 'string' && props[k] !== '' ? (props[k] as string) : undefined
+      return (
+        <NewsletterBox
+          lang={str('lang') ?? pageLanguage}
+          title={str('title')}
+          description={str('description')}
+          button={str('button')}
+        />
+      )
+    },
 
     // <banner> — sticky announcement bar; children re-parsed as markdown.
     // Layout lives in globals.css (.es-banner). See page-banner.tsx.

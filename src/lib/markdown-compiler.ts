@@ -132,7 +132,7 @@ export const sanitizeSchema = {
     'onlyfor', // Audience gate (auth/anon/students/class) — wraps children
     'cta', // Call-to-action button link, styled with the app's button variants
     'helpvideo', // "How do I …?" link opening a docked help clip (help-video-link.tsx)
-    'newsletter', // Retired (Brevo removed); renders nothing so old pages don't break
+    'newsletter', // Product-update sign-up box (newsletter-box.tsx)
     'banner', // Sticky announcement bar at the top edge of the page (per page, not site-wide)
     'plugin', // User-created plugins rendered in sandboxed iframes
     'iframe', // Raw embeds (geotraceroute, etc.) — sandbox forced post-sanitize by rehypeSandboxIframes
@@ -194,6 +194,7 @@ export const sanitizeSchema = {
     'phet': ['sim', 'locale', 'height', 'title'],
     'pricing': ['lang'],
     'importer': ['lang', 'label', 'sub'],
+    'newsletter': ['lang', 'title', 'description', 'button'],
     'cta': ['href', 'label', 'variant', 'size', 'align', 'external', 'font', 'weight', 'fontsize', 'fontSize', 'note', 'notehref', 'noteHref'],
     // id keys the per-browser dismiss state; dismissible="false" hides the X;
     // color/text are CSS colors for background/foreground.

@@ -24,9 +24,9 @@ The database, uploaded files and encrypted backups are stored in Switzerland. Th
 | Infomaniak | Server for application and PostgreSQL database, object storage (uploaded files, images), encrypted backups of database and files, email delivery to teachers (SMTP) | Switzerland | Infomaniak Network SA (Switzerland) |
 | CloudMailin | Receiving forwarded emails (mail hooks, e.g. login codes) and product-update drafts | USA/EU | Dynamic Edge Software Ltd (UK) |
 
-Emails to teachers (verification, notifications, product updates) are sent via SMTP through Infomaniak in Switzerland, without open or click tracking. Product updates go only to teachers who opted in (at sign-up, in account settings or via a link); every one carries an unsubscribe link.
+Emails to teachers (verification, notifications, product updates) are sent via SMTP through Infomaniak in Switzerland, without open or click tracking. Product updates go to teachers who opted in (at sign-up, in account settings or via a link) and to teachers who registered before 30 October 2026, until they unsubscribe. Every one carries an unsubscribe link. Visitors without an account can subscribe to product updates with their email address (double opt-in: updates only after clicking the confirmation link). Stored: email address, language, and the time of sign-up and confirmation; the entry is deleted on unsubscribe, unconfirmed sign-ups after 7 days.
 
-*October 2026: Brevo removed. Emails to teachers are sent via SMTP through Infomaniak in Switzerland, without open or click tracking. Product updates only with consent.*
+*October 2026: Brevo removed. Emails to teachers are sent via SMTP through Infomaniak in Switzerland, without open or click tracking. Product updates for new teachers only with consent; existing teachers can unsubscribe at any time. Visitors without an account can subscribe to product updates, confirmed by email.*
 
 ## What Data Is Stored
 

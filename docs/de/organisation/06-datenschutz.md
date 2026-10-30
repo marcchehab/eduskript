@@ -26,9 +26,9 @@ Datenbank, hochgeladene Dateien und verschlüsselte Sicherungen liegen in der Sc
 
 Die vollständige Liste inklusive Zahlungsabwicklung und KI-Anbietern steht in der [Datenschutzerklärung](https://eduskript.org/datenschutz#unterauftragsbearbeiter).
 
-E-Mails an Lehrpersonen (Verifizierung, Benachrichtigungen, Produkt-Updates) gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates erhalten nur Lehrpersonen, die eingewilligt haben (bei der Registrierung, in den Kontoeinstellungen oder per Link); jede Mail enthält einen Abmeldelink.
+E-Mails an Lehrpersonen (Verifizierung, Benachrichtigungen, Produkt-Updates) gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates erhalten Lehrpersonen, die eingewilligt haben (bei der Registrierung, in den Kontoeinstellungen oder per Link), sowie Lehrpersonen, die sich vor dem 30. Oktober 2026 registriert haben, bis sie sich abmelden. Jede Mail enthält einen Abmeldelink. Besucherinnen und Besucher ohne Konto können Produkt-Updates mit ihrer E-Mail-Adresse abonnieren (Double-Opt-in: Updates erst nach Klick auf den Bestätigungslink). Gespeichert werden E-Mail-Adresse, Sprache sowie Zeitpunkt von Anmeldung und Bestätigung; beim Abmelden wird der Eintrag gelöscht, unbestätigte Anmeldungen nach 7 Tagen.
 
-*Oktober 2026: Brevo entfernt. E-Mails an Lehrpersonen gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates nur mit Einwilligung.*
+*Oktober 2026: Brevo entfernt. E-Mails an Lehrpersonen gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates für neue Lehrpersonen nur mit Einwilligung; bestehende können sich jederzeit abmelden. Besucherinnen und Besucher ohne Konto können Produkt-Updates mit Bestätigung per Mail abonnieren.*
 
 ## Welche Daten gespeichert werden
 

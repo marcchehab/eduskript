@@ -28,12 +28,17 @@ export default async function ProductUpdatesAdminPage() {
     getConsentCandidates(),
   ])
 
+  const teacherCount = recipients.filter((r) => r.kind === 'user').length
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Product Updates</h1>
         <p className="text-muted-foreground mt-2">
-          {recipients.length} teacher{recipients.length === 1 ? '' : 's'} opted in. Send an update by
+          {recipients.length} recipient{recipients.length === 1 ? '' : 's'}: {teacherCount} opted-in
+          teacher{teacherCount === 1 ? '' : 's'}, {recipients.length - teacherCount} confirmed
+          subscriber{recipients.length - teacherCount === 1 ? '' : 's'} without an account (deduplicated by
+          email). Send an update by
           mailing it from an allowed sender to the product-update CloudMailin address; the approval
           link arrives by mail.
         </p>

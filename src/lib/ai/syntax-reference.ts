@@ -580,6 +580,18 @@ A button linking to the anonymous skript import (/import), where visitors conver
 
 **Attributes (all optional):** \`lang\` — \`de\` for German default text, anything else English; \`label\` — custom button text; \`sub\` — custom second line (default: the supported formats).`)
 
+  // Product-update sign-up
+  sections.push(`## Newsletter signup
+
+A sign-up box for Eduskript product updates (mails about new Eduskript features, not the teacher's own list). Visitors without an account enter their email and confirm via a mailed link; signed-in teachers who haven't enabled product updates get a one-click button; everyone else sees nothing.
+
+\`\`\`html
+<newsletter />
+<newsletter lang="de" title="Neues von Eduskript" description="Ein paar Mails im Jahr." button="Anmelden" />
+\`\`\`
+
+**Attributes (all optional):** \`lang\` — \`de\` or \`en\` (default: the site language); \`title\`, \`description\`, \`button\` — custom texts.`)
+
   // Announcement banner
   sections.push(`## Banner
 
@@ -963,6 +975,8 @@ export function getCondensedSyntaxReference(): string {
 **Import button:** \`<importer lang="de" />\` — button linking to the anonymous Word/PDF import (/import), shows the supported formats inside the button; optional \`label\` and \`sub\` (second line, replaces the format list). Links only (the upload with its privacy notice happens on /import).
 
 **CTA button:** \`<cta href="/auth/signup">Create free account</cta>\` — a link styled as a button in the site's own theme; \`label\` instead of children when self-closing, plus \`variant\` (default|secondary|outline|ghost), \`size\` (lg|default|sm), \`align\` (center|left|right), and typography \`font\` (heading|body), \`weight\` (normal|medium|semibold|bold), \`fontsize\` (sm|base|lg|xl|2xl|3xl or a CSS length); \`note\` + \`notehref\` add a small muted link under the button (e.g. \`note="What does it cost?" notehref="#pricing"\`). Never draw a button as an image.
+
+**Newsletter:** \`<newsletter [lang="de"] [title="..."] [description="..."] [button="..."] />\` — sign-up box for Eduskript product updates (guests: email + confirmation mail; teachers: one-click enable).
 
 **Help video link:** \`<helpvideo topic="create-skript">Wie erstelle ich ein neues Skript?</helpvideo>\` — inline link that opens the help clip help-<topic>.mp4 in a docked panel which stays open across pages until closed; only use topics the author names.
 

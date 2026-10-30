@@ -8,7 +8,14 @@ vi.mock('@/lib/prisma', () => ({
       update: vi.fn(),
       create: vi.fn(),
     },
-    user: { findMany: vi.fn(), updateMany: vi.fn() },
+    user: { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() },
+    productUpdateSubscriber: {
+      findMany: vi.fn(async () => []),
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      update: vi.fn(),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
   },
 }))
 
@@ -128,8 +135,8 @@ describe('product-update sending', () => {
   it('sends one individual mail per recipient with its own unsubscribe link', async () => {
     vi.mocked(prisma.productUpdate.findUnique).mockResolvedValue(draft({ status: 'sending' }) as never)
     const recipients = [
-      { id: 'u1', email: 'a@school.ch', name: 'Anna', lang: 'de' as const },
-      { id: 'u2', email: 'b@school.uk', name: 'Ben', lang: 'en' as const },
+      { id: 'u1', email: 'a@school.ch', name: 'Anna', lang: 'de' as const, kind: 'user' as const },
+      { id: 'u2', email: 'b@school.uk', name: 'Ben', lang: 'en' as const, kind: 'user' as const },
     ]
     const res = await sendClaimedDraft('d1', recipients, 0)
     expect(res).toEqual({ sent: 2, failed: 0 })
@@ -146,8 +153,8 @@ describe('product-update sending', () => {
       // Footer lands inside <body>.
       expect(c.htmlContent.indexOf('unsubscribe?token=')).toBeLessThan(c.htmlContent.indexOf('</body>'))
     }
-    expect(calls[0].htmlContent).toContain('Abmelden')
-    expect(calls[1].htmlContent).toContain('Unsubscribe')
+    expect(calls[0].htmlContent).toContain('jederzeit')
+    expect(calls[1].htmlContent).toContain('unsubscribe</a> at any time')
     expect(prisma.productUpdate.update).toHaveBeenLastCalledWith({
       where: { id: 'd1' },
       data: expect.objectContaining({ status: 'sent' }),
@@ -160,8 +167,8 @@ describe('product-update sending', () => {
     const res = await sendClaimedDraft(
       'd1',
       [
-        { id: 'u1', email: 'a@school.ch', name: null, lang: 'de' },
-        { id: 'u2', email: 'b@school.ch', name: null, lang: 'de' },
+        { id: 'u1', email: 'a@school.ch', name: null, lang: 'de', kind: 'user' },
+        { id: 'u2', email: 'b@school.ch', name: null, lang: 'de', kind: 'user' },
       ],
       0
     )
@@ -170,7 +177,7 @@ describe('product-update sending', () => {
 
   it('sends nothing for a draft that was not claimed', async () => {
     vi.mocked(prisma.productUpdate.findUnique).mockResolvedValue(draft({ status: 'pending' }) as never)
-    expect(await sendClaimedDraft('d1', [{ id: 'u1', email: 'a@x.ch', name: null, lang: 'de' }], 0)).toEqual({
+    expect(await sendClaimedDraft('d1', [{ id: 'u1', email: 'a@x.ch', name: null, lang: 'de', kind: 'user' }], 0)).toEqual({
       sent: 0,
       failed: 0,
     })
@@ -184,13 +191,14 @@ describe('product-update sending', () => {
     const mail = vi.mocked(sendEmail).mock.calls[0][0]
     expect(mail.to).toEqual(['admin@eduskript.org'])
     expect(mail.htmlContent).toContain('/dashboard/admin/product-updates/d1?token=')
-    expect(mail.htmlContent).toContain('2 opted-in teachers')
+    expect(mail.htmlContent).toContain('would go to 2 recipients')
   })
 })
 
 describe('setProductUpdates', () => {
   it('stamps consent on opt-in and clears it on opt-out', async () => {
     vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 })
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ email: 'A@School.ch' } as never)
     await setProductUpdates('u1', true)
     expect(vi.mocked(prisma.user.updateMany).mock.calls[0][0]!.data).toMatchObject({ productUpdates: true })
     expect(vi.mocked(prisma.user.updateMany).mock.calls[0][0]!.data.productUpdatesConsentAt).toBeInstanceOf(Date)
@@ -199,5 +207,7 @@ describe('setProductUpdates', () => {
       productUpdates: false,
       productUpdatesConsentAt: null,
     })
+    // Opt-out also drops a guest subscription with the same address.
+    expect(prisma.productUpdateSubscriber.deleteMany).toHaveBeenCalledWith({ where: { email: 'a@school.ch' } })
   })
 })

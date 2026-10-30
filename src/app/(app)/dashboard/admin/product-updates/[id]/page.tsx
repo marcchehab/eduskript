@@ -30,6 +30,7 @@ export default async function ProductUpdateApprovalPage({
   }
 
   const expired = draft.expiresAt <= new Date()
+  // Teachers + confirmed guest subscribers, deduplicated (service.ts getRecipients).
   const count = draft.status === 'pending' ? (await getRecipients()).length : draft.recipientCount ?? 0
   const preview = renderProductUpdate(draft, 'de', unsubscribePageUrl('preview'))
 

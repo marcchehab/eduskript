@@ -44,7 +44,7 @@ describe('POST /api/admin/product-updates/[id]', () => {
 
   it('claims and schedules the send for an admin', async () => {
     vi.mocked(requireAdmin).mockResolvedValue({ error: null, session: { user: { id: 'admin1' } } } as never)
-    vi.mocked(approveAndClaim).mockResolvedValue({ ok: true, recipients: [{ id: 'u1', email: 'a@x.ch', name: null, lang: 'de' }] })
+    vi.mocked(approveAndClaim).mockResolvedValue({ ok: true, recipients: [{ id: 'u1', email: 'a@x.ch', name: null, lang: 'de', kind: 'user' }] })
     const res = await approvePOST(approveReq({ action: 'send', token: 't' }), params)
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ status: 'sending', recipients: 1 })
