@@ -2,12 +2,13 @@
 
 /**
  * One-button page body for /unsubscribe and /subscribe (product updates).
- * The click POSTs the signed token to the matching API route; GETting the
- * page alone changes nothing, so link scanners in mail gateways can't
- * (un)subscribe anybody. English with a German line, since the mails go out
+ * The signed token is POSTed to the matching API route; the server-rendered
+ * page alone changes nothing. /subscribe POSTs automatically from JS on load
+ * (one click in the mail), which mail-gateway link scanners (e.g. Microsoft
+ * Safe Links) normally don't execute; /unsubscribe waits for the button. English with a German line, since the mails go out
  * in both languages.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 interface Props {
@@ -48,9 +49,12 @@ const GUEST_DONE = {
 
 export function ProductUpdatesTokenAction({ action, token, guest = false }: Props) {
   const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error' | 'expired'>('idle')
+  const started = useRef(false)
   const copy = guest ? { ...COPY[action], ...GUEST_DONE[action] } : COPY[action]
 
   const submit = async () => {
+    if (started.current) return
+    started.current = true
     setState('busy')
     try {
       const res = await fetch(`/api/product-updates/${action}?token=${encodeURIComponent(token)}`, { method: 'POST' })
@@ -59,7 +63,13 @@ export function ProductUpdatesTokenAction({ action, token, guest = false }: Prop
     } catch {
       setState('error')
     }
+    started.current = false
   }
+
+  useEffect(() => {
+    if (action === 'subscribe') void submit()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount
+  }, [])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

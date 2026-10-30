@@ -251,7 +251,7 @@ export async function requestGuestSubscription(
 }
 
 /**
- * The confirm button (POST, never the page view). If the address belongs to
+ * Confirmation POST from /subscribe (sent by JS on load, never by the server-rendered page view). If the address belongs to
  * a mailable teacher account, the teacher's own flag is set and the guest row
  * deleted — one subscription per address, managed in the account settings.
  * Otherwise the row is marked confirmed. Returns false for unknown or
