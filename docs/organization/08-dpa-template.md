@@ -168,7 +168,7 @@ No sensitive personal data within the meaning of Art. 5 lit. c FADP is intended.
 - Database backups at the second site encrypted (AES-256); file backups at the second site encrypted (rclone crypt, XSalsa20-Poly1305); uploaded files encrypted server-side in the object storage according to Infomaniak (teachers' files are publicly accessible via their URL; snaps are kept in a non-public bucket and served only after an access check). The server's disk itself is not encrypted (Infomaniak does not offer this for VPS); access only via SSH key
 - Pseudonymisation of students at sign-in; no storage of student email addresses
 - Roles and permissions: teachers see only their own classes; students only released content; data of different schools and teachers is logically separated
-- Access to production systems only by the operator, with two-factor authentication (passkey or TOTP)
+- Access to production systems only by the operator: server via SSH key, admin accounts (hosting, DNS, code) with two-factor authentication
 - Database: backup on the server itself (about 14 days, not additionally encrypted) and daily encrypted backup in a second data centre (Winterthur), kept for at most 6 months
 - Files: nightly encrypted backup in Winterthur; deleted or replaced files stay there for at most 30 days
 - No third-party analytics, no tracking, no advertising

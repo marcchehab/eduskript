@@ -208,6 +208,8 @@ export interface KaraMessage {
   text: string
   speaker?: string
   audio?: string
+  /** What the voice says instead of `text` (AURORA_SPOKEN: default lines without the filled-in details). */
+  voice?: string
 }
 
 export interface KaraEvidence extends KaraMessage {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AURORA_DEFAULTS, AURORA_WANT, auroraLine, isAuroraDefault } from '@/lib/kara/aurora-defaults'
+import { AURORA_DEFAULTS, AURORA_SPOKEN, AURORA_WANT, auroraLine, isAuroraDefault } from '@/lib/kara/aurora-defaults'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
@@ -221,13 +221,27 @@ describe('auroraLine', () => {
 })
 
 describe('isAuroraDefault', () => {
-  it('accepts defaults with filled placeholders, nothing else', () => {
+  it('accepts fixed defaults and spoken variants, never filled-in texts', () => {
     expect(isAuroraDefault(AURORA_DEFAULTS.win)).toBe(true)
-    expect(isAuroraDefault('Zeile 12: stufe ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(true)
-    expect(isAuroraDefault('eval? Mikroweich nennt das Lizenzverletzung. Schreiben Sie es aus.')).toBe(true)
-    expect(isAuroraDefault('Zeile x: stufe ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(false)
-    expect(isAuroraDefault('Zeile 1: a b ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(false)
+    expect(isAuroraDefault(AURORA_SPOKEN['lint.bare_call'])).toBe(true)
+    expect(isAuroraDefault('Zeile 12: stufe ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(false)
+    expect(isAuroraDefault('eval? Mikroweich nennt das Lizenzverletzung. Schreiben Sie es aus.')).toBe(false)
+    expect(isAuroraDefault(AURORA_DEFAULTS['lint.bare_call'])).toBe(false)
     expect(isAuroraDefault('Irgendein Text.')).toBe(false)
+  })
+
+  it('every default with placeholders has a spoken variant without them', () => {
+    for (const [k, t] of Object.entries(AURORA_DEFAULTS)) {
+      if (!t.includes('{')) continue
+      expect(AURORA_SPOKEN[k], k).toBeTruthy()
+      expect(AURORA_SPOKEN[k]).not.toMatch(/\{/)
+    }
+  })
+
+  it('a filled default line carries its spoken variant as voice', () => {
+    const m = auroraLine({ aurora: {} }, 'lint.bare_call', { vars: { line: 3, name: 'stufe' } })
+    expect(m?.text).toBe('Zeile 3: stufe ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')
+    expect(m?.voice).toBe(AURORA_SPOKEN['lint.bare_call'])
   })
 })
 
@@ -274,13 +288,13 @@ describe('door.ask', () => {
     expect(karaRunInput(parseKaraLevel('>D.'), 0).door_ask).toEqual([])
   })
 
-  it('AURORA names the function, the answer and the expected kind; voice only for plain answers', () => {
+  it('AURORA names the function, the answer and the expected kind; the voice says it without them', () => {
     const vars = { name: 'zaehle_faesser', got: 'None', want: AURORA_WANT.number }
-    const line = auroraLine(parseKaraConfig(''), 'error', { sub: 'door_code', vars })?.text
-    expect(line).toBe('Die Tür hat zaehle_faesser() gefragt. Antwort: None. Erwartet war eine Zahl. Idealerweise die richtige.')
-    expect(isAuroraDefault(line!)).toBe(true)
-    expect(isAuroraDefault('Die Tür hat wand() gefragt. Antwort: 1. Erwartet war True oder False. Idealerweise die richtige.')).toBe(true)
-    expect(isAuroraDefault("Die Tür hat f() gefragt. Antwort: 'Hallo Welt'. Erwartet war eine Zahl. Idealerweise die richtige.")).toBe(false)
+    const msg = auroraLine(parseKaraConfig(''), 'error', { sub: 'door_code', vars })
+    expect(msg?.text).toBe('Die Tür hat zaehle_faesser() gefragt. Antwort: None. Erwartet war eine Zahl. Idealerweise die richtige.')
+    expect(isAuroraDefault(msg!.text)).toBe(false)
+    expect(msg?.voice).toBe(AURORA_SPOKEN['error.door_code'])
+    expect(isAuroraDefault(msg!.voice!)).toBe(true)
     expect(auroraLine(parseKaraConfig(''), 'error', { sub: 'door_missing', vars: { name: 'f' } })?.text)
       .toBe('Die Tür fragt nach f(). Diese Funktion gibt es nicht. Noch nicht.')
     expect(auroraLine(parseKaraConfig(''), 'door.ok')).toBeUndefined()

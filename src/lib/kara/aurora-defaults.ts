@@ -67,6 +67,24 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'lint.toolbox_call': 'Ihre Werkzeugkiste arbeitet von selbst: In {name} steht ein Aufruf ausserhalb jeder Funktion. Er läuft bei jedem Import mit. In befehle.py gehören nur def-Blöcke, die Aufrufe gehören in main.py.',
 }
 
+/**
+ * What AURORA's voice says for the defaults with placeholders: the same line
+ * without the filled-in details (line numbers, names, return values from the
+ * student's code). The card shows the filled text; only these fixed lines go
+ * to the TTS provider, so nothing from the student's code leaves for
+ * rendering, and each line is rendered once instead of per variant.
+ */
+export const AURORA_SPOKEN: Record<string, string> = {
+  'error.door_code': 'Die Tür hat Ihre Funktion gefragt. Die Antwort war nicht die erwartete. Idealerweise die richtige.',
+  'error.door_missing': 'Die Tür fragt nach einer Funktion, die es nicht gibt. Noch nicht.',
+  'error.forbidden': 'Das? Mikroweich nennt das Lizenzverletzung. Schreiben Sie es aus.',
+  'error.locked': 'Diese Schleifen sind in Ihrer Lizenz noch nicht enthalten. Bis dahin: Funktionen.',
+  'lint.bare_call': 'Ein Befehl ohne Klammern. Sie haben ihn erwähnt, nicht ausgeführt.',
+  'lint.indented_call': 'Ein Aufruf ist eingerückt und gehört darum noch zur Funktion darüber. Ihr Hauptprogramm steckt in der Funktion. Shift+Tab rückt die Aufrufe an den linken Rand.',
+  'lint.toolbox_bare': 'In der Werkzeugkiste steht ein Befehl ohne Klammern. Dort erwähnt, nicht ausgeführt. Darum steht das Inventar still.',
+  'lint.toolbox_call': 'Ihre Werkzeugkiste arbeitet von selbst: Dort steht ein Aufruf ausserhalb jeder Funktion. Er läuft bei jedem Import mit. In befehle.py gehören nur def-Blöcke, die Aufrufe gehören in main.py.',
+}
+
 /** `{want}` in error.door_code: the trace's error.want (kara-module.ts `_door_want`) in AURORA's words. */
 export const AURORA_WANT: Record<KaraDoorWant, string> = {
   number: 'eine Zahl',
@@ -87,21 +105,14 @@ function fill(text: string, vars: AuroraVars | undefined): string {
 }
 
 /**
- * True when `text` is a built-in default, also with its placeholders filled
- * ({line} = digits, {name} = a Python identifier, {got} = a number, True,
- * False or None, {want} = an AURORA_WANT phrase). A door answer that is a
- * string or list does not match, so the student cannot make AURORA's voice
- * say arbitrary text; that card stays silent. Used by the TTS route to
- * allow on-demand rendering; every distinct filled text is its own voice file.
+ * True when `text` is a line AURORA's voice may speak by default: a default
+ * without placeholders or an AURORA_SPOKEN line. Filled-in texts never match,
+ * so nothing from the student's code reaches the TTS provider. Used by the
+ * TTS route to allow on-demand rendering.
  */
 export function isAuroraDefault(text: string): boolean {
-  return Object.values(AURORA_DEFAULTS).some(t => {
-    if (t === text) return true
-    if (!t.includes('{')) return false
-    const re = t.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{line\}/g, '\\d{1,5}').replace(/\{name\}/g, '[A-Za-z_][A-Za-z0-9_]{0,40}')
-      .replace(/\{got\}/g, '(?:-?\\d{1,12}(?:\\.\\d{1,6})?|True|False|None)').replace(/\{want\}/g, `(?:${Object.values(AURORA_WANT).join('|')})`)
-    return new RegExp(`^${re}$`).test(text)
-  })
+  return Object.values(AURORA_SPOKEN).includes(text) ||
+    Object.values(AURORA_DEFAULTS).some(t => t === text && !t.includes('{'))
 }
 
 interface AuroraOpts {
@@ -141,7 +152,9 @@ export function auroraLine(
 
 function pick(aurora: Record<string, KaraMessage>, event: string, opts: AuroraOpts): KaraMessage | undefined {
   const def = (key: string): KaraMessage | undefined =>
-    AURORA_DEFAULTS[key] ? { text: AURORA_DEFAULTS[key], speaker: 'AURORA' } : undefined
+    AURORA_DEFAULTS[key]
+      ? { text: AURORA_DEFAULTS[key], speaker: 'AURORA', ...(AURORA_SPOKEN[key] && { voice: AURORA_SPOKEN[key] }) }
+      : undefined
   if (event === 'error') {
     const sub = opts.sub ? `error.${opts.sub}` : null
     return (sub ? aurora[sub] : undefined) ?? aurora.error ?? (sub ? def(sub) : undefined) ?? def('error')

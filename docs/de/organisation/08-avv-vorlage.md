@@ -165,7 +165,7 @@ Keine besonders schützenswerten Personendaten im Sinne von Art. 5 lit. c DSG vo
 - Datenbank-Sicherungen am zweiten Standort verschlüsselt (AES-256); Datei-Sicherungen am zweiten Standort verschlüsselt (rclone crypt, XSalsa20-Poly1305); hochgeladene Dateien im Objektspeicher laut Infomaniak serverseitig verschlüsselt (Dateien von Lehrpersonen sind über ihre URL öffentlich abrufbar; Schnappschüsse liegen in einem nicht öffentlichen Bucket und werden nur nach Zugriffsprüfung ausgeliefert). Der Datenträger des Servers selbst ist nicht verschlüsselt (bietet Infomaniak für VPS nicht an); Zugriff nur per SSH-Schlüssel
 - Pseudonymisierung der Schülerinnen und Schüler bei der Anmeldung; keine Speicherung von Schüler-E-Mails
 - Rollen- und Berechtigungskonzept: Lehrpersonen sehen nur eigene Klassen; Schüler nur freigegebene Inhalte; Daten verschiedener Schulen und Lehrpersonen sind logisch getrennt
-- Zugriff auf Produktivsysteme nur durch Betreiber, mit Zwei-Faktor-Authentifizierung (Passkey bzw. TOTP)
+- Zugriff auf Produktivsysteme nur durch Betreiber: Server per SSH-Schlüssel, Verwaltungskonten (Hosting, DNS, Code) mit Zwei-Faktor-Authentifizierung
 - Datenbank: Sicherung auf dem Server selbst (rund 14 Tage, nicht zusätzlich verschlüsselt) und tägliche verschlüsselte Sicherung in einem zweiten Rechenzentrum (Winterthur), höchstens 6 Monate aufbewahrt
 - Dateien: nächtliche verschlüsselte Sicherung in Winterthur; gelöschte oder ersetzte Dateien bleiben dort höchstens 30 Tage
 - Keine Drittanbieter-Analytics, kein Tracking, keine Werbung

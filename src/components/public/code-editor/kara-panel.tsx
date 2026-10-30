@@ -596,7 +596,8 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
   // A skript audio file wins; otherwise the cached TTS line (speakers with a voice only).
   useEffect(() => {
     if (!spoken) { stopVoice(); return }
-    const { audio, speaker, text } = spoken.message
+    const { audio, speaker } = spoken.message
+    const text = spoken.message.voice ?? spoken.message.text
     let cancelled = false
     void (async () => {
       const url = (audio && assets?.[audio]) || (speaker ? await ttsLineUrl(speaker, text) : null)
@@ -973,7 +974,7 @@ function WorldBar({ variant, count, suite, suiteStars, config, busy, onVariant, 
 /** Dialogue bar under the world: at least `minHeight` (draggable divider above), grows with long text, fills spare height side by side. */
 function MessageBar({ card, assets, onContinue, more, minHeight, fixed }: { card: KaraCard | null; assets?: Record<string, string>; onContinue?: () => void; more: number; minHeight: number; fixed?: boolean }) {
   const speaker = card?.message.speaker
-  const speaking = useSpeaking(speaker, card?.message.text)
+  const speaking = useSpeaking(speaker, card?.message.voice ?? card?.message.text)
   return (
     // items-center-safe: when the text is taller than a fixed bar, align to the top so it can
     // scroll (plain items-center pushes the first lines above the scroll origin, unreachable).
