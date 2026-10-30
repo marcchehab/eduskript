@@ -6,6 +6,7 @@
 #   - WAL archiving not failing (a failing archive_command makes Postgres keep
 #     WAL until the disk is full)
 #   - newest pgBackRest backup younger than 26 h
+#   - last successful object storage backup (files-backup.sh) younger than 26 h
 # Every ping carries a one-line body with the time in UTC and Swiss local
 # time (Healthchecks.io shows it as the ping body).
 set -uo pipefail
@@ -39,6 +40,10 @@ newest=$(docker exec -u postgres eduskript-db pgbackrest --stanza=eduskript --ou
 age=$(( $(date +%s) - newest ))
 [ "$age" -lt 93600 ] || fail "newest backup ${age}s old"
 
-msg="ok $stamp: disk ${disk}%, newest backup $(( age / 3600 ))h old"
+files_ok=$(cat /var/lib/eduskript/files-backup.ok 2>/dev/null || echo 0)
+files_age=$(( $(date +%s) - files_ok ))
+[ "$files_age" -lt 93600 ] || fail "files backup ${files_age}s old"
+
+msg="ok $stamp: disk ${disk}%, newest backup $(( age / 3600 ))h old, files backup $(( files_age / 3600 ))h old"
 [ -n "${HEALTH_HEARTBEAT_URL:-}" ] && curl -fsS -m 10 --retry 3 --data-raw "$msg" "$HEALTH_HEARTBEAT_URL" >/dev/null
 echo "$msg"

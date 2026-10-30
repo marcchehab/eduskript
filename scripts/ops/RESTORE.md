@@ -1,4 +1,4 @@
-# Restore the database (pgBackRest)
+# Restore (database: A, B; files: C)
 
 All commands on the VPS (`ssh eduskript-prod`, then `sudo -i`).
 `pgb` below = `docker exec -u postgres eduskript-db pgbackrest --stanza=eduskript`.
@@ -56,3 +56,51 @@ diff /tmp/l.txt /tmp/r.txt && echo MATCH   # rows written in between show up as 
 docker rm -f restore-test; rm -rf /tmp/restore-test
 ```
 The WAL repo must be mounted: recovery fetches WAL via `pgbackrest archive-get`.
+
+## C. Restore files (object storage backup, files-backup.sh)
+
+The backup is an `rclone crypt` mirror in dc4-a (README.md "Backups (object
+storage)"). On the VPS, `fb` below = `sudo eduskript-files-backup rclone`
+(rclone with the remotes `src:` = live buckets dc3-a, `filesbackup:` =
+decrypted view of the backup). Only `current/` and `deleted/` exist in it.
+
+Find and restore **one file** (keys as in the `files`/`videos` tables, e.g.
+`files/<hash>.png`):
+```
+fb ls filesbackup:current/eduskript-teacher-files/files/ | grep <hash>
+fb lsf -R filesbackup:deleted/ | grep <hash>        # deleted in the last 30 days?
+fb copyto filesbackup:current/eduskript-teacher-files/files/<hash>.png /tmp/restore/<hash>.png   # look at it first
+fb copyto filesbackup:current/eduskript-teacher-files/files/<hash>.png src:eduskript-teacher-files/files/<hash>.png
+```
+For a deleted file use `filesbackup:deleted/<YYYY-MM-DD>/<bucket>/<key>` as
+the source. Writing to `src:` changes production: double-check the key.
+
+Whole bucket back into a (new or emptied) dc3-a container — `copy`, never
+`sync` (sync would delete what is newer in the source):
+```
+fb copy filesbackup:current/eduskript-teacher-files src:eduskript-teacher-files --transfers 16 -P
+```
+A new container must first be made public again (Swift `X-Container-Read:
+.r:*` + CORS metadata, README.md "File storage"); the app builds public URLs
+from `S3_PUBLIC_BASE_URL`.
+
+If dc3-a is down: copy into a new container in dc4-a (`dst:<name>`, created
+with a Keystone token) and point `S3_ENDPOINT`, `S3_PUBLIC_BASE_URL` and
+`NEXT_PUBLIC_KARA_TILESET_URL` (config/deploy.yml) at `s3.pub2`.
+
+Without the VPS: install rclone anywhere, then
+```
+export RCLONE_CONFIG_DST_TYPE=s3 RCLONE_CONFIG_DST_PROVIDER=Other \
+  RCLONE_CONFIG_DST_ENDPOINT=https://s3.pub2.infomaniak.cloud RCLONE_CONFIG_DST_REGION=us-east-1 \
+  RCLONE_CONFIG_DST_FORCE_PATH_STYLE=true RCLONE_CONFIG_DST_NO_CHECK_BUCKET=true \
+  RCLONE_CONFIG_DST_ACCESS_KEY_ID=<S3_ACCESS_KEY> RCLONE_CONFIG_DST_SECRET_ACCESS_KEY=<S3_SECRET_KEY> \
+  RCLONE_CONFIG_FB_TYPE=crypt RCLONE_CONFIG_FB_REMOTE=dst:eduskript-files-backup \
+  RCLONE_CONFIG_FB_FILENAME_ENCRYPTION=standard RCLONE_CONFIG_FB_DIRECTORY_NAME_ENCRYPTION=true \
+  RCLONE_CONFIG_FB_PASSWORD="$(rclone obscure '<FILES_BACKUP_CRYPT_PASS>')"
+rclone lsd fb:current
+```
+(secrets from the Bitwarden note "eduskript server env").
+
+Test (verified 2026-10-29): compare `fb size --fast-list src:eduskript-teacher-files`
+with `fb size --fast-list filesbackup:current/eduskript-teacher-files`, then
+restore one file to /tmp and `cmp` it with `fb cat src:…`.

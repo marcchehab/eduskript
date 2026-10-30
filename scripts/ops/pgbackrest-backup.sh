@@ -9,9 +9,29 @@ TYPE="${1:-diff}"
 BACKUP_REPOS="1"
 [ -f /etc/eduskript-ops.env ] && . /etc/eduskript-ops.env
 
+# io-timeout: Infomaniak S3 (repo2) occasionally stalls >60s (the default)
+# during expire's listing/deletes.
+pgbr() { docker exec -u postgres eduskript-db pgbackrest --stanza=eduskript --io-timeout=180 "$@"; }
+
+# Unix start time of the newest backup in a repo (0 if none/unreadable).
+newest_backup_start() {
+  pgbr --repo="$1" --output=json info 2>/dev/null \
+    | python3 -c 'import json,sys; b=json.load(sys.stdin)[0]["backup"]; print(b[-1]["timestamp"]["start"] if b else 0)' 2>/dev/null \
+    || echo 0
+}
+
 ok=1
 for repo in $BACKUP_REPOS; do
-  docker exec -u postgres eduskript-db pgbackrest --stanza=eduskript --repo="$repo" --type="$TYPE" backup || ok=0
+  started=$(date +%s)
+  pgbr --repo="$repo" --type="$TYPE" backup && continue
+  # `backup` runs expire afterwards and fails if only that step fails. If this
+  # run's backup made it into the repo, retry expire once instead of alerting.
+  if [ "$(newest_backup_start "$repo")" -ge "$started" ]; then
+    echo "repo$repo: backup stored, expire failed; retrying expire in 5 min" >&2
+    sleep 300
+    pgbr --repo="$repo" expire && continue
+  fi
+  ok=0
 done
 
 if [ -n "${BACKUP_HEARTBEAT_URL:-}" ]; then

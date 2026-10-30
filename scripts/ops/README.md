@@ -59,6 +59,7 @@ set once with a Keystone token — not via the S3 API. The old Scaleway bucket
 | Rebuild DB image (config/db) | `bin/build-db-image && bin/reboot-db` |
 | Backup status | `ssh eduskript-prod sudo docker exec -u postgres eduskript-db pgbackrest info` |
 | Run app cron now (billing, trials, demo reset) | `ssh eduskript-prod sudo systemctl start eduskript-cron` |
+| Files backup now / status | `ssh eduskript-prod sudo systemctl start eduskript-files-backup`; `journalctl -u eduskript-files-backup` |
 | Timers / health | `ssh eduskript-prod 'systemctl list-timers "eduskript-*"; sudo eduskript-health'` |
 
 Migrations must be expand/contract (old and new container run side by side
@@ -89,10 +90,47 @@ for ~30 s, and `kamal rollback` runs old code against the new schema).
      and `… check`, then set `BACKUP_REPOS="1 2"` in `/etc/eduskript-ops.env`
      and run `systemctl start eduskript-backup@full`.
 - Heartbeats: healthchecks.io project "eduskript" (API key in the Bitwarden note "eduskript prod.env"),
-  checks `eduskript-backup` (daily), `eduskript-health` (hourly) and `eduskript-cron` (daily app cron, `CRON_SECRET` + `CRON_HEARTBEAT_URL` also in that file). Ping URLs
+  checks `eduskript-backup` (daily), `eduskript-files-backup` (daily, see below), `eduskript-health` (hourly) and `eduskript-cron` (daily app cron, `CRON_SECRET` + `CRON_HEARTBEAT_URL` also in that file). Ping URLs
   are in `/etc/eduskript-ops.env` on the VPS (`BACKUP_HEARTBEAT_URL`,
   `HEALTH_HEARTBEAT_URL`). Alerts go to the project's email integration.
 - Timers are installed by `install-ops.sh` (see its header).
+
+## Backups (object storage)
+
+`files-backup.sh` (installed as `/usr/local/sbin/eduskript-files-backup`,
+timer `eduskript-files-backup.timer`, daily 03:15) mirrors the production
+buckets `eduskript-teacher-files` and `eduskript-imports` from dc3-a (Geneva)
+to the container `eduskript-files-backup` in dc4-a (Winterthur) with
+`rclone sync` through an `rclone crypt` remote (contents and object names
+encrypted). Since 2026-10-29.
+
+- Layout (decrypted view): `current/<bucket>/<key>` = mirror;
+  `deleted/<YYYY-MM-DD>/<bucket>/<key>` = objects deleted or overwritten in
+  the source that night (`--backup-dir`). `deleted/` dirs older than 30 days
+  are purged by the same script, so deletions (e.g. account deletion) are
+  gone from the backup after 30 days. No Swift object versioning.
+- Credentials: the app's EC2 key, read from `/etc/eduskript/app.env`
+  (`S3_ACCESS_KEY`/`S3_SECRET_KEY`; it works in dc4-a too). Crypt password:
+  `FILES_BACKUP_CRYPT_PASS` in `/etc/eduskript/files-backup.env` (root:deploy
+  640, included in `bin/sync-secrets`). Without it the backup is unreadable.
+- rclone is the Debian package (1.60, aws-sdk-go v1): it sends no
+  aws-chunked/checksum headers, which Swift's S3 layer rejects. Remotes are
+  defined via `RCLONE_CONFIG_*` env in the script, there is no rclone.conf;
+  `sudo eduskript-files-backup rclone <args>` runs rclone with them
+  (`src:`, `dst:`, `filesbackup:`).
+- Change detection: `--update --use-server-modtime` (LastModified + size, no
+  HEAD per object). Nightly runs only list both sides.
+- The destination container was created like `eduskript-backups` (Keystone
+  token, `PUT https://s3.pub2.infomaniak.cloud/object/v1/AUTH_<project>/eduskript-files-backup`),
+  private (no `X-Container-Read`).
+- Not covered: snaps. Production has no `SCW_USER_BUCKET`, so snaps are
+  stored as data URLs in the database (in the DB backups). Dev buckets and
+  `eduskript-atlas-backup` (dc3-a) are not backed up.
+- Monitoring: heartbeat `FILES_BACKUP_HEARTBEAT_URL` in `/etc/eduskript-ops.env`
+  (healthchecks.io check `eduskript-files-backup`, daily, 2 h grace; the ping
+  body has object counts/sizes). On success the script writes
+  `/var/lib/eduskript/files-backup.ok`; `eduskript-health` fails when it is
+  older than 26 h.
 
 ## Restore
 

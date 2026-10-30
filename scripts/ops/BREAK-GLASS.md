@@ -8,11 +8,17 @@ the site back up or at least keep the data safe. Don't delete anything.
 - Server: Infomaniak VPS "eduskript-prod" (ov-275f28.infomaniak.ch,
   179.237.126.129). Infomaniak login: Bitwarden item "Infomaniak".
 - SSH key: Bitwarden SSH item "eduskript-prod" (user `debian`, has sudo).
-- All app secrets: on the server in `/etc/eduskript/*.env`; backup in
-  Bitwarden note "eduskript server env".
+- All app secrets: on the server in `/etc/eduskript/*.env` (app, db, caddy,
+  files-backup); backup in Bitwarden note "eduskript server env".
 - Backups: on the server (`/var/lib/eduskript/pgbackrest`) and encrypted at
   Infomaniak object storage in Winterthur (region dc4-a, bucket `eduskript-backups`, passphrase = `PGBACKREST_REPO2_CIPHER_PASS`
   in /etc/eduskript/db.env).
+- File backups (teacher uploads, videos): encrypted copy of the object storage
+  in Winterthur (dc4-a, container `eduskript-files-backup`), refreshed
+  nightly. Password = `FILES_BACKUP_CRYPT_PASS` in
+  /etc/eduskript/files-backup.env, copy in the Bitwarden note "eduskript
+  server env" (section `# files-backup.env`). Without it the file backup is
+  unreadable. Restore: `scripts/ops/RESTORE.md` section C.
 - Code + deploy config: GitHub repo eduskript, `config/deploy.yml`.
 
 ## 1. Look
@@ -39,5 +45,5 @@ Bitwarden access to someone who knows Docker/Linux.
 
 ## 4. Tell people
 
-Teachers who use eduskript: short email via Brevo or Chris' mail account;
+Teachers who use eduskript: short email from Chris' mail account;
 status note on the eduskript.org frontpage is not possible while it is down.
