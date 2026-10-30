@@ -121,7 +121,7 @@ async function purgeDemoUser(_prisma: PrismaLike, userId: string): Promise<void>
  * scripts/reset-demo-user.ts; both used to carry their own copy of this.
  *
  * What still survives a reset: S3 blobs whose hash another user shares,
- * newsletter addresses in Brevo, mail already sent, and AI spend.
+ * mail already sent, and AI spend.
  */
 export async function resetDemoUser(prisma: PrismaLike): Promise<SeedResult & { userId: string }> {
   const bcrypt = (await import('bcryptjs')).default

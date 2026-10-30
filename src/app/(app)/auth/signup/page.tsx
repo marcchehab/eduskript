@@ -7,6 +7,7 @@ import { signIn } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Check, X } from 'lucide-react'
@@ -25,6 +26,8 @@ export default function SignUpPage() {
     pageSlug: '',
     pageLanguage: 'en-GB'
   })
+  // Opt-in, unchecked by default (src/lib/product-updates/).
+  const [productUpdates, setProductUpdates] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [errorDetails, setErrorDetails] = useState<string[]>([])
@@ -91,7 +94,8 @@ export default function SignUpPage() {
           email: formData.email,
           password: formData.password,
           pageSlug: formData.pageSlug,
-          pageLanguage: formData.pageLanguage
+          pageLanguage: formData.pageLanguage,
+          productUpdates
         })
       })
 
@@ -329,6 +333,20 @@ export default function SignUpPage() {
                   onChange={handleChange}
                   required
                 />
+              </div>
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="productUpdates"
+                  checked={productUpdates}
+                  onCheckedChange={(v) => setProductUpdates(v === true)}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="productUpdates" className="text-sm font-normal leading-snug">
+                  {t(
+                    'Email me product updates (a few times a year, unsubscribe any time)',
+                    'Produkt-Updates per E-Mail erhalten (ein paar Mal im Jahr, jederzeit abbestellbar)'
+                  )}
+                </Label>
               </div>
               {error && (
                 <div className="text-red-600 text-sm text-center">

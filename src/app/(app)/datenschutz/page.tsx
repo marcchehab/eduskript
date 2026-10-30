@@ -30,14 +30,15 @@ export const metadata: Metadata = {
 // VPS into bucket eduskript-teacher-files, subtitles via Infomaniak AI Whisper; files in Infomaniak Public Cloud object storage
 // (S3_ENDPOINT in config/deploy.yml); backups via pgBackRest to Infomaniak object storage in
 // Winterthur (PGBACKREST_REPO2_* in config/deploy.yml, retention in
-// config/db/pgbackrest.conf)), src/lib/s3.ts, OpenRouter provider list
+// config/db/pgbackrest.conf; repo1 on the VPS itself, unencrypted, ~14 days);
+// file backups via rclone crypt to Winterthur, deleted files kept 30 days
+// (scripts/ops/files-backup.sh)), src/lib/s3.ts, OpenRouter provider list
 // (retention/training flags), Infomaniak LLM API terms art. 6 (no storage, no
 // training; copy in pr-audit/vertraege). AI providers must match DEFAULTS /
 // STUDENT_DATA in src/lib/ai/provider.ts.
 const SUBPROCESSORS: { name: string; purpose: string; location: string; studentData: string }[] = [
-  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (hochgeladene Dateien, Bilder, Videos), verschlüsselte Datenbank-Sicherungen (getrennter Standort), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen), automatische Untertitel für Videos von Lehrpersonen (Whisper)', location: 'Schweiz', studentData: 'ja' },
-  { name: 'Brevo / Sendinblue SAS (Frankreich)', purpose: 'E-Mail-Versand an Lehrpersonen (Bestätigung, Benachrichtigungen)', location: 'EU', studentData: 'nein' },
-  { name: 'CloudMailin (Dynamic Edge Software Ltd, Grossbritannien)', purpose: 'Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes)', location: 'USA/EU', studentData: 'nein' },
+  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, E-Mail-Versand an Lehrpersonen (SMTP), Dateispeicher (hochgeladene Dateien, Bilder, Videos), verschlüsselte Sicherungen von Datenbank und Dateien (getrennter Standort), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen), automatische Untertitel für Videos von Lehrpersonen (Whisper)', location: 'Schweiz', studentData: 'ja' },
+  { name: 'CloudMailin (Dynamic Edge Software Ltd, Grossbritannien)', purpose: 'Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes) und von Entwürfen für Produkt-Updates', location: 'USA/EU', studentData: 'nein' },
   { name: 'Payrexx AG (Schweiz)', purpose: 'Zahlungsabwicklung', location: 'Schweiz', studentData: 'nein' },
   { name: 'OpenRouter, Inc. (USA)', purpose: 'Vermittlung der KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten', location: 'USA', studentData: 'nein' },
   { name: 'Modellanbieter über OpenRouter (u. a. Google Vertex AI)', purpose: 'KI-Unterstützung der Lehrperson beim Schreiben (Chat, KI-Bearbeitung, Diagramme, Plugins)', location: 'USA u. a.', studentData: 'nein' },
@@ -48,6 +49,9 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'Oktober 2026', change: 'Umzug in die Schweiz: Server, Datenbank, Dateien, Sicherungen und die KI für Schülerdaten laufen bei Infomaniak. Koyeb, Neon/AWS, Scaleway und Google für Schülerdaten entfernt; OpenRouter nur noch für Inhalte der Lehrpersonen. CloudMailin ergänzt (war bereits im Einsatz, fehlte in der Liste).' },
   { date: 'Oktober 2026', change: 'Formeln, Schriften und Python werden nicht mehr von einem CDN (jsDelivr) geladen, sondern von unseren Servern in der Schweiz. Abschnitt «Eingebettete Inhalte» ergänzt.' },
   { date: 'Oktober 2026', change: 'Videos werden auf unseren Servern in der Schweiz aufbereitet und gespeichert, Untertitel von der KI bei Infomaniak erstellt. Mux (USA) entfernt.' },
+  { date: 'Oktober 2026', change: 'Abschnitt «Technische Daten»: IP-Hash beim Import von Dokumenten ohne Konto ergänzt.' },
+  { date: 'Oktober 2026', change: 'Sicherungen genauer beschrieben: Dateien werden neu jede Nacht verschlüsselt in Winterthur gesichert, gelöschte Dateien bleiben dort höchstens 30 Tage. Aufbewahrung der Datenbank-Sicherungen präzisiert (auf dem Server rund 14 Tage, verschlüsselt in Winterthur höchstens 6 Monate).' },
+  { date: 'Oktober 2026', change: 'Brevo entfernt. E-Mails an Lehrpersonen gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates nur mit Einwilligung.' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -135,6 +139,10 @@ export default function DatenschutzPage() {
               <li>Passwort als bcrypt-Hash (nur bei Anmeldung mit E-Mail und Passwort)</li>
               <li>Erstellte Inhalte (Skripts, Seiten, Dateien) und Einstellungen</li>
               <li>Abo-Status. Kartendaten liegen nur bei Payrexx, nicht bei uns.</li>
+              <li>
+                Ob du Produkt-Updates per E-Mail erhalten willst, und wann du
+                eingewilligt hast (nur mit Einwilligung, standardmässig aus)
+              </li>
             </ul>
 
             <h3 className={h3}>Schülerinnen und Schüler</h3>
@@ -166,10 +174,15 @@ export default function DatenschutzPage() {
             <h3 className={h3}>Technische Daten</h3>
             <p>
               IP-Adressen verwenden wir kurzzeitig im Arbeitsspeicher, um
-              Missbrauch zu begrenzen (Rate-Limiting). Wir speichern sie weder
-              in der Datenbank noch in Server-Protokollen: Der Server führt
-              keine Zugriffsprotokolle und entfernt IP-Adressen aus
-              Fehlermeldungen, bevor sie geschrieben werden.
+              Missbrauch zu begrenzen (Rate-Limiting). In Server-Protokollen
+              speichern wir sie nicht: Der Server führt keine
+              Zugriffsprotokolle und entfernt IP-Adressen aus Fehlermeldungen,
+              bevor sie geschrieben werden. Einzige Ausnahme ist der Import von
+              Dokumenten ohne Konto: Dafür speichern wir einen mit einem
+              geheimen Schlüssel gebildeten Hash der IP-Adresse, um die Zahl
+              der Importe pro Anschluss
+              zu begrenzen. Er wird mit dem Import nach 7 Tagen gelöscht, oder
+              sofort, wenn eine Lehrperson den Import übernimmt.
             </p>
             <p className="mt-2">
               Für Besuche auf eduskript.org zählen wir anonym, über welchen
@@ -187,7 +200,10 @@ export default function DatenschutzPage() {
             <h2 className={h2}>3. Zweck</h2>
             <p>
               Wir bearbeiten Personendaten ausschliesslich, um die Plattform zu
-              betreiben und Zahlungen abzuwickeln. Wir verkaufen keine Daten,
+              betreiben und Zahlungen abzuwickeln, sowie, wenn du eingewilligt
+              hast, um dir Produkt-Updates per E-Mail zu senden. Jede dieser
+              E-Mails enthält einen Link zum Abmelden; abmelden kannst du
+              dich auch in den Kontoeinstellungen. Wir verkaufen keine Daten,
               bilden keine Profile, zeigen keine Werbung und verwenden keine
               Inhalte zum Training von KI-Modellen.
             </p>
@@ -255,11 +271,13 @@ export default function DatenschutzPage() {
               5. Unterauftragsbearbeiter und Standorte
             </h2>
             <p>
-              Anwendung, Datenbank, Dateien und verschlüsselte
-              Datenbank-Sicherungen liegen in der Schweiz (Infomaniak; die
-              Sicherungen in einem anderen Rechenzentrum als der Server). Der
-              E-Mail-Versand an Lehrpersonen liegt in der EU, die nach
-              Schweizer Recht als Staat mit angemessenem Datenschutz gilt.
+              Anwendung, Datenbank, Dateien und Sicherungen liegen in der
+              Schweiz (Infomaniak). Neben einer kurzfristigen
+              Datenbank-Sicherung auf dem Server selbst sichern wir Datenbank
+              und Dateien verschlüsselt in einem anderen Rechenzentrum
+              (Winterthur) als dem des Servers (Genf). Auch E-Mails an
+              Lehrpersonen versenden wir über Infomaniak in der Schweiz, ohne
+              Öffnungs- oder Klick-Tracking.
               Daten von Schülerinnen und Schülern verlassen die Schweiz nicht.
               Ausgenommen ist, was der Browser beim Öffnen eingebetteter
               Inhalte anderer Anbieter selbst abruft (siehe{' '}
@@ -349,8 +367,13 @@ export default function DatenschutzPage() {
                 Lehrperson sieht sie danach nicht mehr.
               </li>
               <li>
-                Gelöschte Daten bleiben noch höchstens 6 Monate in den
-                Datensicherungen und verschwinden dann auch dort.
+                Gelöschte Daten bleiben noch eine Zeit lang in den Sicherungen
+                und verschwinden dann auch dort: in der Datenbank-Sicherung auf
+                dem Server nach rund 14 Tagen, in den verschlüsselten
+                Datenbank-Sicherungen in Winterthur nach höchstens 6 Monaten.
+                Dateien (hochgeladene Dateien, Bilder, Videos) sichern wir jede
+                Nacht verschlüsselt in Winterthur; gelöschte Dateien bleiben
+                dort höchstens 30 Tage.
               </li>
               <li>
                 Server-Protokolle enthalten keine Inhalte von Schülerinnen und

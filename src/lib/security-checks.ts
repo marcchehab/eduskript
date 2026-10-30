@@ -93,8 +93,8 @@ export function validateSecurityConfiguration(): SecurityCheckResult {
 
   // Email configuration (if using email features)
   if (process.env.NODE_ENV === 'production') {
-    if (!process.env.BREVO_API_KEY) {
-      warnings.push('BREVO_API_KEY is not set (email features may not work)')
+    if (!process.env.SMTP_PASSWORD) {
+      warnings.push('SMTP_PASSWORD is not set (transactional email will not work)')
     }
     if (!process.env.EMAIL_FROM) {
       warnings.push('EMAIL_FROM is not set (email features may not work)')

@@ -153,12 +153,12 @@ describe('lib/security-checks', () => {
         process.env.NEXTAUTH_URL = 'https://example.com'
       })
 
-      it('should warn when BREVO_API_KEY is not set in production', () => {
-        delete process.env.BREVO_API_KEY
+      it('should warn when SMTP_PASSWORD is not set in production', () => {
+        delete process.env.SMTP_PASSWORD
 
         const result = validateSecurityConfiguration()
 
-        expect(result.warnings.some(w => w.includes('BREVO_API_KEY'))).toBe(true)
+        expect(result.warnings.some(w => w.includes('SMTP_PASSWORD'))).toBe(true)
       })
 
       it('should warn when EMAIL_FROM is not set in production', () => {

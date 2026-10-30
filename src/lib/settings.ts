@@ -19,13 +19,6 @@
 /** Everything storable in Site.extraSettings. Add a key here, not at a call site. */
 export interface SiteExtraSettings {
   /**
-   * Brevo list backing the site's <newsletter> box, provisioned on first use.
-   * Stored rather than derived from the slug: Brevo list names are not stable
-   * identifiers, so a slug rename would otherwise orphan the subscribers.
-   */
-  newsletterListId?: number
-
-  /**
    * Sidebar title-row style: the default icon+pageName row, or a wide logo
    * image in its place. 'logo' with no logoUrl set falls back to 'icon'.
    */
@@ -120,12 +113,9 @@ export const CUSTOM_CSS_MAX_LENGTH = 50_000
 /** Shown on the public badge when the supporter has not set a custom message. */
 export const DEFAULT_SUPPORTER_MESSAGE = 'I support 🇨🇭open-source'
 
-/** Everything storable in Organization.extraSettings. */
-export interface OrgExtraSettings {
-  newsletterListId?: number
-}
-
-type ExtraSettings = SiteExtraSettings & OrgExtraSettings
+// Organization.extraSettings has no keys of its own any more (its only one,
+// the Brevo newsletterListId, went with Brevo); it is read with the same shape.
+type ExtraSettings = SiteExtraSettings
 
 /** Prisma hands back `JsonValue`; narrow it without trusting the contents. */
 function asRecord(value: unknown): Record<string, unknown> {
@@ -142,9 +132,6 @@ export function readExtraSettings(source: { extraSettings?: unknown } | unknown)
   const raw = asRecord(source)
   const bag = 'extraSettings' in raw ? asRecord(raw.extraSettings) : raw
   const out: ExtraSettings = {}
-
-  const listId = toPositiveInt(bag.newsletterListId)
-  if (listId !== undefined) out.newsletterListId = listId
 
   if (bag.titleStyle === 'icon' || bag.titleStyle === 'logo') out.titleStyle = bag.titleStyle
   if (typeof bag.logoUrl === 'string' && bag.logoUrl) out.logoUrl = bag.logoUrl
@@ -188,10 +175,4 @@ export function mergeExtraSettings(
   }
 
   return next
-}
-
-/** Ints arrive as numbers or strings depending on who wrote them. */
-function toPositiveInt(value: unknown): number | undefined {
-  const n = typeof value === 'number' ? value : Number(value)
-  return Number.isInteger(n) && n > 0 ? n : undefined
 }

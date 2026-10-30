@@ -54,7 +54,6 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'phet', info: 'Embed a PhET simulation (Insert → PhET to browse)', apply: '<phet sim="" locale="de" />', cursorOffset: 11 },
   { label: 'spacer', info: 'Blank writing area for students to solve on by hand', apply: '<spacer pattern="checkered" height="200" />' },
   { label: 'cta', info: 'Call-to-action link styled as a button', apply: '<cta href="">Text</cta>', cursorOffset: 11 },
-  { label: 'newsletter', info: 'Email signup box (Brevo list)', apply: '<newsletter />' },
   { label: 'banner', info: 'Sticky announcement bar at the top of the page', apply: '<banner>\n\n</banner>' },
   { label: 'helpvideo', info: 'Link that opens a docked help video (help-<topic>.mp4)', apply: '<helpvideo topic="">Text</helpvideo>', cursorOffset: 17 },
   { label: 'ai-feedback', info: 'Button: send pen strokes/section content to a vision model for feedback. Reference solution: "Provide solution" below it in the preview', apply: '<ai-feedback prompt="" />', cursorOffset: 21 },
@@ -221,12 +220,6 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'dismissible', info: 'false hides the close button' },
     { label: 'color', info: 'Background: palette name (paper|muted|yellow|green|blue|pink|orange|red|purple, theme-aware) or CSS color' },
     { label: 'text', info: 'Text: palette name (text = normal text color, red|blue|green|…, theme-aware) or CSS color' },
-  ],
-  'newsletter': [
-    { label: 'title', info: 'Heading text' },
-    { label: 'description', info: 'Description text' },
-    { label: 'button', info: 'Button text' },
-    { label: 'list-id', info: 'Brevo list id' },
   ],
   'ai-feedback': [
     { label: 'prompt', info: 'Teacher instructions for the AI' },

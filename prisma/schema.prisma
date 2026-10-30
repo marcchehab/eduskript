@@ -87,6 +87,12 @@ model User {
   // answers" to the student's real account afterwards. See exam-recovery / transfer route.
   isTemporary      Boolean   @default(false) @map("is_temporary")
   gdprConsentAt    DateTime? // Timestamp of GDPR consent acceptance
+  // Product-update mails (src/lib/product-updates/*). Opt-in only: false by
+  // default, set at signup (unchecked checkbox), in account settings, or via the
+  // signed link in the one-time consent mail. Consent time is kept as proof;
+  // cleared again on unsubscribe.
+  productUpdates          Boolean   @default(false) @map("product_updates")
+  productUpdatesConsentAt DateTime? @map("product_updates_consent_at")
   lastSeenAt       DateTime? // For inactive account cleanup
   // First-touch visit source ({ref?, utm?, referrer?}, see src/lib/visit-source.ts),
   // attached once right after signup. Campaign labels and a domain only.
@@ -1628,4 +1634,30 @@ model ScriptImportAsset {
 
   @@unique([importId, name])
   @@map("script_import_assets")
+}
+
+/// A product-update mail received via CloudMailin (sender allowlist + DKIM
+/// checked in src/lib/product-updates/inbound.ts), waiting for admin approval.
+/// status: pending → sending → sent, or pending → discarded. The pending →
+/// sending step is a conditional update, so a second approve click is a no-op.
+/// The approve link is HMAC-signed over id + expiresAt (24 h). See
+/// src/lib/product-updates/*.
+model ProductUpdate {
+  id             String    @id @default(cuid())
+  fromAddr       String    @map("from_addr")
+  subject        String
+  bodyHtml       String?   @map("body_html") @db.Text
+  bodyText       String?   @map("body_text") @db.Text
+  status         String    @default("pending")
+  expiresAt      DateTime  @map("expires_at")
+  recipientCount Int?      @map("recipient_count")
+  sentCount      Int       @default(0) @map("sent_count")
+  failedCount    Int       @default(0) @map("failed_count")
+  approvedById   String?   @map("approved_by_id")
+  approvedAt     DateTime? @map("approved_at")
+  finishedAt     DateTime? @map("finished_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("product_updates")
 }

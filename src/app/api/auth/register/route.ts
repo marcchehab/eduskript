@@ -9,7 +9,6 @@ import { randomBytes } from 'crypto'
 import { registrationRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { validatePassword } from '@/lib/password-validation'
 import { createTrialSubscription } from '@/lib/trial'
-import { syncTeacherProductList } from '@/lib/teacher-list'
 import { seedOnboardingSkript } from '@/lib/seed-demo-content'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 
@@ -82,7 +81,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { name, email, password, pageSlug: requestedPageSlug, pageLanguage: requestedPageLanguage } = await request.json()
+    const { name, email, password, pageSlug: requestedPageSlug, pageLanguage: requestedPageLanguage, productUpdates: requestedProductUpdates } = await request.json()
 
     // Validate input
     if (!name || !email || !password) {
@@ -99,6 +98,10 @@ export async function POST(request: NextRequest) {
       typeof requestedPageLanguage === 'string' && /^[a-zA-Z][a-zA-Z0-9-]{1,34}$/.test(requestedPageLanguage)
         ? requestedPageLanguage
         : null
+
+    // Product-update mails are opt-in: only a literal `true` from the (unchecked
+    // by default) signup checkbox counts. See src/lib/product-updates/.
+    const productUpdates = requestedProductUpdates === true
 
     // Validate password strength
     const passwordValidation = validatePassword(password)
@@ -157,6 +160,8 @@ export async function POST(request: NextRequest) {
           email,
           hashedPassword,
           emailVerified: null,
+          productUpdates,
+          productUpdatesConsentAt: productUpdates ? new Date() : null,
         },
       })
       await tx.site.create({
@@ -195,10 +200,6 @@ export async function POST(request: NextRequest) {
 
     // Auto-start trial for teacher accounts (no-op if no default trial plan configured)
     await createTrialSubscription(user.id)
-
-    // Add the new teacher to the EN/DE product-update mailing list (Brevo).
-    // Fire-and-forget; registration must not depend on Brevo.
-    void syncTeacherProductList(user.id)
 
     // Seed the starter skript into the new teacher's library. Non-fatal —
     // registration should still succeed if this fails.

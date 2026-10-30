@@ -77,7 +77,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 ## 8. Ort der Datenbearbeitung und Bekanntgabe ins Ausland
 
-8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Die KI-Verarbeitung von Lösungen der Schülerinnen und Schüler (Ziffer 9) findet ebenfalls bei Infomaniak in der Schweiz statt. Verschlüsselte Datenbank-Sicherungen liegen ebenfalls bei Infomaniak in der Schweiz, in einem anderen Rechenzentrum als der Server. Der E-Mail-Versand an Lehrpersonen erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
+8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Die KI-Verarbeitung von Lösungen der Schülerinnen und Schüler (Ziffer 9) findet ebenfalls bei Infomaniak in der Schweiz statt. Verschlüsselte Sicherungen von Datenbank und Dateien liegen ebenfalls bei Infomaniak in der Schweiz, in einem anderen Rechenzentrum als der Server. Auch der E-Mail-Versand an Lehrpersonen erfolgt über Infomaniak in der Schweiz.
 
 8.2 Personendaten von Schülerinnen und Schülern werden nicht in Staaten ohne angemessenen Datenschutz übermittelt. In die USA gehen nur Inhalte von Lehrpersonen: KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten (OpenRouter; gestützt auf die Standardvertragsklauseln der EU im [Auftragsbearbeitungsvertrag von OpenRouter](https://openrouter.ai/data-processing-agreement), Stand 26. August 2026).
 
@@ -110,7 +110,7 @@ Eduskript meldet der Schule Verletzungen der Datensicherheit (z. B. Datenverlust
 
 12.1 Lehrpersonen können ihre Inhalte jederzeit als Markdown-Dateien samt Anhängen exportieren. Personendaten eines Kontos lassen sich in den Einstellungen als JSON-Datei herunterladen. Bei Vertragsende überträgt Eduskript die Daten der Schule auf Verlangen unentgeltlich und umgehend in diesen Formaten, auch wenn zwischen den Parteien Streitigkeiten bestehen.
 
-12.2 Nach Vertragsende löscht Eduskript die Personendaten von Schülerinnen und Schülern der Schule innert 30 Tagen, sofern die Schule nicht vorher eine Rückgabe verlangt. Gelöschte Daten bleiben höchstens 6 Monate in den verschlüsselten Sicherungen und werden dann auch dort entfernt. Die Löschung wird auf Verlangen schriftlich bestätigt; die Schule kann sie selbst oder durch Dritte überprüfen lassen.
+12.2 Nach Vertragsende löscht Eduskript die Personendaten von Schülerinnen und Schülern der Schule innert 30 Tagen, sofern die Schule nicht vorher eine Rückgabe verlangt. Gelöschte Daten bleiben noch befristet in den Sicherungen (Dateien höchstens 30 Tage, Datenbankinhalte höchstens 6 Monate) und werden dann auch dort entfernt. Die Löschung wird auf Verlangen schriftlich bestätigt; die Schule kann sie selbst oder durch Dritte überprüfen lassen.
 
 12.3 Von Lehrpersonen veröffentlichte Unterrichtsmaterialien bleiben gemäss Nutzungsbedingungen online, solange die Lehrperson sie nicht selbst löscht; sie enthalten keine Schülerdaten.
 
@@ -128,7 +128,7 @@ Eduskript nennt die Schule nur mit deren schriftlicher Zustimmung als Referenz o
 
 Eduskript ist ein kleiner Anbieter. Folgende Anforderungen der AGB Auslagerung Informatikleistungen erfüllt Eduskript nicht oder nur teilweise:
 
-- **Ort der Datenbearbeitung (Ziff. 12):** Datenbank, Dateien, Sicherungen und KI-Verarbeitung der Schülerdaten liegen in der Schweiz. Nur der E-Mail-Versand an Lehrpersonen liegt in der EU (Ziffer 8).
+- **Ort der Datenbearbeitung (Ziff. 12):** Datenbank, Dateien, Sicherungen, E-Mail-Versand und KI-Verarbeitung der Schülerdaten liegen in der Schweiz (Ziffer 8).
 - **Sicherheitsmanagement nach ISO 27000 und externe Audits (Ziff. 8a, 9a):** Eduskript hat keine eigene Zertifizierung und lässt keine periodischen Audits durchführen. Die Rechenzentren der Hosting-Anbieter sind nach ISO 27001 zertifiziert; der Quellcode ist öffentlich prüfbar.
 - **Protokollierung von Zugriffen (Ziff. 8d):** Lesezugriffe werden nicht einzeln protokolliert. Protokolliert werden Ereignisse bei Prüfungen (Start, Abgabe, Rückgabe).
 - **Konventionalstrafe (Ziff. 16):** Nicht enthalten. Die Schule kann eine vereinbaren.
@@ -162,11 +162,12 @@ Keine besonders schützenswerten Personendaten im Sinne von Art. 5 lit. c DSG vo
 ## Anhang 2 – Technische und organisatorische Massnahmen
 
 - Verschlüsselte Übertragung (TLS) für alle Verbindungen
-- Datensicherungen verschlüsselt (AES-256); hochgeladene Dateien im Objektspeicher von Infomaniak verschlüsselt. Der Datenträger des Servers selbst ist nicht verschlüsselt (bietet Infomaniak für VPS nicht an); Zugriff nur per SSH-Schlüssel
+- Datenbank-Sicherungen am zweiten Standort verschlüsselt (AES-256); Datei-Sicherungen am zweiten Standort verschlüsselt (rclone crypt, XSalsa20-Poly1305); hochgeladene Dateien im Objektspeicher laut Infomaniak serverseitig verschlüsselt (Dateien von Lehrpersonen sind über ihre URL öffentlich abrufbar). Der Datenträger des Servers selbst ist nicht verschlüsselt (bietet Infomaniak für VPS nicht an); Zugriff nur per SSH-Schlüssel
 - Pseudonymisierung der Schülerinnen und Schüler bei der Anmeldung; keine Speicherung von Schüler-E-Mails
 - Rollen- und Berechtigungskonzept: Lehrpersonen sehen nur eigene Klassen; Schüler nur freigegebene Inhalte; Daten verschiedener Schulen und Lehrpersonen sind logisch getrennt
 - Zugriff auf Produktivsysteme nur durch Betreiber, mit Zwei-Faktor-Authentifizierung (Passkey bzw. TOTP)
-- Tägliche verschlüsselte Sicherungen, höchstens 6 Monate aufbewahrt
+- Datenbank: Sicherung auf dem Server selbst (rund 14 Tage, nicht zusätzlich verschlüsselt) und tägliche verschlüsselte Sicherung in einem zweiten Rechenzentrum (Winterthur), höchstens 6 Monate aufbewahrt
+- Dateien: nächtliche verschlüsselte Sicherung in Winterthur; gelöschte oder ersetzte Dateien bleiben dort höchstens 30 Tage
 - Keine Drittanbieter-Analytics, kein Tracking, keine Werbung
 - Quellcode öffentlich einsehbar (open source, AGPL v3) – Sicherheitsprüfung durch Dritte möglich
 - Rate-Limiting gegen Missbrauch
@@ -178,9 +179,8 @@ Stand bei Unterzeichnung. Die jeweils aktuelle, datierte Liste steht in der [Dat
 
 | Anbieter | Zweck | Standort | Schülerdaten? |
 |---|---|---|---|
-| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher (inkl. Videos), verschlüsselte Datenbank-Sicherungen, KI-Verarbeitung (KI-Feedback, KI-Bewertung, automatische Video-Untertitel) mit offenen Modellen | Schweiz | ja |
-| Brevo (Sendinblue SAS) | E-Mail-Versand an Lehrpersonen | EU | nein |
-| CloudMailin (Dynamic Edge Software Ltd, UK) | Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes) | USA/EU | nein |
+| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, E-Mail-Versand an Lehrpersonen, Dateispeicher (inkl. Videos), verschlüsselte Sicherungen von Datenbank und Dateien, KI-Verarbeitung (KI-Feedback, KI-Bewertung, automatische Video-Untertitel) mit offenen Modellen | Schweiz | ja |
+| CloudMailin (Dynamic Edge Software Ltd, UK) | Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes) und von Entwürfen für Produkt-Updates | USA/EU | nein |
 | Payrexx AG | Zahlungsabwicklung | Schweiz | nein |
 | OpenRouter, Inc. | Vermittlung von KI-Anfragen der Lehrpersonen für eigene Inhalte | USA | nein |
 | Modellanbieter über OpenRouter, u. a. Google Vertex AI (nur ohne Datenspeicherung) | KI-Unterstützung der Lehrperson beim Schreiben | USA u. a. | nein |

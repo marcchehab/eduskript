@@ -34,7 +34,6 @@ import { YT } from '@/components/markdown/youtube'
 import { Flex, FlexItem } from '@/components/markdown/flex'
 import { ImporterButton } from '@/components/markdown/importer-button'
 import { CtaButton, type CtaVariant, type CtaSize, type CtaAlign } from '@/components/markdown/cta-button'
-import { NewsletterBox } from '@/components/markdown/newsletter-box'
 import { PageBanner } from '@/components/markdown/page-banner'
 import { HelpVideoLink } from '@/components/help-video/help-video-link'
 import { PluginContainer } from '@/components/markdown/plugin-container'
@@ -1147,25 +1146,11 @@ export function createMarkdownComponents(
       )
     },
 
-    // <newsletter /> — email capture, stored in Brevo (see /api/newsletter).
-    'newsletter': (props: Record<string, unknown>) => {
-      const str = (...keys: string[]): string | undefined => {
-        for (const k of keys) {
-          const v = props[k]
-          if (typeof v === 'string' && v !== '') return v
-        }
-        return undefined
-      }
-      return (
-        <NewsletterBox
-          pageId={pageId}
-          title={str('title', 'data-title', 'dataTitle')}
-          description={str('description', 'data-description', 'dataDescription')}
-          button={str('button', 'data-button', 'dataButton')}
-          listId={str('list-id', 'listId', 'data-list-id', 'dataListId')}
-        />
-      )
-    },
+    // <newsletter /> — retired (Oktober 2026). The per-site email capture
+    // lived in Brevo, which is gone; nobody had subscribed. The tag stays
+    // whitelisted (markdown-compiler.ts) and renders nothing, so pages that
+    // still contain it don't break or show raw markup.
+    'newsletter': () => null,
 
     // <banner> — sticky announcement bar; children re-parsed as markdown.
     // Layout lives in globals.css (.es-banner). See page-banner.tsx.

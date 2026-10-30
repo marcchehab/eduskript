@@ -1,5 +1,5 @@
 /**
- * Trial lifecycle mails (German, via Brevo transactional — src/lib/email.ts).
+ * Trial lifecycle mails (German, via SMTP — src/lib/email.ts).
  *
  * - `welcome`: right when the account becomes usable — after email
  *   verification (verify-email route) or at OAuth signup (privacy-adapter).
@@ -301,7 +301,7 @@ async function deliver(
  * Welcome mail, once the account is usable. Call sites: verify-email route
  * (password signups) and privacy-adapter createUser (OAuth). No-op without a
  * trialing subscription or for an unverified password account. Never throws —
- * signup must not depend on Brevo.
+ * signup must not depend on the mail server.
  */
 export async function sendWelcomeEmail(userId: string): Promise<void> {
   try {

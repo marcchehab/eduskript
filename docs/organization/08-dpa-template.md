@@ -80,7 +80,7 @@ UID CHE-261.508.926, operator of eduskript.org
 
 ## 8. Place of processing and transfer abroad
 
-8.1 The database and uploaded files are stored in Switzerland (Infomaniak). AI processing of students' answers (section 9) also takes place at Infomaniak in Switzerland. Encrypted database backups are also stored at Infomaniak in Switzerland, in a different data centre from the server. Email delivery to teachers takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
+8.1 The database and uploaded files are stored in Switzerland (Infomaniak). AI processing of students' answers (section 9) also takes place at Infomaniak in Switzerland. Encrypted backups of the database and files are also stored at Infomaniak in Switzerland, in a different data centre from the server. Email delivery to teachers also runs through Infomaniak in Switzerland.
 
 8.2 Students' personal data is not transferred to countries without an adequate level of data protection. Only teachers' content goes to the USA: AI requests with which teachers edit their own content (OpenRouter; based on the EU Standard Contractual Clauses in [OpenRouter's data processing agreement](https://openrouter.ai/data-processing-agreement), as of 26 August 2026).
 
@@ -113,7 +113,7 @@ Eduskript notifies the School of data security breaches (e.g. data loss, attack,
 
 12.1 Teachers can export their content at any time as Markdown files including attachments. An account's personal data can be downloaded in the settings as a JSON file. On termination, Eduskript transfers the School's data on request, free of charge and without delay, in these formats, even if there is a dispute between the parties.
 
-12.2 After termination, Eduskript deletes the personal data of the School's students within 30 days, unless the School has requested its return beforehand. Deleted data remains in encrypted backups for at most 6 months and is then removed there as well. Deletion is confirmed in writing on request; the School may verify it itself or have it verified by third parties.
+12.2 After termination, Eduskript deletes the personal data of the School's students within 30 days, unless the School has requested its return beforehand. Deleted data remains in the backups for a limited time (files at most 30 days, database contents at most 6 months) and is then removed there as well. Deletion is confirmed in writing on request; the School may verify it itself or have it verified by third parties.
 
 12.3 Teaching materials published by teachers remain online in accordance with the terms of service until the teacher deletes them; they contain no student data.
 
@@ -131,7 +131,7 @@ Eduskript names the School as a reference or in publications only with the Schoo
 
 Eduskript is a small provider. It does not meet, or only partially meets, the following requirements of the AGB Auslagerung Informatikleistungen:
 
-- **Place of processing (cl. 12):** Database, files, backups and AI processing of student data are in Switzerland. Only email delivery to teachers is in the EU (section 8).
+- **Place of processing (cl. 12):** Database, files, backups, email delivery and AI processing of student data are in Switzerland (section 8).
 - **Security management under ISO 27000 and external audits (cl. 8a, 9a):** Eduskript has no certification of its own and does not commission periodic audits. The hosting providers' data centres are ISO 27001 certified; the source code is publicly reviewable.
 - **Access logging (cl. 8d):** Read access is not logged individually. Exam events are logged (start, hand-in, return).
 - **Contractual penalty (cl. 16):** Not included. The School may agree one.
@@ -165,11 +165,12 @@ No sensitive personal data within the meaning of Art. 5 lit. c FADP is intended.
 ## Annex 2 – Technical and organisational measures
 
 - Encrypted transmission (TLS) for all connections
-- Backups encrypted (AES-256); uploaded files encrypted in Infomaniak's object storage. The server's disk itself is not encrypted (Infomaniak does not offer this for VPS); access only via SSH key
+- Database backups at the second site encrypted (AES-256); file backups at the second site encrypted (rclone crypt, XSalsa20-Poly1305); uploaded files encrypted server-side in the object storage according to Infomaniak (teachers' files are publicly accessible via their URL). The server's disk itself is not encrypted (Infomaniak does not offer this for VPS); access only via SSH key
 - Pseudonymisation of students at sign-in; no storage of student email addresses
 - Roles and permissions: teachers see only their own classes; students only released content; data of different schools and teachers is logically separated
 - Access to production systems only by the operator, with two-factor authentication (passkey or TOTP)
-- Daily encrypted backups, kept for at most 6 months
+- Database: backup on the server itself (about 14 days, not additionally encrypted) and daily encrypted backup in a second data centre (Winterthur), kept for at most 6 months
+- Files: nightly encrypted backup in Winterthur; deleted or replaced files stay there for at most 30 days
 - No third-party analytics, no tracking, no advertising
 - Source code publicly available (open source, AGPL v3) – security review by third parties possible
 - Rate limiting against abuse
@@ -181,9 +182,8 @@ As at signature. The current, dated list is in the [privacy policy](https://edus
 
 | Provider | Purpose | Location | Student data? |
 |---|---|---|---|
-| Infomaniak Network SA | Application server and PostgreSQL database, file storage (incl. videos), encrypted database backups, AI processing (AI feedback, AI scoring, automatic video subtitles) with open models | Switzerland | yes |
-| Brevo (Sendinblue SAS) | Email delivery to teachers | EU | no |
-| CloudMailin (Dynamic Edge Software Ltd, UK) | Receiving emails forwarded by teachers (mail hooks, e.g. login codes) | USA/EU | no |
+| Infomaniak Network SA | Application server and PostgreSQL database, email delivery to teachers, file storage (incl. videos), encrypted backups of database and files, AI processing (AI feedback, AI scoring, automatic video subtitles) with open models | Switzerland | yes |
+| CloudMailin (Dynamic Edge Software Ltd, UK) | Receiving emails forwarded by teachers (mail hooks, e.g. login codes) and product-update drafts | USA/EU | no |
 | Payrexx AG | Payment processing | Switzerland | no |
 | OpenRouter, Inc. | Routing of teachers' AI requests for their own content | USA | no |
 | Model providers via OpenRouter, incl. Google Vertex AI (zero data retention only) | AI support for teachers when writing | USA and others | no |

@@ -6,11 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { KeyRound, Mailbox } from 'lucide-react'
 import { AccountDataCard } from '@/components/dashboard/account-data-card'
+import { ProductUpdatesCard } from '@/components/product-updates/settings-card'
+import { prisma } from '@/lib/prisma'
 
 // Account settings = user-wide, not tied to a single site. Per-site settings
 // (page identity, sidebar/typography, AI prompt, domains) moved to
 // /dashboard/site/[siteId]/settings when multi-site landed. This page keeps the
-// account-level items: connected apps, mail hooks, data export / deletion.
+// account-level items: connected apps, mail hooks, product updates, data
+// export / deletion.
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
 
@@ -22,6 +25,11 @@ export default async function SettingsPage() {
   if (session.user.accountType === 'student') {
     redirect('/dashboard/profile')
   }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { productUpdates: true },
+  })
 
   return (
     <div className="space-y-6">
@@ -69,6 +77,8 @@ export default async function SettingsPage() {
             </Link>
           </CardContent>
         </Card>
+
+        <ProductUpdatesCard initialEnabled={user?.productUpdates ?? false} />
 
         <AccountDataCard accountType="teacher" />
       </div>

@@ -8,9 +8,12 @@ Eduskript ist für den Einsatz in Schulen gebaut, wo die verarbeiteten Daten Leh
 
 ## Rechtlicher Rahmen
 
-Eduskript wird unter dem **Schweizer Bundesgesetz über den Datenschutz (revDSG)** betrieben. Da der E-Mail-Versand in der EU liegt, ist die Verarbeitung auch an der **EU-Datenschutz-Grundverordnung (DSGVO)** ausgerichtet.
+Eduskript wird unter dem **Schweizer Bundesgesetz über den Datenschutz (revDSG)** betrieben. Die Verarbeitung ist zudem an der **EU-Datenschutz-Grundverordnung (DSGVO)** ausgerichtet.
 
-Anwendung, Datenbank und hochgeladene Dateien liegen bei Infomaniak in der Schweiz (Schweizer Unternehmen, nicht dem US CLOUD Act unterstellt). Verschlüsselte Datenbank-Sicherungen liegen ebenfalls bei Infomaniak, in einem anderen Rechenzentrum (Winterthur) als der Server (Genf).
+Anwendung, Datenbank und hochgeladene Dateien liegen bei Infomaniak in der Schweiz (Schweizer Unternehmen, nicht dem US CLOUD Act unterstellt). Sicherungen liegen ebenfalls bei Infomaniak:
+
+- Datenbank: eine kurzfristige Sicherung auf dem Server selbst (rund 14 Tage, nicht zusätzlich verschlüsselt) und eine mit AES-256 verschlüsselte Sicherung in einem anderen Rechenzentrum (Winterthur) als der Server (Genf), höchstens 6 Monate aufbewahrt.
+- Dateien (hochgeladene Dateien, Bilder, Videos): jede Nacht verschlüsselt nach Winterthur gesichert. Gelöschte oder ersetzte Dateien bleiben dort höchstens 30 Tage und sind danach endgültig gelöscht.
 
 ## Wo Daten gespeichert werden
 
@@ -18,12 +21,14 @@ Datenbank, hochgeladene Dateien und verschlüsselte Sicherungen liegen in der Sc
 
 | Auftragsverarbeiter | Zweck | Standort | Unternehmen |
 |---------------|---------|----------|---------|
-| Infomaniak | Server für Anwendung und PostgreSQL-Datenbank, Objektspeicher (hochgeladene Dateien, Bilder), verschlüsselte Datenbank-Sicherungen | Schweiz | Infomaniak Network SA (Schweiz) |
-| Brevo | Transaktions-E-Mails (Verifizierung, Benachrichtigungen) | EU | Sendinblue SAS / Brevo (Frankreich) |
+| Infomaniak | Server für Anwendung und PostgreSQL-Datenbank, Objektspeicher (hochgeladene Dateien, Bilder), verschlüsselte Sicherungen von Datenbank und Dateien, E-Mail-Versand an Lehrpersonen (SMTP) | Schweiz | Infomaniak Network SA (Schweiz) |
+| CloudMailin | Empfang weitergeleiteter E-Mails (Mail-Hooks, z. B. Login-Codes) und von Entwürfen für Produkt-Updates | USA/EU | Dynamic Edge Software Ltd (Grossbritannien) |
 
-Die vollständige Liste inklusive Zahlungsabwicklung, Video-Hosting und KI-Anbietern steht in der [Datenschutzerklärung](https://eduskript.org/datenschutz#unterauftragsbearbeiter).
+Die vollständige Liste inklusive Zahlungsabwicklung und KI-Anbietern steht in der [Datenschutzerklärung](https://eduskript.org/datenschutz#unterauftragsbearbeiter).
 
-Transaktions-E-Mails werden mit deaktiviertem Tracking versendet.
+E-Mails an Lehrpersonen (Verifizierung, Benachrichtigungen, Produkt-Updates) gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates erhalten nur Lehrpersonen, die eingewilligt haben (bei der Registrierung, in den Kontoeinstellungen oder per Link); jede Mail enthält einen Abmeldelink.
+
+*Oktober 2026: Brevo entfernt. E-Mails an Lehrpersonen gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates nur mit Einwilligung.*
 
 ## Welche Daten gespeichert werden
 
@@ -61,7 +66,7 @@ Eduskript unterstützt die Anmeldung über externe Identitätsanbieter. Einige d
 
 - Diese Anbieter werden **nur verwendet, wenn ein Nutzer sie aktiv wählt**. Die Anmeldung per E-Mail/Passwort bezieht sie nie ein.
 - Eduskript erhält nur die minimalen Profildaten, die zum Erstellen des Kontos nötig sind (und bei Schülern werden selbst diese wie oben beschrieben auf ein Pseudonym reduziert).
-- Für Schweizer Schulen sind souveräne Identitätsföderationen der bevorzugte Weg. Die Unterstützung von **Edulog** (die Föderation der Identitätsdienste für den Schweizer Bildungsraum, betrieben von Educa im Auftrag der EDK) ist der empfohlene Weg; sie bietet pseudonymisierten Zugang ohne US-Anbieter in der Kette.
+- Für Schweizer Schulen sind souveräne Identitätsföderationen der bevorzugte Weg. Eine Anbindung an **Edulog** (die Föderation der Identitätsdienste für den Schweizer Bildungsraum, betrieben von Educa im Auftrag der EDK) ist geplant, aber noch nicht umgesetzt; sie würde pseudonymisierten Zugang ohne US-Anbieter in der Kette bieten.
 
 ## KI-Funktionen
 
@@ -69,7 +74,7 @@ KI-Feedback und KI-Bewertung schicken nur Aufgabentext, Lösung und gegebenenfal
 
 ## Sitzungen
 
-Die Authentifizierung verwendet **zustandslose JWT-Sitzungen**. Es gibt keinen serverseitigen Sitzungsspeicher; das Sitzungs-Token liegt in einem HTTP-only, sicheren Cookie. Eduskript verwendet keine Sitzungs- oder Login-Dienste von Drittanbietern.
+Die Authentifizierung verwendet **zustandslose JWT-Sitzungen**. Es gibt keinen serverseitigen Sitzungsspeicher; das Sitzungs-Token liegt in einem HTTP-only, sicheren Cookie. Eduskript verwendet keine Sitzungsdienste von Drittanbietern; die Anmeldung über Microsoft ist optional (siehe oben).
 
 ## Was Eduskript *nicht* tut
 
@@ -82,7 +87,7 @@ Die Authentifizierung verwendet **zustandslose JWT-Sitzungen**. Es gibt keinen s
 
 Nach revDSG und DSGVO können Nutzer Auskunft über ihre personenbezogenen Daten sowie deren Berichtigung oder Löschung verlangen. Da Schülerkonten nur ein Pseudonym und keine E-Mail enthalten, ist der Datenbestand bei Schülern konstruktionsbedingt minimal.
 
-Das Löschen eines Kontos entfernt die zugehörigen personenbezogenen Daten. Von Lehrpersonen erstellte Inhalte unterliegen der [Inhaltslizenz](03-inhaltslizenz.md) und den Regeln der Zusammenarbeit.
+Das Löschen eines Kontos entfernt die zugehörigen personenbezogenen Daten. In den Sicherungen bleiben sie noch bis zum Ablauf der oben genannten Fristen (Dateien 30 Tage, Datenbank höchstens 6 Monate). Von Lehrpersonen erstellte Inhalte unterliegen der [Inhaltslizenz](03-inhaltslizenz.md) und den Regeln der Zusammenarbeit.
 
 ## Kontakt
 
@@ -90,4 +95,4 @@ Für Fragen oder Anfragen zum Datenschutz: Luz Media GmbH, [kontakt@luzmedia.ch]
 
 ## Zusammenfassung
 
-Eduskript speichert das Minimum an personenbezogenen Daten, das für den Betrieb nötig ist. Identitäten von Lehrpersonen sind konventionell; Identitäten von Schülern sind pseudonymisiert und enthalten keine E-Mail. Die Kerndaten liegen in der Schweiz (Infomaniak); ebenso die verschlüsselten Sicherungen; der E-Mail-Versand liegt in der EU (Brevo). KI-Anfragen enthalten keine Identifikationsmerkmale. US-Identitätsanbieter sind optional und werden vom Nutzer selbst gewählt; Analytics oder Tracking werden nicht eingesetzt.
+Eduskript speichert das Minimum an personenbezogenen Daten, das für den Betrieb nötig ist. Identitäten von Lehrpersonen sind konventionell; Identitäten von Schülern sind pseudonymisiert und enthalten keine E-Mail. Die Kerndaten liegen in der Schweiz (Infomaniak); ebenso die verschlüsselten Sicherungen und der E-Mail-Versand. KI-Anfragen enthalten keine Identifikationsmerkmale. US-Identitätsanbieter sind optional und werden vom Nutzer selbst gewählt; Analytics oder Tracking werden nicht eingesetzt.

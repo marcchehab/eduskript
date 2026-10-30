@@ -6,22 +6,27 @@ Eduskript is built for use in schools, where the data being handled belongs to t
 
 ## Legal Framework
 
-Eduskript is operated under the **Swiss Federal Act on Data Protection (revFADP / revDSG)**. Because email delivery is in the EU, processing is also aligned with the **EU General Data Protection Regulation (GDPR)**.
+Eduskript is operated under the **Swiss Federal Act on Data Protection (revFADP / revDSG)**. Processing is also aligned with the **EU General Data Protection Regulation (GDPR)**.
 
-Application, database and uploaded files are at Infomaniak in Switzerland (a Swiss company, not subject to the US CLOUD Act). Encrypted database backups are also at Infomaniak, in a different data centre (Winterthur) from the server (Geneva).
+Application, database and uploaded files are at Infomaniak in Switzerland (a Swiss company, not subject to the US CLOUD Act). Backups are also at Infomaniak:
+
+- Database: a short-term backup on the server itself (about 14 days, not additionally encrypted) and an AES-256-encrypted backup in a different data centre (Winterthur) from the server (Geneva), kept for at most 6 months.
+- Files (uploaded files, images, videos): backed up encrypted to Winterthur every night. Deleted or replaced files stay there for at most 30 days and are then gone for good.
 
 > For school leadership and IT there is a [one-page overview](07-for-school-leadership-and-it.md) and a [data processing agreement template](08-dpa-template.md).
 
 ## Where Data Is Stored
 
-The database, uploaded files and encrypted backups are stored in Switzerland. The authoritative, dated list of all sub-processors (including payments, video and AI providers) is in the [privacy policy](https://eduskript.org/datenschutz#unterauftragsbearbeiter) (German).
+The database, uploaded files and encrypted backups are stored in Switzerland. The authoritative, dated list of all sub-processors (including payments and AI providers) is in the [privacy policy](https://eduskript.org/datenschutz#unterauftragsbearbeiter) (German).
 
 | Sub-processor | Purpose | Location | Company |
 |---------------|---------|----------|---------|
-| Infomaniak | Server for application and PostgreSQL database, object storage (uploaded files, images), encrypted database backups | Switzerland | Infomaniak Network SA (Switzerland) |
-| Brevo | Transactional email (verification, notifications) | EU | Sendinblue SAS / Brevo (France) |
+| Infomaniak | Server for application and PostgreSQL database, object storage (uploaded files, images), encrypted backups of database and files, email delivery to teachers (SMTP) | Switzerland | Infomaniak Network SA (Switzerland) |
+| CloudMailin | Receiving forwarded emails (mail hooks, e.g. login codes) and product-update drafts | USA/EU | Dynamic Edge Software Ltd (UK) |
 
-Transactional emails are sent with tracking disabled.
+Emails to teachers (verification, notifications, product updates) are sent via SMTP through Infomaniak in Switzerland, without open or click tracking. Product updates go only to teachers who opted in (at sign-up, in account settings or via a link); every one carries an unsubscribe link.
+
+*October 2026: Brevo removed. Emails to teachers are sent via SMTP through Infomaniak in Switzerland, without open or click tracking. Product updates only with consent.*
 
 ## What Data Is Stored
 
@@ -59,11 +64,11 @@ Eduskript supports signing in through external identity providers. Some of these
 
 - These providers are used **only when a user actively chooses them**. Email/password sign-in never involves them.
 - Eduskript receives only the minimal profile data needed to create the account (and for students, even that is reduced to a pseudonym as described above).
-- For Swiss schools, sovereign identity federations are the preferred route. Support for **Edulog** (the federation of identity services for the Swiss educational space, operated by Educa on behalf of the EDK) is the recommended path; it provides pseudonymised access without any US provider in the chain.
+- For Swiss schools, sovereign identity federations are the preferred route. A connection to **Edulog** (the federation of identity services for the Swiss educational space, operated by Educa on behalf of the EDK) is planned but not yet implemented; it would provide pseudonymised access without any US provider in the chain.
 
 ## Sessions
 
-Authentication uses **stateless JWT sessions**. There is no server-side session store; the session token lives in an HTTP-only, secure cookie. Eduskript does not use third-party session or login services.
+Authentication uses **stateless JWT sessions**. There is no server-side session store; the session token lives in an HTTP-only, secure cookie. Eduskript does not use third-party session services; signing in with Microsoft is optional (see above).
 
 ## What Eduskript Does *Not* Do
 
@@ -76,7 +81,7 @@ Authentication uses **stateless JWT sessions**. There is no server-side session 
 
 Under the revFADP and GDPR, users may request access to, correction of, or deletion of their personal data. Because student accounts hold only a pseudonym and no email, the data footprint for students is minimal by construction.
 
-Deleting an account removes the associated personal data. Content created by teachers is subject to the [content license](03-content-license.md) and collaboration rules.
+Deleting an account removes the associated personal data. Backups keep it until the periods above expire (files 30 days, database at most 6 months). Content created by teachers is subject to the [content license](03-content-license.md) and collaboration rules.
 
 ## Contact
 
@@ -84,4 +89,4 @@ For data-protection questions or requests, contact the instance operator. For th
 
 ## Summary
 
-Eduskript stores the minimum personal data needed to function. Teacher identities are conventional; student identities are pseudonymised and contain no email. Core data is hosted in Switzerland (Infomaniak); so are the encrypted backups; email delivery is in the EU (Brevo) under Swiss and EU data-protection law. Third-party US identity providers are optional and user-initiated, and no analytics or tracking is used.
+Eduskript stores the minimum personal data needed to function. Teacher identities are conventional; student identities are pseudonymised and contain no email. Core data is hosted in Switzerland (Infomaniak); so are the encrypted backups and email delivery. Third-party US identity providers are optional and user-initiated, and no analytics or tracking is used.

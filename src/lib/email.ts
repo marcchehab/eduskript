@@ -1,16 +1,26 @@
-import { BrevoClient, BrevoError } from '@getbrevo/brevo'
+import nodemailer, { type Transporter } from 'nodemailer'
 import { createLogger } from '@/lib/logger'
 import { prisma } from '@/lib/prisma'
 
 const log = createLogger('email')
 
-// Built lazily: the SDK validates the API key at construction, so a
-// module-level client would throw at import time whenever BREVO_API_KEY is
-// unset (tests, local dev, build-time module evaluation).
-let client: BrevoClient | undefined
-function getClient(apiKey: string): BrevoClient {
-  client ??= new BrevoClient({ apiKey })
-  return client
+// Transactional mail goes out over plain SMTP (Infomaniak, mail.infomaniak.com,
+// as EMAIL_FROM = noreply@eduskript.org). No provider-side open/click tracking:
+// the message is delivered exactly as built here. Infomaniak caps the sending
+// address at 200 recipients per rolling 24 h (Mail Starter).
+// Product-update mails reuse sendEmail with a `from` override (src/lib/product-updates/).
+//
+// Built lazily so a missing SMTP_PASSWORD only fails when a mail is sent
+// (tests, local dev, build-time module evaluation).
+let transporter: Transporter | undefined
+function getTransporter(password: string): Transporter {
+  transporter ??= nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'mail.infomaniak.com',
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: Number(process.env.SMTP_PORT || 465) === 465,
+    auth: { user: process.env.SMTP_USER || process.env.EMAIL_FROM, pass: password },
+  })
+  return transporter
 }
 
 export interface EmailOptions {
@@ -18,49 +28,42 @@ export interface EmailOptions {
   subject: string
   htmlContent: string
   textContent?: string
-  /** Brevo tag; also used for the X-Mailin-Tag header. */
+  /** Kind of mail (verification, trial, admin…); only used in error logs. */
   tag?: string
-  /** Overrides EMAIL_FROM_NAME (the address stays EMAIL_FROM, the verified sender). */
+  /** Overrides EMAIL_FROM_NAME (the address stays EMAIL_FROM, the authenticated sender). */
   senderName?: string
+  /**
+   * Overrides the whole From (name + address). The SMTP login (SMTP_USER) must
+   * be allowed to send as that address — Infomaniak rejects anything else.
+   */
+  from?: { name: string; address: string }
   replyTo?: string
+  /** Extra headers, e.g. List-Unsubscribe for product updates. */
+  headers?: Record<string, string>
 }
 
-export async function sendEmail({ to, subject, htmlContent, textContent, tag = 'verification', senderName, replyTo }: EmailOptions) {
-  const apiKey = process.env.BREVO_API_KEY
-  if (!apiKey) {
-    throw new Error('BREVO_API_KEY is not configured')
+export async function sendEmail({ to, subject, htmlContent, textContent, tag = 'verification', senderName, from, replyTo, headers }: EmailOptions) {
+  const password = process.env.SMTP_PASSWORD
+  if (!password) {
+    throw new Error('SMTP_PASSWORD is not configured')
   }
 
   try {
-    return await getClient(apiKey).transactionalEmails.sendTransacEmail({
+    return await getTransporter(password).sendMail({
+      from: from ?? { name: senderName || process.env.EMAIL_FROM_NAME || 'Eduskript', address: process.env.EMAIL_FROM || 'noreply@localhost' },
+      to: Array.isArray(to) ? to : [to],
+      ...(replyTo ? { replyTo } : {}),
       subject,
-      htmlContent,
-      textContent,
-      sender: {
-        name: senderName || process.env.EMAIL_FROM_NAME || 'Eduskript',
-        email: process.env.EMAIL_FROM || 'noreply@localhost'
-      },
-      ...(replyTo ? { replyTo: { email: replyTo } } : {}),
-      to: (Array.isArray(to) ? to : [to]).map((email) => ({ email })),
-      // Brevo-specific: suppress click tracking.
-      tags: [tag, 'no-tracking'],
-      headers: {
-        'X-Mailin-Tag': tag,
-        'List-Unsubscribe': '<mailto:unsubscribe@eduskript.org>'
-      }
+      html: htmlContent,
+      ...(textContent ? { text: textContent } : {}),
+      ...(headers ? { headers } : {}),
     })
   } catch (error) {
-    // Surface Brevo's real response. BrevoError carries status + parsed body;
-    // without unpacking them, IP-authorization blocks, SPF/DKIM failures, and
-    // quota errors all collapse into an indistinguishable "Failed to send email".
-    const status = error instanceof BrevoError ? error.statusCode : undefined
-    const body = error instanceof BrevoError ? error.body : undefined
-    const detail =
-      typeof body === 'object' && body !== null
-        ? JSON.stringify(body)
-        : (body ?? (error as Error)?.message ?? String(error))
-    log.error(`send failed (status ${status ?? 'unknown'}): ${detail}`)
-    throw new Error(`Failed to send email: ${status ?? 'error'} ${detail}`)
+    // SMTP errors carry the server's response code (e.g. 535 auth, 550 quota).
+    const code = (error as { responseCode?: number })?.responseCode
+    const detail = (error as Error)?.message ?? String(error)
+    log.error(`send failed (${tag}, smtp ${code ?? 'unknown'}): ${detail}`)
+    throw new Error(`Failed to send email: ${code ?? 'error'} ${detail}`)
   }
 }
 
@@ -69,7 +72,7 @@ export async function sendEmail({ to, subject, htmlContent, textContent, tag = '
  * has a real email, overridable via ADMIN_NOTIFICATION_EMAILS (comma-separated).
  * The override wins outright — it does not merge with the DB admins.
  */
-async function getAdminNotificationRecipients(): Promise<string[]> {
+export async function getAdminNotificationRecipients(): Promise<string[]> {
   const override = process.env.ADMIN_NOTIFICATION_EMAILS
   if (override) {
     return override.split(',').map((e) => e.trim()).filter(Boolean)

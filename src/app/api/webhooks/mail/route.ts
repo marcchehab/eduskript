@@ -7,9 +7,17 @@
  * the "login-code" mode. Public (no session) but gated by a shared secret +
  * per-IP rate limit.
  *
- * CloudMailin must be configured to POST the JSON format to
- * `/api/webhooks/mail?secret=<CLOUDMAILIN_SECRET>`. Related:
- * src/lib/mail-hooks/* and the old single-tenant handler
+ * CloudMailin POSTs to `/api/webhooks/mail?secret=<CLOUDMAILIN_SECRET>` in
+ * either format:
+ *   - "Raw Message" (multipart/form-data: `message` = full RFC 822 source,
+ *     `envelope[to]`, `envelope[from]`) — required for product updates, whose
+ *     DKIM check needs the untouched raw message. Parsed with mailparser.
+ *   - "JSON" (legacy; headers/plain/html) — still accepted for login-code
+ *     hooks, but product updates arriving this way are rejected.
+ *
+ * Product updates: a mail to the sub-address token PRODUCT_UPDATE_MAIL_TOKEN
+ * (env, no MailHook row) goes to src/lib/product-updates/inbound.ts instead of
+ * a MailHook. Related: src/lib/mail-hooks/* and the old single-tenant handler
  * informatikgarten.ch/sites/ig/pages/api/incoming_mails.ts.
  */
 
@@ -21,6 +29,8 @@ import { parseSubAddressToken } from '@/lib/mail-hooks/tokens'
 import { PARSERS, type RawMail } from '@/lib/mail-hooks/parsers'
 import { purgeExpired } from '@/lib/mail-hooks/store'
 import { createLogger } from '@/lib/logger'
+import { simpleParser, type AddressObject } from 'mailparser'
+import { handleProductUpdateMail } from '@/lib/product-updates/inbound'
 
 // Enable with DEBUG=mail:* (env in config/deploy.yml, or localStorage in browser — server here).
 // log.error always prints; log()/log.warn only when the namespace is enabled.
@@ -32,6 +42,61 @@ interface CloudMailinPayload {
   headers?: { from?: string; to?: string; subject?: string }
   plain?: string
   html?: string
+}
+
+/** Format-independent view of an inbound mail. `raw` only for the Raw format. */
+interface InboundMail {
+  envTo?: string
+  headerTo?: string
+  fromAddr: string
+  subject?: string
+  plain?: string
+  html?: string
+  raw?: Buffer
+}
+
+function addressText(a: AddressObject | AddressObject[] | undefined): string | undefined {
+  if (!a) return undefined
+  return (Array.isArray(a) ? a : [a]).map((x) => x.text).join(', ') || undefined
+}
+
+async function readInbound(request: NextRequest): Promise<InboundMail> {
+  const contentType = request.headers.get('content-type') || ''
+  if (contentType.includes('multipart/form-data')) {
+    const form = await request.formData()
+    const message = form.get('message')
+    // CloudMailin sends `message` as a text field. Decoding it as UTF-8 and
+    // back is lossless for 7-bit/QP/base64 and UTF-8 8-bit bodies (what
+    // Thunderbird sends); a non-UTF-8 8-bit body would change bytes and fail DKIM.
+    const raw =
+      typeof message === 'string'
+        ? Buffer.from(message, 'utf8')
+        : message
+          ? Buffer.from(await message.arrayBuffer())
+          : Buffer.alloc(0)
+    const parsed = await simpleParser(raw)
+    const envTo = (form.get('envelope[to]') as string | null) ?? undefined
+    const envFrom = (form.get('envelope[from]') as string | null) ?? undefined
+    return {
+      envTo,
+      headerTo: addressText(parsed.to),
+      fromAddr: envFrom || parsed.from?.value[0]?.address || 'unknown',
+      subject: parsed.subject,
+      plain: parsed.text,
+      html: typeof parsed.html === 'string' ? parsed.html : undefined,
+      raw,
+    }
+  }
+
+  const payload = (await request.json()) as CloudMailinPayload
+  return {
+    envTo: payload.envelope?.to,
+    headerTo: payload.headers?.to,
+    fromAddr: payload.envelope?.from || payload.headers?.from || 'unknown',
+    subject: payload.headers?.subject,
+    plain: payload.plain,
+    html: payload.html,
+  }
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -70,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     const rate = mailWebhookRateLimiter.check(getClientIdentifier(request))
     if (!rate.allowed) {
-      log.warn('rate-limited', { ip: getClientIdentifier(request) })
+      log.warn('rate-limited')
       return NextResponse.json(
         { error: 'Too many requests' },
         { status: 429, headers: { 'Retry-After': String(rate.retryAfter ?? 60) } }
@@ -82,19 +147,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const payload = (await request.json()) as CloudMailinPayload
-    const envTo = payload.envelope?.to
-    const headerTo = payload.headers?.to
-    const fromAddr =
-      payload.envelope?.from || payload.headers?.from || 'unknown'
+    const mail = await readInbound(request)
+    const { envTo, headerTo, fromAddr } = mail
+
+    const token =
+      parseSubAddressToken(envTo) || parseSubAddressToken(headerTo)
+
+    // Product-update drafts: own path, before any MailHook lookup and before
+    // logging the subject. Always 200 so CloudMailin never bounces.
+    const productToken = process.env.PRODUCT_UPDATE_MAIL_TOKEN
+    if (productToken && token && safeEqual(token, productToken)) {
+      if (!mail.raw) {
+        log.error('product update rejected: CloudMailin format is not "Raw Message"')
+        return NextResponse.json({ status: 'ignored', reason: 'raw-format-required' }, { status: 200 })
+      }
+      const result = await handleProductUpdateMail(mail.raw)
+      return NextResponse.json({ status: result.status }, { status: 200 })
+    }
 
     log('received', {
       envTo,
       headerTo,
       from: fromAddr,
-      subject: payload.headers?.subject,
-      hasHtml: !!payload.html,
-      hasPlain: !!payload.plain,
+      subject: mail.subject,
+      hasHtml: !!mail.html,
+      hasPlain: !!mail.plain,
     })
 
     // Route: sub-address token first, then sourceEmail fallback. The fallback
@@ -102,8 +179,6 @@ export async function POST(request: NextRequest) {
     // (e.g. Proton's own forwarding scheme already uses + and =), where the
     // mail lands on the bare CloudMailin address and the original recipient
     // shows up in the To header.
-    const token =
-      parseSubAddressToken(envTo) || parseSubAddressToken(headerTo)
     let hook = token
       ? await prisma.mailHook.findUnique({ where: { token } })
       : null
@@ -137,14 +212,14 @@ export async function POST(request: NextRequest) {
 
     log('routed', { hookId: hook.id, label: hook.label, mode: hook.mode, routedBy })
 
-    const mail: RawMail = {
-      html: payload.html,
-      plain: payload.plain,
-      subject: payload.headers?.subject,
+    const rawMail: RawMail = {
+      html: mail.html,
+      plain: mail.plain,
+      subject: mail.subject,
       from: fromAddr,
     }
     const parser = PARSERS[hook.mode]
-    const extracted = parser ? parser(mail, hook.parserConfig) : null
+    const extracted = parser ? parser(rawMail, hook.parserConfig) : null
 
     log('parsed', { hookId: hook.id, extracted })
 
@@ -154,11 +229,11 @@ export async function POST(request: NextRequest) {
     if (hook.mode === 'login-code' && !extracted) {
       log.warn('no code extracted — accepted + dropped', {
         hookId: hook.id,
-        htmlSample: payload.html?.slice(0, 1200),
+        htmlSample: mail.html?.slice(0, 1200),
         // Full-ish plain body: confirmation/verification links (e.g. setting up
         // a Proton→CloudMailin forward) live here and need to be readable from
         // the DEBUG=mail:* logs. Bounded so a huge body can't flood logs.
-        plainSample: payload.plain?.slice(0, 8000),
+        plainSample: mail.plain?.slice(0, 8000),
       })
       return NextResponse.json({ status: 'ignored', reason: 'no-code' }, { status: 200 })
     }
@@ -173,9 +248,9 @@ export async function POST(request: NextRequest) {
       data: {
         hookId: hook.id,
         fromAddr,
-        subject: payload.headers?.subject ?? null,
-        bodyText: payload.plain ?? null,
-        bodyHtml: payload.html ?? null,
+        subject: mail.subject ?? null,
+        bodyText: mail.plain ?? null,
+        bodyHtml: mail.html ?? null,
         extracted: extracted ?? undefined,
         expiresAt,
       },

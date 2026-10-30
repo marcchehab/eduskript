@@ -293,7 +293,9 @@ export async function claimImport(token: string, userId: string): Promise<{ skri
       prisma.scriptImportAsset.deleteMany({ where: { importId: row.id } }),
       prisma.scriptImport.update({
         where: { id: row.id },
-        data: { claimedSkriptId: skript.id, pages: Prisma.DbNull },
+        // ipHash only serves the per-IP limits on anonymous imports; a claimed
+        // import belongs to an account, so the hash is dropped (/datenschutz).
+        data: { claimedSkriptId: skript.id, pages: Prisma.DbNull, ipHash: '' },
       }),
     ])
     return { skriptId: skript.id, skriptSlug: skript.slug }

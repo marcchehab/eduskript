@@ -580,18 +580,6 @@ A button linking to the anonymous skript import (/import), where visitors conver
 
 **Attributes (all optional):** \`lang\` — \`de\` for German default text, anything else English; \`label\` — custom button text; \`sub\` — custom second line (default: the supported formats).`)
 
-  // Newsletter signup
-  sections.push(`## Newsletter signup
-
-An email capture box. Addresses go to the site's Brevo list, which owns the confirmation mail and the unsubscribe link — nothing is stored on the page.
-
-\`\`\`html
-<newsletter />
-<newsletter title="Stay in the loop" description="One mail a month about new material." button="Sign me up" />
-\`\`\`
-
-**Attributes (all optional):** \`title\`, \`description\`, \`button\` — label on the submit button; \`list-id\` — a specific Brevo list, otherwise the site default.`)
-
   // Announcement banner
   sections.push(`## Banner
 
@@ -975,8 +963,6 @@ export function getCondensedSyntaxReference(): string {
 **Import button:** \`<importer lang="de" />\` — button linking to the anonymous Word/PDF import (/import), shows the supported formats inside the button; optional \`label\` and \`sub\` (second line, replaces the format list). Links only (the upload with its privacy notice happens on /import).
 
 **CTA button:** \`<cta href="/auth/signup">Create free account</cta>\` — a link styled as a button in the site's own theme; \`label\` instead of children when self-closing, plus \`variant\` (default|secondary|outline|ghost), \`size\` (lg|default|sm), \`align\` (center|left|right), and typography \`font\` (heading|body), \`weight\` (normal|medium|semibold|bold), \`fontsize\` (sm|base|lg|xl|2xl|3xl or a CSS length); \`note\` + \`notehref\` add a small muted link under the button (e.g. \`note="What does it cost?" notehref="#pricing"\`). Never draw a button as an image.
-
-**Newsletter:** \`<newsletter [title="..."] [description="..."] [button="..."] />\` — email capture; addresses go to the site's Brevo list, which owns confirmation and unsubscribe.
 
 **Help video link:** \`<helpvideo topic="create-skript">Wie erstelle ich ein neues Skript?</helpvideo>\` — inline link that opens the help clip help-<topic>.mp4 in a docked panel which stays open across pages until closed; only use topics the author names.
 

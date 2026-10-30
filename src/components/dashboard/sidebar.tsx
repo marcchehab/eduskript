@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen, UserCog, Palette } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen, UserCog, Palette, Mail } from 'lucide-react'
 import { NotebookCog } from '@/components/icons/settings-icons'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from './theme-toggle'
@@ -480,6 +480,20 @@ export function DashboardSidebar() {
               >
                 <BarChart3 className="w-5 h-5" />
                 {!isCollapsed && <span>Metrics</span>}
+              </Link>
+              <Link
+                href="/dashboard/admin/product-updates"
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
+                  pathname.startsWith('/dashboard/admin/product-updates')
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  isCollapsed ? 'justify-center px-2' : ''
+                )}
+                title={isCollapsed ? 'Product Updates' : undefined}
+              >
+                <Mail className="w-5 h-5" />
+                {!isCollapsed && <span>Product Updates</span>}
               </Link>
             </div>
           )}

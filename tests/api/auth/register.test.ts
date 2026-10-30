@@ -294,6 +294,30 @@ describe('Registration API', () => {
         expect(data.requiresEmailVerification).toBe(true)
       })
 
+      it('leaves product updates off unless the checkbox was ticked', async () => {
+        vi.mocked(prisma.user.create).mockResolvedValue({ id: 'u1', email: 'a@example.com' } as never)
+        vi.mocked(prisma.verificationToken.create).mockResolvedValue({} as never)
+
+        await POST(createRequest({ name: 'A', email: 'a@example.com', password: 'SecurePass123!' }))
+        // Anything but a literal true (e.g. the string "true") stays off.
+        await POST(createRequest({ name: 'B', email: 'b@example.com', password: 'SecurePass123!', productUpdates: 'true' }))
+
+        for (const call of vi.mocked(prisma.user.create).mock.calls) {
+          expect(call[0].data).toMatchObject({ productUpdates: false, productUpdatesConsentAt: null })
+        }
+      })
+
+      it('records product-update consent when the checkbox was ticked', async () => {
+        vi.mocked(prisma.user.create).mockResolvedValue({ id: 'u1', email: 'a@example.com' } as never)
+        vi.mocked(prisma.verificationToken.create).mockResolvedValue({} as never)
+
+        await POST(createRequest({ name: 'A', email: 'a@example.com', password: 'SecurePass123!', productUpdates: true }))
+
+        const data = vi.mocked(prisma.user.create).mock.calls[0][0].data
+        expect(data.productUpdates).toBe(true)
+        expect(data.productUpdatesConsentAt).toBeInstanceOf(Date)
+      })
+
       it('should hash password before storing', async () => {
         const bcrypt = await import('bcryptjs')
 

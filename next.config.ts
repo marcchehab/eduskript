@@ -172,6 +172,8 @@ const nextConfig: NextConfig = {
     'pdfjs-dist', // PDF import renders pages in Node (legacy build + worker file)
     '@napi-rs/canvas', // native .node binary (WMF rendering, src/lib/script-import/wmf-render.ts)
     'sql.js', // SQL.js uses Node.js 'fs' module which should not be bundled for server
+    'mailauth', // DKIM check for product-update drafts (src/lib/product-updates/inbound.ts); Node-only
+    'mailparser', // inbound mail parsing (webhooks/mail); Node-only
   ],
   // Empty turbopack config to silence warnings about webpack config in Next.js 16
   turbopack: {},

@@ -173,6 +173,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/datenschutz') ||
     pathname.startsWith('/privacy') ||
     pathname.startsWith('/supporters') ||
+    pathname === '/unsubscribe' || // product-update links (src/lib/product-updates/)
+    pathname === '/subscribe' ||
     pathname.startsWith('/import/') ||
     pathname === '/import'
   ) {

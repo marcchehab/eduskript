@@ -11,7 +11,6 @@ import { resolveOwnedSite } from '@/lib/sites'
 import { withDatabaseConnection } from '@/lib/db-connection'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { readExtraSettings, mergeExtraSettings } from '@/lib/settings'
-import { syncTeacherProductList } from '@/lib/teacher-list'
 import { z } from 'zod'
 import { patchSiteExtraSettings } from '@/lib/settings.server'
 
@@ -363,12 +362,6 @@ export async function PATCH(request: NextRequest) {
     // pageLanguage lives on Site and is cached per host (src/lib/tenant.ts);
     // it can change without the slug changing, so this is unconditional.
     invalidateTenantConfig()
-
-    // Keep the EN/DE product-update mailing lists in step: a language change
-    // moves the teacher between them, and OAuth teachers land here on profile
-    // completion (their first chance to be added at all). Fire-and-forget;
-    // never blocks the response.
-    void syncTeacherProductList(session.user.id)
 
     return NextResponse.json(result)
   } catch (error) {
