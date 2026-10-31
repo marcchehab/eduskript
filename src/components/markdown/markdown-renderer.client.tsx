@@ -1,5 +1,6 @@
 'use client'
 
+import { setTagAttribute } from '@/lib/tag-attribute'
 import { fileRefPattern } from '@/lib/file-refs'
 import React, { useState, useEffect, useLayoutEffect, useRef, useDeferredValue, useCallback, memo, useMemo, type ReactNode } from 'react'
 import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
@@ -180,6 +181,15 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
+  // Stable callback: set/remove one attribute of the tag at a source line.
+  const stableOnTagAttributeChange = useCallback((tag: string, line: number, attr: string, value: string | null) => {
+    const currentContent = contentRef.current
+    const notify = onContentChangeRef.current
+    if (!notify || !currentContent) return
+    const newContent = setTagAttribute(currentContent, tag, line, attr, value)
+    if (newContent !== null && newContent !== currentContent) notify(newContent)
+  }, [])
+
   // Stable callback: rewrite a <molecule> tag after a resize/align gizmo drag.
   // Keyed by the SMILES string, the same way image rewrites key on src — two
   // identical LIVE molecules on one page would both match the first-occurrence
@@ -231,10 +241,11 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       onSpacerChange: stableOnSpacerChange,
       onMuxVideoChange: stableOnMuxVideoChange,
       onYoutubeStartTimeChange: stableOnYoutubeStartTimeChange,
+      onTagAttributeChange: stableOnTagAttributeChange,
       onMoleculeChange: stableOnMoleculeChange,
       aiFeedbackSolution: isEditable ? aiFeedbackSolution : undefined,
     })
-  }, [files, pageId, skriptId, karaClues, pageLanguage, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnYoutubeStartTimeChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
+  }, [files, pageId, skriptId, karaClues, pageLanguage, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnYoutubeStartTimeChange, stableOnTagAttributeChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {

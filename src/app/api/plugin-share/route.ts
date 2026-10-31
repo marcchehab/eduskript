@@ -61,7 +61,7 @@ function teacherMemberships(teacherId: string) {
 }
 
 /**
- * The page must carry share="…" or a collecting <leaderboard>, so a direct POST
+ * The page must carry share="…" or a <leaderboard> of that list, so a direct POST
  * cannot create lists. Tag attributes in double or single quotes, either order.
  */
 async function pageSharesInto(pageId: string, siteId: string, list: string): Promise<boolean> {
@@ -74,7 +74,7 @@ async function pageSharesInto(pageId: string, siteId: string, list: string): Pro
   // Exam pages are not collected; the components check too, this covers a direct POST.
   if (page.pageType === 'exam') return false
   return (page.content.match(/<leaderboard\b[^>]*>/g) ?? []).some((tag) =>
-    /\bcollect=["']page["']/.test(tag) && new RegExp(`\\bsource=(["'])${list}\\1`).test(tag))
+    new RegExp(`\\bsource=(["'])${list}\\1`).test(tag) || (list === CLASS_LIST && !/\bsource=/.test(tag)))
 }
 
 export async function POST(request: NextRequest) {

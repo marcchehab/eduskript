@@ -95,6 +95,10 @@ class SSEManager {
       if (this.handlers.size === 0 && this.eventSource) {
         this.eventSource.close()
         this.eventSource = null
+        // Closed before onopen: without this reset, the next connect() returns
+        // the pending promise and never opens a new EventSource.
+        this.isConnecting = false
+        this.connectionPromise = null
         this.notifyConnectionListeners()
       }
     }

@@ -61,6 +61,7 @@ export function rehypeSourceLine(lineMap?: number[]) {
       'excalidraw-image', // Excalidraw drawings
       'spacer', // <spacer> writing area
       'ai-feedback', // keys the editor's "Provide solution" gizmo
+      'leaderboard', 'plugin', // key the editor's list gizmo
       'muxvideo', // Video embeds
       'image', // Custom Image component
       'img', // Native images

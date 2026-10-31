@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { useUserData } from '@/lib/userdata/hooks'
 import { useCurrentSite } from '@/contexts/current-site-context'
 import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
+import { ShareListOptions } from './share-list-options'
 import { PLUGIN_SHARE_UPDATED, reportScore, type ShareEntry, type ShareResults } from '@/lib/plugin-share'
 
 interface PluginContainerProps {
@@ -21,6 +22,8 @@ interface PluginContainerProps {
   share?: string
   /** Which value counts per student: "best" (default) or "last" */
   keep?: string
+  /** Editor only: shows the list gizmo for plugins that call publish(). */
+  onShareChange?: (share: string | null) => void
   /** All other attributes become plugin config */
   [key: string]: unknown
 }
@@ -50,6 +53,7 @@ export function PluginContainer({
   pageId,
   share,
   keep,
+  onShareChange,
   ...configProps
 }: PluginContainerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -460,6 +464,10 @@ export function PluginContainer({
           }}
           title={`Plugin: ${src}`}
         />
+      )}
+      {/* Plugins declare nothing, so this searches the HTML for a publish call. */}
+      {onShareChange && pluginHtml?.includes('.publish(') && (
+        <ShareListOptions value={share} allowOff onChange={onShareChange} />
       )}
     </div>
   )

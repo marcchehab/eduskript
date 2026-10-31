@@ -101,16 +101,21 @@ describe('POST /api/plugin-share', () => {
     expect(mocks.upsert).not.toHaveBeenCalled()
   })
 
-  it('accepts a collecting leaderboard on the page, in any attribute order', async () => {
-    for (const tag of ['<leaderboard source="kapitel-3" collect="page" />', "<leaderboard collect='page' limit=\"5\" source='kapitel-3'/>"]) {
+  it('accepts a leaderboard of that list on the page, in any attribute order', async () => {
+    for (const tag of ['<leaderboard source="kapitel-3" />', "<leaderboard limit=\"5\" source='kapitel-3'/>"]) {
       mocks.pageFindUnique.mockResolvedValue({ content: tag, skriptId: 'sk' })
       expect((await POST(req('POST', { ...publish, share: 'kapitel-3' }))).status).toBe(200)
     }
   })
 
-  it('a leaderboard without collect gives no write access', async () => {
-    mocks.pageFindUnique.mockResolvedValue({ content: '<leaderboard source="kapitel-3" />', skriptId: 'sk' })
+  it('a leaderboard of another list gives no write access', async () => {
+    mocks.pageFindUnique.mockResolvedValue({ content: '<leaderboard source="other" />', skriptId: 'sk' })
     expect((await POST(req('POST', { ...publish, share: 'kapitel-3' }))).status).toBe(403)
+  })
+
+  it('a leaderboard without source collects into the class list', async () => {
+    mocks.pageFindUnique.mockResolvedValue({ content: '<leaderboard limit="5" />', skriptId: 'sk' })
+    expect((await POST(req('POST', publish))).status).toBe(200)
   })
 
   it('rejects a page not placed on the site', async () => {
@@ -128,7 +133,7 @@ describe('POST /api/plugin-share', () => {
 
   it('does not collect exam pages', async () => {
     mocks.pageFindUnique.mockResolvedValue({
-      content: '<leaderboard source="kapitel-3" collect="page" />', skriptId: 'sk', pageType: 'exam',
+      content: '<leaderboard source="kapitel-3" />', skriptId: 'sk', pageType: 'exam',
     })
     expect((await POST(req('POST', { ...publish, share: 'kapitel-3' }))).status).toBe(403)
   })

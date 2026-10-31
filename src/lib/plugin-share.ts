@@ -2,8 +2,8 @@
  * Shared plugin lists (leaderboards). A teacher opts in per embedding:
  * `<plugin src="…" share="class" />` shares within the student's classes,
  * `share="toplist-logarithms"` shares into a named list across all classes of
- * the site. `<leaderboard source="…" />` shows a list; with collect="page" it
- * also collects the scores of every component on its page that has points.
+ * the site. `<leaderboard source="…" />` shows a list and collects the scores of
+ * every component on its page that has points.
  *
  * Stored as UserData rows, one per student and embedding: adapter
  * 'plugin-share', itemId = list name, targetType 'plugin', targetId =
@@ -28,7 +28,7 @@ export const PLUGIN_SHARE_TARGET = 'plugin'
 export const CLASS_LIST = 'class'
 /** Window event fired after a publish, so leaderboards on the page refetch. */
 export const PLUGIN_SHARE_UPDATED = 'plugin-share-updated'
-/** Window event fired by scored components; leaderboards with collect="page" listen. */
+/** Window event fired by scored components; leaderboards on the page listen. */
 export const PAGE_SCORE = 'page-score'
 
 export interface PageScore {
@@ -36,7 +36,7 @@ export interface PageScore {
   earned: number
 }
 
-/** Tell a collecting leaderboard on this page about a score. No listener, no effect. */
+/** Tell the leaderboards on this page about a score. No listener, no effect. */
 export function reportScore(score: PageScore) {
   window.dispatchEvent(new CustomEvent<PageScore>(PAGE_SCORE, { detail: score }))
 }

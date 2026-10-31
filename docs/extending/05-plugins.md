@@ -145,7 +145,7 @@ plugin.publish({ score: 120 }).then(function(result) {
 
 Values come from the browser, so students can forge them. Use this for leaderboards, not for grades.
 
-`<leaderboard source="kapitel-3" collect="page" />` collects without `share`: it adds `plugin.publish({ score })` and the points of every question, Python check, SQL editor and AI feedback on the page that declares `points`.
+`<leaderboard source="kapitel-3" />` also collects without `share`: it adds `plugin.publish({ score })` and the points of every question, Python check, SQL editor and AI feedback on the page that declares `points`.
 
 ### `plugin.getResults(options)`
 

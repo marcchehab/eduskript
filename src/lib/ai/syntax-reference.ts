@@ -736,7 +736,7 @@ All attributes are lowercase string values (not JSX expressions). Self-closing f
 
 \`<leaderboard>\` is self-closing and may stand anywhere; \`source\` matches \`share\`. Only logged-in class members see it and appear in it; students are shown by nickname.
 
-**Collecting a whole page:** \`<leaderboard source="kapitel-3" collect="page" />\` adds the points of every component on the page that declares points, without \`share\` on each: \`<question points="2">\`, \`python-check points="10"\`, \`\`\`\`sql editor solution="..." points="5"\`\`\`\` (all or nothing), \`<ai-feedback points="5">\` (the model's estimate), and plugins calling \`plugin.publish({ score })\`. The best result per component counts. The same \`source\` on several pages collects across them. Exam pages are not collected.`)
+**Collecting a whole page:** every \`<leaderboard source="kapitel-3" />\` also adds the points of every component on the page that declares points, without \`share\` on each: \`<question points="2">\`, \`python-check points="10"\`, \`\`\`\`sql editor solution="..." points="5"\`\`\`\` (all or nothing), \`<ai-feedback points="5">\` (the model's estimate), and plugins calling \`plugin.publish({ score })\`. The best result per component counts. The same \`source\` on several pages collects across them. Exam pages are not collected.`)
 
   // Tabs
   sections.push(`## Tabs
@@ -907,7 +907,7 @@ export function getCondensedSyntaxReference(): string {
   - Use self-closing tags for components without children: \`<plugin src="eduadmin/mod-calc" />\`
   - Correct: \`<plugin src="eduadmin/mod-calc" />\`, \`<question id="q1" type="single">\`
   - Wrong: \`<Question initialCount={7}>\` (PascalCase, JSX) — doesn't error, silently lowercases to \`<question initialcount="{7}">\`, so the attribute is just lost
-  - Plugin results: \`share="class"\` or a list name on \`<plugin>\` shares \`plugin.publish()\` values; \`<leaderboard source="class" value="score" limit="10" />\` shows them; \`collect="page"\` also adds all components with \`points\` on the page
+  - Plugin results: \`share="class"\` or a list name on \`<plugin>\` shares \`plugin.publish()\` values; \`<leaderboard source="class" value="score" limit="10" />\` shows them; it also adds all components with \`points\` on the page
 
 **Callouts:** \`> [!type] Title on same line\` - CRITICAL: title MUST be on same line as [!type]
   - Types: ${baseTypes.join(', ')}

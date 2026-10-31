@@ -203,7 +203,7 @@ export const sanitizeSchema = {
     'banner': ['id', 'dismissible', 'color', 'text'],
     'helpvideo': ['topic'],
     'ping': ['host', 'count', 'os'],
-    'leaderboard': ['source', 'value', 'limit', 'collect'],
+    'leaderboard': ['source', 'value', 'limit'],
     // AI feedback on student work. prompt is the teacher's grading instruction;
     // the server re-reads it from page content, the attr here is authoring UX.
     'ai-feedback': ['id', 'prompt', 'label'],

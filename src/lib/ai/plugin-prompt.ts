@@ -35,8 +35,8 @@ if (typeof window.eduskript !== 'undefined') {
   plugin.getData().then(function(data) { /* ... */ });
 
   // Share a result, e.g. for a leaderboard. setData stays private; only this is shared.
-  // Stored only if the teacher set share="…" on the tag or the page has a collecting
-  // leaderboard, so always call it when a game or exercise ends. Numbers from 0 to 1000000;
+  // Stored only if the teacher set share="…" on the tag or the page has a
+  // <leaderboard>, so always call it when a game or exercise ends. Numbers from 0 to 1000000;
   // use the key "score". The best value per student counts unless the tag says keep="last".
   plugin.publish({ score: 120 }).then(function(r) { /* r.stored */ });
   plugin.getResults({ value: 'score', limit: 10 }).then(function(r) { /* r.entries: { rank, nickname, value, isSelf } */ });

@@ -39,6 +39,7 @@ import { PageBanner } from '@/components/markdown/page-banner'
 import { HelpVideoLink } from '@/components/help-video/help-video-link'
 import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Leaderboard } from '@/components/markdown/leaderboard'
+import { ShareListOptions } from '@/components/markdown/share-list-options'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
 import { Geogebra } from '@/components/markdown/geogebra'
@@ -260,6 +261,7 @@ interface CreateMarkdownComponentsOptions {
   onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
   onMuxVideoChange?: (src: string, newMarkdown: string) => void  // Stable callback for the <muxvideo> options toolbar
   onYoutubeStartTimeChange?: (id: string, startTime: number | null) => void  // Stable callback for the <youtube> start-time gizmo
+  onTagAttributeChange?: (tag: string, line: number, attr: string, value: string | null) => void  // Stable callback for gizmos that set one attribute
   onMoleculeChange?: (smiles: string, newMarkdown: string) => void  // Stable callback for the <molecule> resize/align gizmos
   aiFeedbackSolution?: AiFeedbackSolutionApi  // Editor only: "Provide solution" gizmo on <ai-feedback>
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
@@ -277,7 +279,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues, pageLanguage } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onTagAttributeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues, pageLanguage } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -1313,15 +1315,23 @@ export function createMarkdownComponents(
       <OnlyFor {...props} ownerPageSlug={ownerPageSlug} />
     ),
 
-    'leaderboard': (props: Record<string, unknown>) => (
-      <Leaderboard
-        source={props.source as string | undefined}
-        value={props.value as string | undefined}
-        limit={props.limit as string | undefined}
-        collect={props.collect as string | undefined}
-        pageId={pageId}
-      />
-    ),
+    'leaderboard': (props: Record<string, unknown>) => {
+      const line = Number(props['data-source-line-start'] ?? props['dataSourceLineStart'])
+      const source = props.source as string | undefined
+      return (
+        <>
+          <Leaderboard
+            source={source}
+            value={props.value as string | undefined}
+            limit={props.limit as string | undefined}
+            pageId={pageId}
+          />
+          {onTagAttributeChange && line > 0 && (
+            <ShareListOptions value={source} onChange={(v) => onTagAttributeChange('leaderboard', line, 'source', v)} />
+          )}
+        </>
+      )
+    },
 
     // User-created plugins (sandboxed iframes)
     // Inner text content is passed as config.content to the plugin
@@ -1339,14 +1349,18 @@ export function createMarkdownComponents(
       const innerContent = extractText(props.children).trim()
 
       const configProps = Object.fromEntries(
-        Object.entries(props).filter(([k]) => !['src', 'id', 'height', 'children'].includes(k))
+        Object.entries(props).filter(([k]) => !['src', 'id', 'height', 'children', 'data-source-line-start', 'data-source-line-end', 'dataSourceLineStart', 'dataSourceLineEnd'].includes(k))
       )
       if (innerContent) {
         configProps.content = innerContent
       }
 
+      const line = Number(props['data-source-line-start'] ?? props['dataSourceLineStart'])
       return (
         <PluginContainer
+          onShareChange={onTagAttributeChange && line > 0
+            ? (v: string | null) => onTagAttributeChange('plugin', line, 'share', v)
+            : undefined}
           src={String(props.src || '')}
           id={props.id as string}
           height={props.height as string}

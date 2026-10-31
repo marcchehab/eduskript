@@ -258,7 +258,6 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'source', info: '"class" or the list name used in share="…"' },
     { label: 'value', info: 'Published value to rank by (default: score)' },
     { label: 'limit', info: 'Rows shown (default: 10)' },
-    { label: 'collect', info: '"page": also collect points of all scored components on this page' },
   ],
   'next-stage': [
     { label: 'label', info: 'Advance/confirm button text' },

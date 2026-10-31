@@ -3,7 +3,7 @@
 /**
  * `<leaderboard source="class" value="score" limit="10" />`: a list fed by
  * plugins with share="…". Rendered client-side per viewer, since a page is
- * cached and the list depends on who is logged in. With collect="page" it also
+ * cached and the list depends on who is logged in. It also
  * sends the scores that components on the page report (reportScore) into the
  * list. A score from before the tag was added counts once the student redoes it.
  *
@@ -24,11 +24,10 @@ interface LeaderboardProps {
   source?: string
   value?: string
   limit?: string
-  collect?: string
   pageId?: string
 }
 
-export function Leaderboard({ source = CLASS_LIST, value = 'score', limit = '10', collect, pageId }: LeaderboardProps) {
+export function Leaderboard({ source = CLASS_LIST, value = 'score', limit = '10', pageId }: LeaderboardProps) {
   const { status } = useSession()
   const { siteId } = useCurrentSite()
   const [results, setResults] = useState<ShareResults | null>(null)
@@ -77,7 +76,7 @@ export function Leaderboard({ source = CLASS_LIST, value = 'score', limit = '10'
   }, [load, source])
 
   useEffect(() => {
-    if (collect !== 'page' || status !== 'authenticated' || !siteId || !pageId) return
+    if (status !== 'authenticated' || !siteId || !pageId) return
     const onScore = (e: Event) => {
       const { componentId, earned } = (e as CustomEvent<PageScore>).detail
       fetch('/api/plugin-share', {
@@ -93,7 +92,7 @@ export function Leaderboard({ source = CLASS_LIST, value = 'score', limit = '10'
     }
     window.addEventListener(PAGE_SCORE, onScore)
     return () => window.removeEventListener(PAGE_SCORE, onScore)
-  }, [collect, status, siteId, pageId, source])
+  }, [status, siteId, pageId, source])
 
   const saveNickname = async () => {
     if (editing === null || !siteId) return
