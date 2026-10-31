@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { PluginEditor } from '@/components/dashboard/plugin-editor'
+import { pluginThumbnailUrl } from '@/lib/services/plugins'
 
 export default async function EditPluginPage({ params }: { params: Promise<{ ownerSlug: string; pluginSlug: string }> }) {
   const session = await getServerSession(authOptions)
@@ -14,7 +15,7 @@ export default async function EditPluginPage({ params }: { params: Promise<{ own
   const plugin = await prisma.plugin.findFirst({
     where: { slug: pluginSlug, author: { sites: { some: siteHasOrHadSlug(ownerSlug) } } },
     select: {
-      id: true, slug: true, name: true, description: true, entryHtml: true,
+      id: true, slug: true, name: true, description: true, entryHtml: true, manifest: true,
       author: { select: { id: true, name: true, sites: { where: siteHasOrHadSlug(ownerSlug), take: 1, select: { slug: true, pageName: true } } } },
     },
   })
@@ -31,6 +32,7 @@ export default async function EditPluginPage({ params }: { params: Promise<{ own
         name: plugin.name,
         description: plugin.description,
         entryHtml: plugin.entryHtml,
+        thumbnailUrl: pluginThumbnailUrl(plugin.manifest),
         author: {
           id: plugin.author.id,
           name: plugin.author.name,

@@ -22,7 +22,7 @@ export const updatePluginConfig = {
     slug: z.string().min(1).describe('Plugin slug.'),
     name: z.string().min(1).optional(),
     description: z.string().optional(),
-    manifest: z.record(z.string(), z.unknown()).optional().describe('Replaces the whole manifest, e.g. { defaultHeight }.'),
+    manifest: z.record(z.string(), z.unknown()).optional().describe('Replaces the whole manifest, e.g. { defaultHeight }. The thumbnail is kept.'),
     entryHtml: z.string().min(1).optional().describe('Complete new HTML body content.'),
     changeLog: z.string().max(300).optional().describe('Short note stored with the version.'),
   },

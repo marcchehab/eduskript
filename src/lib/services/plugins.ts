@@ -9,9 +9,12 @@
  * unlike pages/skripts there's no revalidation fan-out here.
  */
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { getTeacherFileUrl } from '@/lib/s3'
+import { pluginThumbnailKey, withoutThumbnailKey } from '@/lib/plugin-thumbnail'
 import { ConflictError, NotFoundError, PermissionDeniedError, ValidationError } from '@/lib/services/pages'
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/
@@ -57,7 +60,7 @@ export async function createPluginForUser(
       slug: args.slug,
       name: args.name,
       description: args.description || null,
-      manifest: args.manifest || {},
+      manifest: withoutThumbnailKey(args.manifest || {}) as Prisma.InputJsonObject,
       entryHtml: args.entryHtml,
       authorId: userId,
       versions: { create: { version: 1, entryHtml: args.entryHtml, changeLog: args.changeLog || 'Created' } },
@@ -85,12 +88,18 @@ export async function updatePluginForUser(
     await addPluginVersion(pluginId, args.entryHtml, args.changeLog)
   }
 
+  // A manifest save replaces the whole JSON (e.g. MCP update_plugin); the
+  // thumbnail stays, and only the thumbnail route can change it.
+  const thumbnailKey = pluginThumbnailKey(plugin.manifest)
+
   const updated = await prisma.plugin.update({
     where: { id: pluginId },
     data: {
       ...(args.name !== undefined && { name: args.name }),
       ...(args.description !== undefined && { description: args.description }),
-      ...(args.manifest !== undefined && { manifest: args.manifest }),
+      ...(args.manifest !== undefined && {
+        manifest: { ...withoutThumbnailKey(args.manifest), ...(thumbnailKey && { thumbnailKey }) } as Prisma.InputJsonObject,
+      }),
       ...(args.entryHtml !== undefined && { entryHtml: args.entryHtml }),
       ...(args.version !== undefined && { version: args.version }),
     },
@@ -213,6 +222,30 @@ export async function findPluginUsage(userId: string, pluginSlugs: string[]) {
     }
   }
   return usage
+}
+
+/** Public URL of a plugin's thumbnail, from its manifest. */
+export function pluginThumbnailUrl(manifest: unknown): string | null {
+  const key = pluginThumbnailKey(manifest)
+  return key ? getTeacherFileUrl(key) : null
+}
+
+/**
+ * Set (key) or clear (null) the thumbnail. Passes the old updatedAt back so
+ * @updatedAt keeps it: a new picture is no content change, and the plugin
+ * lists sort by updatedAt.
+ */
+export async function setPluginThumbnail(userId: string, pluginId: string, key: string | null) {
+  const plugin = await prisma.plugin.findUnique({ where: { id: pluginId } })
+  if (!plugin) throw new NotFoundError('Plugin not found')
+  if (plugin.authorId !== userId) throw new PermissionDeniedError('Only the author can change the thumbnail')
+
+  const manifest = { ...withoutThumbnailKey((plugin.manifest ?? {}) as object), ...(key && { thumbnailKey: key }) }
+  await prisma.plugin.update({
+    where: { id: pluginId },
+    data: { manifest: manifest as Prisma.InputJsonObject, updatedAt: plugin.updatedAt },
+  })
+  return manifest
 }
 
 /** The caller's own plugins, newest first, without entryHtml. */

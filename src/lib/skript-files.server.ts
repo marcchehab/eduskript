@@ -8,7 +8,7 @@
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { prisma } from './prisma'
 import { CACHE_TAGS } from './cached-queries'
-import { getS3Key } from './file-storage'
+import { getFileExtension, getS3Key } from './file-storage'
 import { getTeacherFileUrl } from './s3'
 import { toVideoInfoMetadata, type SkriptFilesData, type SkriptFile, type VideoInfo } from './skript-files'
 
@@ -48,7 +48,8 @@ export async function fetchSkriptFiles(skriptId: string): Promise<SkriptFilesDat
   // Build files record — all URLs point directly to S3 (public bucket)
   const files: Record<string, SkriptFile> = {}
   for (const file of dbFiles) {
-    const ext = file.name.split('.').pop() || ''
+    // Same lowercased extension as the upload's S3 key, or `photo.PNG` 404s.
+    const ext = getFileExtension(file.name) ?? ''
     const url = file.hash
       ? getTeacherFileUrl(getS3Key(file.hash, ext))
       : `/api/files/${file.id}`

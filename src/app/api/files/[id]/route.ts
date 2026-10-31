@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getFileById, sanitizeFilename } from '@/lib/file-storage'
+import { findStoredFile, getFileById, sanitizeFilename } from '@/lib/file-storage'
 import { prisma } from '@/lib/prisma'
 import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
@@ -124,13 +124,9 @@ export async function PATCH(
     }
 
     // Check if a file with the new name already exists in the same skript/parent directory
-    const existingFile = await prisma.file.findFirst({
-      where: {
-        name: sanitizedFilename,
-        skriptId: fileRecord.skriptId,
-        parentId: fileRecord.parentId,
-        id: { not: fileId } // Exclude the current file
-      }
+    const existingFile = await findStoredFile(fileRecord.skriptId, sanitizedFilename, {
+      parentId: fileRecord.parentId,
+      excludeId: fileId, // Renaming a file to its own NFC form is allowed
     })
 
     if (existingFile) {

@@ -18,7 +18,7 @@ import {
 import { sanitizeCustomCss, type RemovedCssItem } from './custom-css'
 import { customCssOptions } from './site-theme'
 import { placedOnSiteWhere } from './site-access'
-import { getS3Key } from './file-storage'
+import { getFileExtension, getS3Key } from './file-storage'
 import { getTeacherFileUrl } from './s3'
 import { patchSiteExtraSettings } from './settings.server'
 
@@ -87,7 +87,7 @@ export async function sanitizeCustomCssForSite(
   const relativeFiles: Record<string, string> = {}
   for (const f of files) {
     if (relativeFiles[f.name] || !f.hash) continue
-    const ext = f.name.split('.').pop() || ''
+    const ext = getFileExtension(f.name) ?? ''
     relativeFiles[f.name] = getTeacherFileUrl(getS3Key(f.hash, ext))
   }
   return sanitizeCustomCss(css, { ...options, relativeFiles })

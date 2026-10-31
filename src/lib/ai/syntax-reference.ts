@@ -768,7 +768,7 @@ What is 2 + 2?
 \`\`\`
 
 **question attributes:**
-- \`id="unique-id"\` — Optional, auto-generated if omitted
+- \`id="unique-id"\` — Always set it. Without an id, all such questions on a page share one stored answer, and exam grading does not list them. Ids must not change once students have answered
 - \`type="multiple"\` — Multiple choice / checkboxes (the default if \`type\` is omitted). **Always set \`type\` explicitly** — omitting it silently gives checkboxes, not a single-select radio group. Other types: \`single\` (radio, one answer), \`text\` (free-text answer), \`number\` (slider), \`range\` (two-handle slider)
 - \`feedback="check|instant|none"\` — when correctness is revealed on a NON-exam page. \`check\` (default): a **Check answer** button; nothing is revealed until pressed, and the question locks once it is correct or the attempts are used up. \`instant\`: right/wrong shown on every change (sliders with feedback bands, if dragging is the point). \`none\`: silent, no correctness at all (polls, exit tickets — the teacher still sees the class tally). **Exam pages ignore this attribute**: answers autosave silently, are handed in with the stage/exam, and feedback appears on the returned exam. Teachers always see correctness when grading.
 - \`attempts="3"\` or \`attempts="unlimited"\` — check mode only, default 1. After a wrong check with attempts left, only the student's own picks are marked (the correct answer stays hidden), and they may change the answer and check again. A correct answer always finishes the question.
@@ -801,13 +801,13 @@ At which $x$ does $f$ have its maximum?
 - Without \`expected\` a slider stays ungraded and the teacher scores it by hand, as before.
 
 **answer attributes:**
-- \`correct="true"\` — Marks the correct answer
+- \`correct="true"\` — Marks the correct answer; set it on every correct answer of a \`multiple\` question. Bare \`correct\` means the same, but always write \`correct="true"\`. Choice questions only: \`text\`, \`number\` and \`range\` take their target from \`expected\`
 - \`feedback="..."\` — Shown when this wrong option is selected. Markdown and \`$math$\` are rendered.
 - \`from="0.7"\` — Feedback band threshold for slider questions (see above)
 
 Spacing is forgiving: a prompt line and blank lines around the \`<answer>\` tags are optional — the question renders correctly either way.
 
-**Free-text auto-check (predict-the-output):** a \`type="text"\` question can be auto-graded against an expected output written as an \`\`\`expected fenced block inside the question (leave a blank line before it). The typed answer gets **partial credit** by a line-exact-match ratio (× \`points\`, default 1, rounded to 0.1 pts) with a diff — the fraction of expected lines matched exactly (LCS-based), not fuzzy character similarity, so a one-character typo loses that whole line's credit. An exact match (after normalizing: each line trimmed, surrounding blank lines dropped; comparison is strictly line-by-line) is fully correct. Optional flags: \`ignore-case="true"\`, \`ignore-whitespace="true"\`. Example:
+**Free-text auto-check (predict-the-output):** a \`type="text"\` question can be auto-graded against an expected output written as an \`\`\`expected fenced block inside the question (leave a blank line before it), or a one-line target as \`expected="…"\` on the tag. The typed answer gets **partial credit** by a line-exact-match ratio (× \`points\`, default 1, rounded to 0.1 pts) with a diff — the fraction of expected lines matched exactly (LCS-based), not fuzzy character similarity, so a one-character typo loses that whole line's credit. An exact match (after normalizing: each line trimmed, surrounding blank lines dropped; comparison is strictly line-by-line) is fully correct. Optional flags: \`ignore-case="true"\`, \`ignore-whitespace="true"\`. Example:
 
 <question id="predict1" type="text" points="2">
 Predict the output:
@@ -944,7 +944,8 @@ export function getCondensedSyntaxReference(): string {
   - \`feedback="check|instant|none"\` (non-exam pages; default \`check\` = a Check answer button, hidden until pressed, locks when finished; \`instant\` = on every change; \`none\` = silent poll) and \`attempts="3"|"unlimited"\` (check mode, default 1; wrong non-final checks mark only the student's picks). Exam pages ignore both: silent autosave, feedback on the returned exam. \`showFeedback="true"\` is a legacy alias for \`feedback="instant"\`.
   - Put the question text inside the tag before the answers; it renders as the card heading. Markdown and \`$math$\` work in the prompt, in the answers and in \`feedback="…"\`.
   - Sliders auto-grade when given a target: \`<question type="number" expected="-1" tolerance="0.15">\` (or \`type="range" expected="-1..1"\`), with \`<answer from="0.7" feedback="…">\` bands from best to worst.
-  - Use \`correct="true"\` to mark the correct answer
+  - Always set \`id\`. Without it, all such questions on a page share one stored answer, and exam grading does not list them
+  - Use \`correct="true"\` to mark the correct answer (bare \`correct\` means the same); choice questions only, the other types use \`expected\`
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented
 

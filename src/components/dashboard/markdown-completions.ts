@@ -22,11 +22,24 @@ import { phetTitle, searchPhetSims, type PhetSimSummary } from '@/lib/phet'
 
 // ── Tag definitions ──────────────────────────────────────────────────
 
+/** Short random id for inserted blocks. Not checked against ids already on the page. */
+export const generateBlockId = () => Math.random().toString(36).slice(2, 7)
+
+/**
+ * The quiz block inserted by the editor ribbon and by tag completion.
+ *
+ * The explicit id is required, not decoration: a lowercase <question> without
+ * one gets the componentId `quiz-`, so all such questions on a page share one
+ * stored answer, and parseGradableComponents skips them on exam pages.
+ */
+export const quizTemplate = (type: 'single' | 'multiple', id = generateBlockId()) =>
+  `<question id="${id}" type="${type}">\nQuestion text\n\n<answer correct="true">Correct answer</answer>\n<answer>Wrong answer</answer>\n</question>\n`
+
 interface TagDef {
   label: string
   info: string
-  /** Text inserted when the completion is applied. */
-  apply: string
+  /** Text inserted when the completion is applied. A function runs each time the option list is built. */
+  apply: string | (() => string)
   /** If set, cursor is placed at this offset within apply text and completions re-trigger. */
   cursorOffset?: number
 }
@@ -40,7 +53,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'img', info: 'Image with layout and invert support', apply: '<img src="" alt="" />', cursorOffset: 10 },
   { label: 'stickme', info: 'Pins wrapped content (image, schema, video) to the margin as you scroll; resizable', apply: '<stickme>\n\n</stickme>' },
   { label: 'plugin', info: 'User-created plugin in a sandboxed iframe', apply: '<plugin src="" height="400"></plugin>', cursorOffset: 13 },
-  { label: 'question', info: 'Quiz question: multiple/single choice, text, number, or range', apply: '<question type="multiple">\n\n<answer correct>Answer</answer>\n<answer>Wrong</answer>\n</question>' },
+  { label: 'question', info: 'Quiz question: multiple/single choice, text, number, or range', apply: () => quizTemplate('multiple') },
   { label: 'answer', info: 'Answer option inside a <question>', apply: '<answer>Text</answer>' },
   { label: 'mark', info: 'Highlight text', apply: '<mark></mark>' },
   { label: 'style', info: 'Scoped CSS block', apply: '<style>\n\n</style>' },
@@ -129,21 +142,22 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'attempts', info: 'Check mode: presses before the question locks (default 1), or "unlimited"' },
     { label: 'showFeedback', info: 'Legacy: "true" = feedback="instant", "false" = feedback="none"' },
     { label: 'points', info: 'Points awarded for a correct answer' },
-    { label: 'minValue', info: 'Range: minimum value' },
-    { label: 'maxValue', info: 'Range: maximum value' },
-    { label: 'step', info: 'Range: step size' },
-    { label: 'minLabel', info: 'Range: label at the minimum end' },
-    { label: 'maxLabel', info: 'Range: label at the maximum end' },
-    { label: 'expected', info: 'Text/number: the expected answer' },
+    { label: 'minValue', info: 'Number/range: minimum value' },
+    { label: 'maxValue', info: 'Number/range: maximum value' },
+    { label: 'step', info: 'Number/range: step size' },
+    { label: 'minLabel', info: 'Number/range: label at the minimum end' },
+    { label: 'maxLabel', info: 'Number/range: label at the maximum end' },
+    { label: 'expected', info: 'Number: target value ("-1"). Range: target interval ("-1..1"). Text: target output (```expected block for multi-line output)' },
     { label: 'tolerance', info: 'Number: allowed +/- tolerance' },
+    { label: 'window', info: 'Number/range: distance beyond the tolerance over which the score fades to zero' },
     { label: 'ignore-case', info: 'Text: ignore letter casing when checking' },
     { label: 'ignore-whitespace', info: 'Text: ignore whitespace differences when checking' },
-    { label: 'gate-at', info: 'Staged page: points needed before the next stage unlocks' },
+    { label: 'gate-at', info: 'Coupled video: pause at this time ("90", "1:30") until answered correctly' },
   ],
   'answer': [
-    { label: 'correct', info: 'Mark as the correct answer' },
+    { label: 'correct', info: 'Mark as a correct answer (correct="true")' },
     { label: 'feedback', info: 'Feedback shown after answering' },
-    { label: 'from', info: 'Range: threshold (0-1) this feedback band starts at' },
+    { label: 'from', info: 'Number/range: score ratio (0-1) this feedback band starts at' },
   ],
   'tabs-container': [
     { label: 'data-items', info: 'JSON array of tab labels, e.g. \'["Tab 1","Tab 2"]\'' },
@@ -663,7 +677,8 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
       from: context.pos - typed.length,
       options: TAG_COMPLETIONS.map(t => {
         // Strip leading `<` from apply text since the `<` is already in the document
-        const applyText = t.apply.startsWith('<') ? t.apply.slice(1) : t.apply
+        const text = typeof t.apply === 'function' ? t.apply() : t.apply
+        const applyText = text.startsWith('<') ? text.slice(1) : text
         const cursorOffset = t.cursorOffset != null ? t.cursorOffset - 1 : undefined // -1 for stripped `<`
 
         return {
@@ -691,17 +706,20 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
     const word = textBefore.match(/(?:^|\s)(\w*)$/)
     if (word) {
       const atLineStart = textBefore.trim() === word[1]
-      const tags: Completion[] = TAG_COMPLETIONS.map(t => ({
-        label: `<${t.label}>`,
-        type: 'type',
-        info: t.info,
-        apply: t.cursorOffset != null
-          ? (view: import('@codemirror/view').EditorView, _c: Completion, from: number, to: number) => {
-              view.dispatch({ changes: { from, to, insert: t.apply }, selection: { anchor: from + t.cursorOffset! } })
-              startCompletion(view)
-            }
-          : t.apply,
-      }))
+      const tags: Completion[] = TAG_COMPLETIONS.map(t => {
+        const text = typeof t.apply === 'function' ? t.apply() : t.apply
+        return {
+          label: `<${t.label}>`,
+          type: 'type',
+          info: t.info,
+          apply: t.cursorOffset != null
+            ? (view: import('@codemirror/view').EditorView, _c: Completion, from: number, to: number) => {
+                view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + t.cursorOffset! } })
+                startCompletion(view)
+              }
+            : text,
+        }
+      })
       return {
         from: context.pos - word[1].length,
         options: atLineStart ? [...BLOCK_SNIPPETS, ...tags] : tags,

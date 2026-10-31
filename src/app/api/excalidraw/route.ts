@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
-import { saveFile, getS3Key, getFileExtension } from '@/lib/file-storage'
+import { saveFile, findStoredFile, getS3Key, getFileExtension } from '@/lib/file-storage'
 import { downloadTeacherFile } from '@/lib/s3'
 
 export async function POST(request: NextRequest) {
@@ -53,10 +53,7 @@ export async function POST(request: NextRequest) {
     // Reject if the chosen filename collides with an existing file in this
     // skript (unless we're re-saving the same drawing under its current name).
     if (baseName !== originalBaseName) {
-      const existing = await prisma.file.findFirst({
-        where: { skriptId, name: `${baseName}.excalidraw` },
-        select: { id: true }
-      })
+      const existing = await findStoredFile(skriptId, `${baseName}.excalidraw`)
       if (existing) {
         return NextResponse.json(
           { error: `A drawing named "${baseName}" already exists. Please choose a different name.` },

@@ -88,7 +88,9 @@ export async function extractAndUploadPdfPages(
       throw new Error(err.error || `Failed to upload page ${i + 1}`)
     }
 
-    filenames.push(filename)
+    // The stored name, which sanitizeFilename may have changed.
+    const uploaded = await response.json()
+    filenames.push(uploaded.name ?? filename)
   }
 
   return filenames

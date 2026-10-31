@@ -30,6 +30,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { deleteSnapImage, deleteTeacherFile, isS3Configured, isTeacherS3Configured } from '@/lib/s3'
+import { getFileExtension } from '@/lib/file-storage'
 
 export async function deleteUserAccount(userId: string): Promise<void> {
   const snapRows = await prisma.userData.findMany({
@@ -124,7 +125,7 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     if (!file.hash || seen.has(file.hash)) continue
     seen.add(file.hash)
     if ((await prisma.file.count({ where: { hash: file.hash } })) > 0) continue
-    const extension = file.name.includes('.') ? file.name.split('.').pop()! : ''
+    const extension = getFileExtension(file.name)
     if (!extension) continue
     try {
       await deleteTeacherFile(`files/${file.hash}.${extension}`)

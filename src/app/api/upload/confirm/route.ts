@@ -12,6 +12,7 @@ import {
 } from '@/lib/s3'
 import { createHash } from 'crypto'
 import { invalidateSkriptFiles } from '@/lib/skript-files.server'
+import { findStoredFile, getFileExtension } from '@/lib/file-storage'
 
 /**
  * Confirm a direct S3 upload and create the database record
@@ -106,7 +107,8 @@ export async function POST(request: NextRequest) {
 
     // Calculate content hash
     const hash = createHash('sha256').update(buffer).digest('hex')
-    const extension = filename.split('.').pop() || 'bin'
+    // Lowercased like saveFile: readers build the key with getFileExtension.
+    const extension = getFileExtension(filename) ?? 'bin'
 
     // Check if this content already exists (deduplication)
     const existsInS3 = await teacherFileExists(hash, extension)
@@ -122,12 +124,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Check if file with same name already exists in this skript
-    const existingFile = await prisma.file.findFirst({
-      where: {
-        name: filename,
-        skriptId
-      }
-    })
+    const existingFile = await findStoredFile(skriptId, filename)
 
     if (existingFile) {
       // Update existing file record
@@ -145,7 +142,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         id: existingFile.id,
-        name: filename,
+        name: existingFile.name,
         size,
         type: contentType,
         hash,

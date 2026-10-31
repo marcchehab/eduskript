@@ -1,5 +1,6 @@
 import type { Root, Image } from 'mdast'
 import { visit } from 'unist-util-visit'
+import { escapeHtmlAttr, fileKind, isLocalFileRef } from '@/lib/file-refs'
 
 /**
  * Remark plugin to transform video references (![](video.mp4)) into MuxVideo components.
@@ -16,30 +17,13 @@ import { visit } from 'unist-util-visit'
  * can also write the HTML directly: <muxvideo src="x.mp4" poster="thumb.jpg" />.
  */
 
-// Minimal HTML attribute-value escape — guards against an alt or title that
-// contains a quote breaking out of the attribute.
-function escapeAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
 export function remarkMuxVideo() {
   return function transformer(tree: Root) {
     visit(tree, 'image', (node: Image) => {
       const url = node.url
 
-      // Skip already-resolved URLs (http, https, or absolute paths)
-      if (!url || url.startsWith('http') || url.startsWith('https') || url.startsWith('/')) {
-        return
-      }
-
-      // Only handle video files
-      if (!url.endsWith('.mp4') && !url.endsWith('.mov')) {
-        return
-      }
+      // Skip already-resolved URLs; only handle video files
+      if (!url || !isLocalFileRef(url) || fileKind(url) !== 'video') return
 
       // Convert to raw HTML so it gets parsed by rehype-raw
       // The MuxVideo component will handle file resolution and metadata fetching
@@ -47,11 +31,11 @@ export function remarkMuxVideo() {
       const poster = node.title || ''
 
       const attrs = [
-        `src="${escapeAttr(url)}"`,
-        `alt="${escapeAttr(alt)}"`,
+        `src="${escapeHtmlAttr(url)}"`,
+        `alt="${escapeHtmlAttr(alt)}"`,
       ]
       if (poster) {
-        attrs.push(`poster="${escapeAttr(poster)}"`)
+        attrs.push(`poster="${escapeHtmlAttr(poster)}"`)
       }
 
       const mutableNode = node as unknown as Record<string, unknown>

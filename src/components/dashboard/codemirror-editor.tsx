@@ -31,7 +31,8 @@ import { PdfPickDialog } from './pdf-pick-dialog'
 import { InteractivePreview } from './interactive-preview'
 import { autocompletion } from '@codemirror/autocomplete'
 import { Ribbon, RibbonGroup, RibbonBigButton, RibbonSmallButton, RibbonSmallStack, RibbonSmallRow, RibbonSplitBigButton, RibbonGalleryChip, type RibbonTabDef } from '@/components/dashboard/editor-ribbon'
-import { createMarkdownCompletions, pageLinkCompletions, phetSimCompletions } from './markdown-completions'
+import { createMarkdownCompletions, generateBlockId as generateId, pageLinkCompletions, phetSimCompletions, quizTemplate } from './markdown-completions'
+import { questionIdLinter } from './question-id-lint'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
 import type { Compartment, Extension } from '@codemirror/state'
@@ -39,6 +40,7 @@ import { toggleInline, toggleStrikethrough, insertLink as insertLinkEdit, type F
 import type { VideoInfo } from '@/lib/skript-files'
 import { classifyPaste, type PasteMenuOption } from '@/lib/paste-rules'
 import { planBlockInsert } from '@/lib/block-insert'
+import { buildFileEmbed } from '@/lib/file-refs'
 import { AIEditPanel } from '@/components/ai/ai-edit-panel'
 import { useInlineAIEdit } from '@/hooks/use-inline-ai-edit'
 import type { ContentModel } from '@/hooks/use-ai-edit-chat'
@@ -436,7 +438,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     if (muxVideoData) {
       try {
         const video = JSON.parse(muxVideoData)
-        const insertText = `![](${video.filename})`
+        const insertText = buildFileEmbed(video.filename)
         if (editorViewRef.current && !useSimpleEditor) {
           const view = editorViewRef.current
           const insertPos = dropPosition !== null && dropPosition !== undefined ? dropPosition : view.state.selection.main.head
@@ -639,45 +641,16 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertFileAtPosition = (file: { id: string; name?: string; filename?: string; url?: string; isDirectory?: boolean }, position?: number | null) => {
     if (file.isDirectory) return // Don't insert directories
 
-    let insertText = ''
-
-    // Determine the type of insert based on file extension
     // Handle both 'name' and 'filename' properties for backward compatibility
     const fileName = file.name || file.filename
     if (!fileName) {
       console.error('File has no name property:', file)
       return
     }
-    const extension = fileName.split('.').pop()?.toLowerCase()
-    
-    if (extension === 'pdf') {
-      // PDF - embed using custom element, filename resolved at render time
-      insertText = `<pdf src="${fileName}" height="1267"></pdf>`
-    } else if (['sqlite', 'db'].includes(extension || '')) {
-      // Database file - insert SQL editor block
-      insertText = `\`\`\`sql editor id="${generateId()}" db="${fileName}"\n-- Show all tables in the database\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\``
-    } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
-      // Image - empty alt by default. The markdown pipeline renders alt as a
-      // figcaption beneath the image; the basename is rarely the right
-      // caption. Authors add one manually when they want one.
-      insertText = `![](${fileName})`
-    } else if (extension === 'excalidraw') {
-      // Excalidraw drawing - use image syntax with just filename
-      insertText = `![](${fileName})`
-    } else if (['mp4', 'mov'].includes(extension || '')) {
-      // Uploaded video reference, resolved at render time via remarkMuxVideo
-      // (same as editor-with-media's file panel).
-      insertText = `![](${fileName})`
-    } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
-      // Bare filename; markdown-components' AudioComponent resolves it to the
-      // current file URL at render time.
-      insertText = `<audio controls src="${fileName}"></audio>`
-    } else {
-      // Generic file/download link. Bare filename, resolved to the current
-      // file URL at render time (markdown-components AnchorComponent); label is
-      // the basename without extension.
-      insertText = `[${fileName.replace(/\.[^.]+$/, '')}](${fileName})`
-    }
+    // Filename encoding and per-type markdown live in file-refs.ts, shared with
+    // editor-with-media's file panel. Images get an empty alt: the pipeline
+    // renders alt as a figcaption, and the basename is rarely the right caption.
+    const insertText = buildFileEmbed(fileName, 'embed', { editorId: generateId() })
 
     if (editorViewRef.current && !useSimpleEditor) {
       // Insert at specific position or current cursor position in CodeMirror
@@ -892,6 +865,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               run: () => { formatShortcutsRef.current[key]?.(); return true },
             })))),
             markdownExtension,
+            questionIdLinter,
             autocompletion({
               override: [
                 createMarkdownCompletions(() => fileListRef.current || []),
@@ -1336,8 +1310,6 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     onChange(newContent)
   }
 
-  const generateId = () => Math.random().toString(36).slice(2, 7)
-
   // Insert code editor block
   const insertCodeEditor = () => {
     // Pre-fill an explicit id so saves persist across markdown edits. Without
@@ -1349,11 +1321,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   }
 
   // Insert quiz question block
-  const insertQuiz = () => {
-    const quizTemplate = `<question id="${generateId()}" type="single">\nQuestion text\n\n<answer correct>Correct answer</answer>\n<answer>Wrong answer</answer>\n</question>\n`
-
-    insertBlockTemplate(quizTemplate)
-  }
+  const insertQuiz = () => insertBlockTemplate(quizTemplate('single'))
 
   // Insert a <spacer> writing area. An explicit id keys the round-trip
   // find/replace when the student/teacher resizes or restyles it in the preview.
@@ -1455,7 +1423,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     // originalName is set both when editing an existing drawing and on
     // re-saves within one session (the editor tracks its last saved name).
     if (!originalName) {
-      const insertText = `![](${name}.excalidraw)\n`
+      const insertText = `${buildFileEmbed(`${name}.excalidraw`)}\n`
 
       if (editorViewRef.current && !useSimpleEditor) {
         const view = editorViewRef.current

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import JSZip from 'jszip'
 import { downloadTeacherFile, isTeacherS3Configured } from '@/lib/s3'
+import { getFileExtension } from '@/lib/file-storage'
 
 interface ExportManifest {
   version: number
@@ -144,7 +145,7 @@ export async function GET(request: Request) {
 
               // Download from S3
               if (file.hash) {
-                const ext = file.name.split('.').pop() || 'bin'
+                const ext = getFileExtension(file.name) ?? 'bin'
                 const s3Key = `files/${file.hash}.${ext}`
 
                 try {
@@ -193,7 +194,7 @@ export async function GET(request: Request) {
           for (const file of skript.files) {
             if (file.isDirectory) continue
             if (file.hash) {
-              const ext = file.name.split('.').pop() || 'bin'
+              const ext = getFileExtension(file.name) ?? 'bin'
               const s3Key = `files/${file.hash}.${ext}`
 
               try {

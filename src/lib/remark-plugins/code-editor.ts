@@ -355,6 +355,13 @@ function parseMeta(node: CodeNode): Record<string, string> {
     }
   })
 
+  // Filenames may contain spaces (stored embeds predate percent-encoding in
+  // src/lib/file-refs.ts) — re-parse from raw meta string, split(' ') cut them.
+  for (const key of ['db', 'schema-image', 'assets']) {
+    const quoted = metaString.match(new RegExp(`(?:^|\\s)${key}="([^"]*)"`))
+    if (quoted) attributes[key] = quoted[1]
+  }
+
   // solution may contain spaces — re-parse from raw meta string
   const solutionMatch = metaString.match(/solution="([^"]*)"/)
   if (solutionMatch) {

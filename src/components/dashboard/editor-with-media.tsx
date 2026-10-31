@@ -1,5 +1,6 @@
 'use client'
 
+import { buildFileEmbed, fileKind, normalizeFileName, renameFileRefs } from '@/lib/file-refs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -352,16 +353,10 @@ export function EditorWithMedia({
     refreshFileList()
   }, [refreshFileList])
 
-  // Link text for a file link: the basename without extension. The href is
-  // the bare filename — markdown-components' AnchorComponent resolves it to the
-  // current file URL at render time, so the link survives a re-upload with the
-  // same name (a pasted S3 URL would not).
-  const linkLabel = (name: string) => name.replace(/\.[^.]+$/, '')
-
   // Insert file content at the current cursor position (or append to end).
-  // Branches on extension and insertion type. Note that .mp4/.mov go through
-  // the video pipeline (`![](filename)`) — the markdown renderer resolves them
-  // via remarkMuxVideo. Raw <video> tags are not used.
+  // Branches on insertion type; buildFileEmbed (file-refs.ts) writes the markdown.
+  // File links stay bare filenames: AnchorComponent resolves them to the current
+  // URL at render time, so the link survives a re-upload with the same name.
   const handleFileInsert = useCallback((file: {
     id: string
     name: string
@@ -371,39 +366,10 @@ export function EditorWithMedia({
   }, insertionType: 'embed' | 'link' | 'sql-editor' | 'pdf-page' = 'embed') => {
     if (file.isDirectory) return
 
-    const extension = file.name.split('.').pop()?.toLowerCase()
-    let insertText = ''
-
-    if (extension === 'pdf' && insertionType === 'pdf-page') {
-      insertText = `<pdf src="${file.name}" height="1267"></pdf>`
-    } else if (['sqlite', 'db'].includes(extension || '')) {
-      if (insertionType === 'sql-editor') {
-        insertText = `\`\`\`sql editor db="${file.name}"\n-- Show all tables in the database\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\``
-      } else {
-        insertText = `[${linkLabel(file.name)}](${file.name})`
-      }
-    } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
-      if (insertionType === 'embed') {
-        // Empty alt by default — the markdown pipeline turns alt into a
-        // figcaption shown beneath the image, and the basename is rarely
-        // what the author wants to display. Authors add a caption manually
-        // when they want one.
-        insertText = `![](${file.name})`
-      } else {
-        insertText = `[${linkLabel(file.name)}](${file.name})`
-      }
-    } else if (extension === 'excalidraw') {
-      insertText = `![](${file.name})`
-    } else if (['mp4', 'mov'].includes(extension || '')) {
-      // Uploaded video reference (resolved at render time via remarkMuxVideo)
-      insertText = `![](${file.name})`
-    } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
-      // Bare filename; markdown-components' AudioComponent resolves it to the
-      // current file URL at render time.
-      insertText = `<audio controls src="${file.name}"></audio>`
-    } else {
-      insertText = `[${linkLabel(file.name)}](${file.name})`
-    }
+    // Pdf and database files only embed through their dedicated insertion types.
+    const kind = fileKind(file.name)
+    const plainEmbedAsLink = insertionType === 'embed' && (kind === 'pdf' || kind === 'database')
+    const insertText = buildFileEmbed(file.name, insertionType === 'link' || plainEmbedAsLink ? 'link' : 'embed')
 
     if (file.position !== undefined) {
       const pos = file.position
@@ -414,11 +380,7 @@ export function EditorWithMedia({
   }, [content, onChange])
 
   const handleFileRenamed = useCallback((oldFilename: string, newFilename: string) => {
-    const escaped = oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const updated = content
-      .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${escaped}\\)`, 'g'), `![$1](${newFilename})`)
-      .replace(new RegExp(`\\[([^\\]]*)\\]\\(${escaped}\\)`, 'g'), `[$1](${newFilename})`)
-      .replace(new RegExp(`<source src="${escaped}"`, 'g'), `<source src="${newFilename}"`)
+    const updated = renameFileRefs(content, oldFilename, newFilename)
 
     if (updated !== content) onChange(updated)
   }, [content, onChange])
@@ -563,7 +525,7 @@ export function EditorWithMedia({
     // Defensive collision check; the Save button is disabled when we already
     // know there's a clash, but fileList may have been refreshed in the
     // background between render and click.
-    if (fileList.some(f => f.name.toLowerCase() === finalName.toLowerCase())) {
+    if (fileList.some(f => normalizeFileName(f.name).toLowerCase() === normalizeFileName(finalName).toLowerCase())) {
       alert.showError(`A file named "${finalName}" already exists. Please choose a different name.`)
       return
     }
@@ -933,7 +895,8 @@ export function EditorWithMedia({
                           if (uploaded.existed) {
                             alert.showInfo('A file with this name already existed and was embedded. Rename or delete the existing file to re-upload.', 'Existing file used')
                           }
-                          handleFileInsert({ ...file, id: uploaded.id, url: uploaded.url }, 'pdf-page')
+                          // uploaded.name, not file.name: the server sanitizes the name.
+                          handleFileInsert({ ...file, id: uploaded.id, url: uploaded.url, name: uploaded.name ?? file.name }, 'pdf-page')
                         } catch (error) {
                           console.error('PDF upload failed:', error)
                           alert.showError(error instanceof Error ? error.message : 'Failed to upload PDF')
@@ -967,7 +930,7 @@ export function EditorWithMedia({
                           (current, total) => setPdfExtracting(`Extracting page ${current}/${total}…`)
                         )
 
-                        const imgTags = filenames.map((name, i) => `![${i + 1}](${name})`).join('\n')
+                        const imgTags = filenames.map((name, i) => buildFileEmbed(name, 'embed', { alt: String(i + 1) })).join('\n')
                         const insertText = `<fullwidth class="invert-dark">\n\n${imgTags}\n\n</fullwidth>`
 
                         if (file.position !== undefined) {
@@ -1051,7 +1014,7 @@ export function EditorWithMedia({
           {pasteImagePending && (() => {
             const trimmed = pasteImagePending.name.trim()
             const fullName = trimmed ? `${trimmed}.${pasteImagePending.ext}` : null
-            const collides = !!fullName && fileList.some(f => f.name.toLowerCase() === fullName.toLowerCase())
+            const collides = !!fullName && fileList.some(f => normalizeFileName(f.name).toLowerCase() === normalizeFileName(fullName).toLowerCase())
             const canSave = !!fullName && !collides
             return (
               <>

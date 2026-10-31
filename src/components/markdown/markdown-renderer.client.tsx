@@ -1,9 +1,10 @@
 'use client'
 
+import { fileRefPattern } from '@/lib/file-refs'
 import React, { useState, useEffect, useLayoutEffect, useRef, useDeferredValue, useCallback, memo, useMemo, type ReactNode } from 'react'
 import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
-import { createSkriptFiles, createEmptySkriptFiles, type SkriptFilesData } from '@/lib/skript-files'
+import { createSkriptFiles, createEmptySkriptFiles, skriptFileNames, type SkriptFilesData } from '@/lib/skript-files'
 import type { VideoInfo } from '@/lib/skript-files'
 import { EagerImageLoader } from './eager-image-loader'
 import { FootnotePreview } from './footnote-preview'
@@ -101,7 +102,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
 
     const imageComponentPattern = new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*/?>`)
     const excaliPattern = new RegExp(`<excali[^>]*src="${escapedBaseName}"[^>]*/?>`)
-    const markdownPattern = new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)(\\{[^}]*\\})?`)
+    const markdownPattern = new RegExp(`!\\[([^\\]]*)\\]\\(${fileRefPattern(srcForMatching)}\\)(\\{[^}]*\\})?`)
 
     const newContent =
       replaceOutsideFences(currentContent, excaliPattern, newMarkdown) ??
@@ -153,7 +154,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
 
     const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const tagPattern = new RegExp(`<muxvideo[^>]*\\bsrc="${escapedSrc}"[^>]*/?>`)
-    const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(${escapedSrc}\\)`)
+    const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(${fileRefPattern(src)}\\)`)
 
     const newContent =
       replaceOutsideFences(currentContent, tagPattern, newMarkdown) ??
@@ -259,7 +260,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
         setError(null)
 
         // Compile markdown using safe unified pipeline (no JS execution)
-        const rendered = await compileMarkdown(deferredContent, { components, footnoteLabel: footnoteLabelForLang(pageLanguage) })
+        const rendered = await compileMarkdown(deferredContent, { components, footnoteLabel: footnoteLabelForLang(pageLanguage), fileNames: skriptFileNames(files) })
 
         // Bail out if a newer generation started
         if (currentGeneration !== processingRef.current) return
@@ -276,7 +277,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     }
 
     processContent()
-  }, [deferredContent, components, pageLanguage])
+  }, [deferredContent, components, files, pageLanguage])
 
   // Restore scroll position after DOM updates
   useLayoutEffect(() => {

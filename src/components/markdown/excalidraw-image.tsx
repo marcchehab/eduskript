@@ -48,8 +48,8 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
   const fileId = excalidrawFile?.id ?? ''
 
   // Get real dimensions from the light SVG file (fall back to 800x600)
-  const baseName = src.replace(/\.excalidraw(\.md)?$/, '')
-  const lightFile = files?.files[`${baseName}.excalidraw.light.svg`]
+  const baseName = src.replace(/\.excalidraw(\.md)?$/i, '')
+  const lightFile = files ? resolveFile(files, `${baseName}.excalidraw.light.svg`) : undefined
   const imgWidth = lightFile?.width ?? 800
   const imgHeight = lightFile?.height ?? 600
 
@@ -149,7 +149,7 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
         <button
           onClick={(e) => {
             e.stopPropagation()
-            onEdit(filename, fileId)
+            onEdit(excalidrawFile?.name ?? filename, fileId)
           }}
           className="absolute top-2 left-2 z-20 p-2 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent"
           title="Edit drawing"

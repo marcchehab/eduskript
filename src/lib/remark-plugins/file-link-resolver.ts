@@ -1,4 +1,5 @@
 import { visit } from 'unist-util-visit'
+import { isLocalFileRef } from '@/lib/file-refs'
 
 // Extensions handled by other plugins (excalidraw, video)
 const SKIP_EXTENSIONS = ['.excalidraw', '.excalidraw.md', '.mp4', '.mov']
@@ -22,9 +23,7 @@ export function remarkFileLinkResolver() {
       const url = node.url
 
       // Skip already-resolved URLs, anchors, and protocols
-      if (url.startsWith('http') || url.startsWith('https') || url.startsWith('/') || url.startsWith('#') || url.startsWith('mailto:')) {
-        return
-      }
+      if (!isLocalFileRef(url)) return
 
       // Image extensions are NOT skipped: this visits `link` nodes only, so
       // [text](photo.png) is a download link to the image, not an <img>

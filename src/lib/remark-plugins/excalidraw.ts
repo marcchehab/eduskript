@@ -1,4 +1,5 @@
 import { visit } from 'unist-util-visit'
+import { escapeHtmlAttr, fileKind, isLocalFileRef } from '@/lib/file-refs'
 
 /**
  * Remark plugin to transform Excalidraw file references into custom elements.
@@ -22,15 +23,8 @@ export function remarkExcalidraw() {
 
       const url = node.url
 
-      // Skip already-resolved URLs
-      if (url.startsWith('http') || url.startsWith('https') || url.startsWith('/')) {
-        return
-      }
-
-      // Only handle .excalidraw files
-      if (!url.endsWith('.excalidraw') && !url.endsWith('.excalidraw.md')) {
-        return
-      }
+      // Skip already-resolved URLs; only handle .excalidraw files
+      if (!isLocalFileRef(url) || fileKind(url) !== 'excalidraw') return
 
       const alt = node.alt || ''
 
@@ -38,7 +32,7 @@ export function remarkExcalidraw() {
       // The ExcalidrawImage component will handle file resolution
       const mutableNode = node as Record<string, unknown>
       mutableNode.type = 'html'
-      mutableNode.value = `<excalidraw-image src="${url}" alt="${alt}"></excalidraw-image>`
+      mutableNode.value = `<excalidraw-image src="${escapeHtmlAttr(url)}" alt="${escapeHtmlAttr(alt)}"></excalidraw-image>`
       delete mutableNode.url
       delete mutableNode.alt
       delete mutableNode.children

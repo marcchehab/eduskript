@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PluginThumbnail } from '@/components/dashboard/plugin-thumbnail'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { Plus, Pencil, Trash2, Copy, Search, Eye, Check, GitFork, User, Globe, FileText } from 'lucide-react'
@@ -17,6 +18,7 @@ interface Plugin {
   version: string
   manifest: Record<string, unknown>
   entryHtml: string
+  thumbnailUrl: string | null
   createdAt: string
   updatedAt: string
   author: {
@@ -197,7 +199,10 @@ export function PluginsDashboard({ userId }: PluginsDashboardProps) {
             const used = usage[plugin.slug] || []
 
             return (
-              <div key={plugin.id} className="flex items-center justify-between rounded-lg border p-4 hover:bg-muted/50 transition-colors">
+              <div key={plugin.id} className="flex items-center gap-4 rounded-lg border p-4 hover:bg-muted/50 transition-colors">
+                <Link href={editHref(plugin)} tabIndex={-1} aria-hidden className="hidden shrink-0 sm:block">
+                  <PluginThumbnail name={plugin.name} url={plugin.thumbnailUrl} className="w-32 text-3xl" />
+                </Link>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <Link href={editHref(plugin)} className="font-medium truncate hover:underline">{plugin.name}</Link>

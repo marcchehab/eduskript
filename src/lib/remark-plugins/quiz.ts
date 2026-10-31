@@ -281,9 +281,13 @@ function parseQuestionBlock(content: string): { attrs: QuestionAttributes; optio
     const correctMatch = optAttrs.match(/correct=["']([^"']+)["']/) || optAttrs.match(/is=["']([^"']+)["']/)
     const feedbackMatch = optAttrs.match(/feedback=["']([^"']+)["']/)
 
-    // Normalize: is="correct" (legacy) and correct="true" both mean correct
+    // Normalize: is="correct" (legacy), bare correct and correct="true" all mean
+    // correct. Same set as isCorrect in components/markdown/quiz.tsx.
     const correctRaw = correctMatch?.[1]
-    const isCorrectOption = correctRaw === 'true' || correctRaw === 'correct'
+    // Bare <Option correct>: the regex above needs a value, so check separately,
+    // with quoted values removed so feedback="not correct here" does not match.
+    const isBareCorrect = /(?:^|\s)correct(?:\s|$)/.test(optAttrs.replace(/=\s*(["'])[\s\S]*?\1/g, '='))
+    const isCorrectOption = isBareCorrect || correctRaw === 'true' || correctRaw === 'correct'
 
     options.push({
       correct: isCorrectOption ? 'true' : correctRaw,

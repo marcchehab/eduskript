@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useTheme } from 'next-themes'
 import { FileImportDialog } from '@/components/dashboard/file-import-dialog'
+import { normalizeFileName } from '@/lib/file-refs'
 
 interface FileItem {
   id: string
@@ -219,7 +220,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
     // Check if file with same name already exists
     const existingFile = files.find(f => 
       (f.uploadType === uploadType || !f.uploadType) && 
-      getFileName(f) === file.name
+      normalizeFileName(getFileName(f)) === normalizeFileName(file.name)
     )
     
     if (existingFile) {

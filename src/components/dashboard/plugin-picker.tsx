@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { PluginThumbnail } from '@/components/dashboard/plugin-thumbnail'
 import Link from 'next/link'
 import { Search, Puzzle, User, Globe, Sparkles } from 'lucide-react'
 
@@ -13,6 +14,7 @@ interface PluginInfo {
   description: string | null
   version: string
   manifest: Record<string, unknown>
+  thumbnailUrl: string | null
   author: {
     id: string
     pageSlug: string | null
@@ -183,22 +185,25 @@ export function PluginPicker({ open, onOpenChange, onSelect, userId, newPluginHr
                   <button
                     key={plugin.id}
                     onClick={() => handleSelect(plugin)}
-                    className="w-full text-left px-3 py-2.5 rounded-md hover:bg-accent transition-colors group"
+                    className="flex w-full items-center gap-3 text-left px-3 py-2.5 rounded-md hover:bg-accent transition-colors group"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm group-hover:text-accent-foreground">{plugin.name}</span>
-                      {!isOwn && (
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                          {authorLabel}
-                        </span>
+                    <PluginThumbnail name={plugin.name} url={plugin.thumbnailUrl} className="w-16 text-lg" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm group-hover:text-accent-foreground">{plugin.name}</span>
+                        {!isOwn && (
+                          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                            {authorLabel}
+                          </span>
+                        )}
+                      </div>
+                      {plugin.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{plugin.description}</p>
                       )}
+                      <code className="text-[10px] text-muted-foreground/70 mt-0.5 block">
+                        {plugin.author.pageSlug}/{plugin.slug}
+                      </code>
                     </div>
-                    {plugin.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{plugin.description}</p>
-                    )}
-                    <code className="text-[10px] text-muted-foreground/70 mt-0.5 block">
-                      {plugin.author.pageSlug}/{plugin.slug}
-                    </code>
                   </button>
                 )
               })}

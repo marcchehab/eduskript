@@ -1,5 +1,6 @@
 'use client'
 
+import { buildFileEmbed } from '@/lib/file-refs'
 import { useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -94,7 +95,7 @@ export function VideoPickDialog({ open, onOpenChange, skriptId, videos, onInsert
                         type="button"
                         disabled={!ready}
                         title={ready ? `Insert ${video.filename}` : 'Still processing…'}
-                        onClick={() => insertAndClose(`![](${video.filename})`)}
+                        onClick={() => insertAndClose(buildFileEmbed(video.filename))}
                         className="flex items-center gap-2 p-2 rounded-md border border-border hover:border-primary/60 hover:bg-accent/40 disabled:opacity-50 text-left"
                       >
                         {video.metadata.poster ? (
@@ -154,7 +155,7 @@ export function VideoPickDialog({ open, onOpenChange, skriptId, videos, onInsert
         initialFile={uploadFile}
         onUploadComplete={(filename) => {
           onUploaded?.()
-          if (filename) insertAndClose(`![](${filename})`)
+          if (filename) insertAndClose(buildFileEmbed(filename))
         }}
       />
     </>

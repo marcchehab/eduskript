@@ -7,6 +7,7 @@ import {
   extractReferencedFilenames,
   extractReferencedVideoFilenames,
 } from '@/lib/extract-file-references'
+import { matchByRefs, normalizeFileName } from '@/lib/file-refs'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -93,29 +94,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Copy referenced files (content-addressed: same hash = same S3 object)
     const referencedFilenames = extractReferencedFilenames(page.content)
 
+    // Loaded per skript and filtered here, because name IN (…) cannot match a
+    // stored U+202F or NFD name the way rendering does (matchByRefs).
     const sourceFiles =
       referencedFilenames.length > 0
-        ? await prisma.file.findMany({
-            where: {
-              skriptId: page.skriptId,
-              name: { in: referencedFilenames },
-              parentId: null,
-            },
-          })
+        ? matchByRefs(
+            await prisma.file.findMany({
+              where: { skriptId: page.skriptId, parentId: null },
+            }),
+            referencedFilenames,
+            (f) => f.name
+          )
         : []
 
     const existingTargetFiles =
       sourceFiles.length > 0
         ? await prisma.file.findMany({
-            where: {
-              skriptId: targetSkriptId,
-              name: { in: sourceFiles.map((f) => f.name) },
-              parentId: null,
-            },
+            where: { skriptId: targetSkriptId, parentId: null },
             select: { name: true },
           })
         : []
-    const existingNames = new Set(existingTargetFiles.map((f) => f.name))
+    const existingNames = new Set(existingTargetFiles.map((f) => normalizeFileName(f.name)))
 
     // Collect referenced videos from the source skript. Videos live in the
     // Video table (not File), so we duplicate a DB row pointing to the same
@@ -124,19 +123,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const sourceVideos =
       referencedVideoFilenames.length > 0
-        ? await prisma.video.findMany({
-            where: {
-              filename: { in: referencedVideoFilenames },
-              skripts: { some: { id: page.skriptId } },
-            },
-            select: {
-              id: true,
-              filename: true,
-              provider: true,
-              metadata: true,
-              encodeJobId: true,
-            },
-          })
+        ? matchByRefs(
+            await prisma.video.findMany({
+              where: { skripts: { some: { id: page.skriptId } } },
+              select: {
+                id: true,
+                filename: true,
+                provider: true,
+                metadata: true,
+                encodeJobId: true,
+              },
+            }),
+            referencedVideoFilenames,
+            (v) => v.filename
+          )
         : []
 
     // Determine original author for provenance
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const newPage = await prisma.$transaction(async (tx) => {
       // Copy files that don't already exist in target
-      const filesToCopy = sourceFiles.filter((f) => !existingNames.has(f.name))
+      const filesToCopy = sourceFiles.filter((f) => !existingNames.has(normalizeFileName(f.name)))
       if (filesToCopy.length > 0) {
         await tx.file.createMany({
           data: filesToCopy.map((f) => ({

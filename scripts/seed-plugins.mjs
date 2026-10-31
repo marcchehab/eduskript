@@ -201,7 +201,12 @@ async function main() {
         data: {
           name: def.name,
           description: def.description,
-          manifest: def.manifest,
+          // Keep the thumbnail: this runs on every deploy (docker-entrypoint.sh)
+          // and def.manifest knows nothing about it.
+          manifest: {
+            ...def.manifest,
+            ...(existing.manifest?.thumbnailKey && { thumbnailKey: existing.manifest.thumbnailKey }),
+          },
           entryHtml,
         },
       })

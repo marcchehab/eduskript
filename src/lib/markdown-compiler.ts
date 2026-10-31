@@ -31,6 +31,7 @@ import rehypeKatex from 'rehype-katex'
 import 'katex/contrib/mhchem' // registers \ce{} / \pu{} macros on the shared KaTeX instance
 import rehypeSlug from 'rehype-slug'
 import { remarkPlugins } from './markdown-plugins'
+import { repairFileRefs } from './file-ref-repair'
 import { rehypeSourceLine, rehypeMathBlockWrapper } from './rehype-plugins/source-line'
 import { rehypeColorTitle } from './rehype-plugins/color-title'
 import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
@@ -325,6 +326,9 @@ export interface CompileMarkdownOptions {
    *  see footnoteLabelForLang. The label is always rendered visible (sr-only
    *  is dropped via footnoteLabelProperties below). */
   footnoteLabel?: string
+  /** Stored filenames of this skript (skriptFileNames), so repairFileRefs can
+   *  tell a legacy name containing `)` from text after a link. */
+  fileNames?: string[]
 }
 
 /**
@@ -470,10 +474,11 @@ const CONTAINER_TAGS = [
  * content or order). So we anchor each processed line to its original by
  * walking non-blank lines in lockstep.
  */
-function preprocessMarkdown(content: string): { text: string; lineMap: number[] } {
+function preprocessMarkdown(content: string, fileNames?: string[]): { text: string; lineMap: number[] } {
   // Blank the slide directive markers (`---/`, `---x`) first. Line-count-
   // preserving, so the lineMap alignment below is unaffected.
-  const base = expandSelfClosingTags(stripSlideDirectives(content))
+  // repairFileRefs is line-count-preserving too.
+  const base = repairFileRefs(expandSelfClosingTags(stripSlideDirectives(content)), fileNames)
   const text = delimitContainerTags(normalizeQuestionSpacing(base))
 
   const baseLines = base.split('\n')
@@ -530,9 +535,9 @@ export async function compileMarkdown(
   content: string,
   options?: CompileMarkdownOptions
 ): Promise<ReactNode> {
-  const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>(), anchors = true, footnoteLabel } = options ?? {}
+  const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>(), anchors = true, footnoteLabel, fileNames } = options ?? {}
 
-  const { text: processed, lineMap } = preprocessMarkdown(content)
+  const { text: processed, lineMap } = preprocessMarkdown(content, fileNames)
 
   // Slides re-render the page's content, which would duplicate heading ids and
   // data-section-id anchors in the DOM. Drop those plugins when anchors=false.

@@ -82,13 +82,22 @@ interface QuestionProps {
 interface OptionProps {
   children: ReactNode
   feedback?: string
-  correct?: 'true' | 'false'
+  correct?: string
+  /** Legacy spelling of correct: is="correct". Ignored when `correct` is set. */
+  is?: string
   /** Slider feedback band: shown when the auto-check ratio reaches this value. */
   from?: string
 }
 
-// Parse correct prop to boolean
-const isCorrect = (value: 'true' | 'false' | undefined): boolean => value === 'true'
+// Parse the `correct` attribute. A bare `<answer correct>` reaches us as '' (the
+// editor templates inserted that form until 2026-10, and the docs still use it),
+// so '' counts as correct. 'correct' matches what remarkQuiz accepts for <Option>.
+// is="correct" is the legacy spelling, as for <Option>. Anything else, including
+// correct="false", is not correct.
+const isCorrect = ({ correct, is }: Pick<OptionProps, 'correct' | 'is'>): boolean =>
+  correct !== undefined
+    ? correct === '' || correct === 'true' || correct === 'correct'
+    : is === 'correct'
 
 // The question prompt reads as the heading of the card: foreground text at the
 // page's own font size (same as the options, which inherit it), not the muted
@@ -637,7 +646,7 @@ function QuestionInner({
             const optionProps = element.props
             const { label, feedback } = splitAnswerContent(optionProps)
             const isSelected = selected.includes(index)
-            const optionIsCorrect = isCorrect(optionProps.correct)
+            const optionIsCorrect = isCorrect(optionProps)
 
             return (
               <div
@@ -1008,7 +1017,7 @@ function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | '
     Children.forEach(children, (child) => {
       if (isAnswerElement(child)) {
         const element = child
-        if (element.props.correct === 'true') {
+        if (isCorrect(element.props)) {
           correctIndices.push(i)
         }
         const text = extractTextFromChildren(element.props.children).trim()
@@ -1395,7 +1404,7 @@ function StaticQuestion({
         <ul className="space-y-2">
           {options.map((el, index) => {
             const { label } = splitAnswerContent(el.props)
-            const correct = isCorrect(el.props.correct)
+            const correct = isCorrect(el.props)
             return (
               <li
                 key={index}

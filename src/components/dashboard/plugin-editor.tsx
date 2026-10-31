@@ -22,6 +22,7 @@ import { generateSlug } from '@/lib/markdown'
 import { extractPluginHtml } from '@/lib/ai/plugin-prompt'
 import { expandTemplates, findTemplateRefs } from '@/lib/plugin-templates'
 import { PluginTemplatesDialog, TemplateAddForm } from '@/components/dashboard/plugin-templates'
+import { PluginThumbnailField } from '@/components/dashboard/plugin-thumbnail'
 import {
   AlertTriangle, ArrowLeft, Check, ChevronLeft, ChevronRight, Code2, Copy, Eye, GitFork, History,
   Loader2, Lock, Map as MapIcon, RotateCcw, Save, Send, Sparkles, Square, Undo2, Wand2,
@@ -33,6 +34,7 @@ export interface PluginData {
   name: string
   description: string | null
   entryHtml: string
+  thumbnailUrl?: string | null
   author: { id: string; pageSlug: string | null; pageName: string | null; name: string | null }
 }
 
@@ -124,6 +126,8 @@ export function PluginEditor({ userId, ownerSlug, plugin, returnTo }: {
     name: plugin?.name ?? '', description: plugin?.description ?? '', html: plugin?.entryHtml ?? DEFAULT_PLUGIN_HTML,
   }))
   const [savedPlugin, setSavedPlugin] = useState<PluginData | null>(plugin)
+  // Saved on its own by PluginThumbnailField, so not part of the dirty flag.
+  const [thumbnailUrl, setThumbnailUrl] = useState(plugin?.thumbnailUrl ?? null)
   const [saving, setSaving] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -575,6 +579,16 @@ export function PluginEditor({ userId, ownerSlug, plugin, returnTo }: {
                   {savedPlugin ? 'Fixed after the first save, because pages embed the plugin by this name.' : 'Made from the name. You can change it until the first save.'}
                 </p>
               </div>
+              {canEdit && (savedPlugin ? (
+                <PluginThumbnailField
+                  apiPath={`/api/plugins/${encodeURIComponent(srcOwner)}/${encodeURIComponent(savedPlugin.slug)}/thumbnail`}
+                  name={name}
+                  url={thumbnailUrl}
+                  onChange={setThumbnailUrl}
+                />
+              ) : (
+                <p className="border-t pt-3 text-xs text-muted-foreground">Save the plugin first to add a thumbnail.</p>
+              ))}
               <div className="space-y-1.5 border-t pt-3">
                 <Label className="text-xs font-medium">Embed in a page</Label>
                 <div className="flex items-center gap-2">

@@ -7,6 +7,7 @@ import { Maximize2, Contrast } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveFile, resolveUrl } from '@/lib/skript-files'
+import { decodeFileRef, isLocalFileRef } from '@/lib/file-refs'
 import { ResizableWrapper } from './resizable-wrapper'
 import { ImageLightbox } from './image-lightbox'
 
@@ -74,8 +75,10 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
   // Resolve the image URL and dimensions
-  const isRelativePath = src && !src.startsWith('http') && !src.startsWith('/')
-  const fileInfo = isRelativePath && files ? resolveFile(files, src) : undefined
+  // `filename`, not `src`: remark-rehype percent-encodes src, and data-original-src
+  // holds the reference as written in the markdown.
+  const isRelativePath = filename && isLocalFileRef(filename)
+  const fileInfo = isRelativePath && files ? resolveFile(files, filename) : undefined
   const resolvedSrc = fileInfo?.url
   const imageSrc = resolvedSrc ?? src
   const isMissing = isRelativePath && !resolvedSrc
@@ -239,7 +242,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
         )}
         {isMissing ? (
           <span className="flex items-center justify-center w-full h-32 bg-muted border border-dashed border-border rounded-md text-muted-foreground text-sm">
-            Missing: {filename}
+            Missing: {decodeFileRef(filename)}
           </span>
         ) : imageSrc.startsWith('http') && !optimizeImages ? (
           // External URLs without optimization: use native img

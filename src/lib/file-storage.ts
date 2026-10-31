@@ -76,12 +76,13 @@ import {
   teacherFileExists,
 } from './s3'
 import { invalidateSkriptFiles } from './skript-files.server'
+import { ALLOWED_EXTENSIONS_DEFAULT, normalizeFileName } from './file-refs'
 
 // File storage configuration - exported for pre-validation in upload handlers
 // 500MB default for direct S3 uploads (large videos/databases)
 // Server-proxied uploads are limited by platform body size limits (~10MB)
 export const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '524288000') // 500MB default
-export const ALLOWED_TYPES = (process.env.ALLOWED_FILE_TYPES || 'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,odt,txt,md,zip,mp4,mp3,wav,ogg,webm,csv,json,xml,html,css,js,ts,py,java,cpp,c,h,hpp,rs,go,php,rb,sh,yml,yaml,excalidraw,db,sqlite,ig').split(',')
+export const ALLOWED_TYPES = (process.env.ALLOWED_FILE_TYPES || ALLOWED_EXTENSIONS_DEFAULT).split(',')
 
 /**
  * Characters that are dangerous in filenames (path traversal, null bytes, control chars).
@@ -92,10 +93,14 @@ const DANGEROUS_FILENAME_PATTERN = /[<>:"/\\|?*\x00-\x1f]|\.\.|\.\//g
 /**
  * Sanitize a filename by removing dangerous characters.
  * Prevents path traversal attacks and filesystem issues.
+ *
+ * Also stores macOS names in a form a teacher can retype: NFD umlauts become
+ * NFC, and U+202F/NBSP become plain spaces. Rows stored before this keep their
+ * name; resolveFile matches them regardless.
  */
 export function sanitizeFilename(filename: string): string {
   // Remove path traversal sequences and dangerous characters
-  let sanitized = filename.replace(DANGEROUS_FILENAME_PATTERN, '')
+  let sanitized = normalizeFileName(filename).replace(DANGEROUS_FILENAME_PATTERN, '')
 
   // Remove leading/trailing dots and spaces (Windows issues)
   sanitized = sanitized.replace(/^[\s.]+|[\s.]+$/g, '')
@@ -114,6 +119,35 @@ export function sanitizeFilename(filename: string): string {
   }
 
   return sanitized
+}
+
+/**
+ * Find the row a filename refers to, among the files of one skript (and one
+ * parent, when `parentId` is given). Exact name first, then the comparison
+ * resolveFile uses, so a row stored as NFD or with U+202F before sanitizeFilename
+ * normalized names still counts as the same file. Such a row is matched, never
+ * renamed: pages keep working and its name changes only if a teacher renames it.
+ *
+ * The fallback loads the names in that scope, O(n), and runs on every upload of
+ * a new name.
+ */
+export async function findStoredFile(
+  skriptId: string,
+  name: string,
+  options: { parentId?: string | null; excludeId?: string } = {}
+) {
+  const scope = {
+    skriptId,
+    ...(options.parentId !== undefined && { parentId: options.parentId }),
+    ...(options.excludeId && { id: { not: options.excludeId } }),
+  }
+  const exact = await prisma.file.findFirst({ where: { ...scope, name, isDirectory: false } })
+  if (exact) return exact
+
+  const wanted = normalizeFileName(name)
+  const rows = await prisma.file.findMany({ where: { ...scope, isDirectory: false }, select: { id: true, name: true } })
+  const twin = rows.find((row) => normalizeFileName(row.name) === wanted)
+  return twin ? prisma.file.findFirst({ where: { id: twin.id } }) : null
 }
 
 /**
@@ -194,7 +228,7 @@ export async function saveFile({
   overwrite?: boolean
   width?: number
   height?: number
-}): Promise<{ id: string; hash: string; url: string; size: number }> {
+}): Promise<{ id: string; name: string; hash: string; url: string; size: number }> {
   // Check S3 configuration
   if (!isTeacherS3Configured()) {
     throw new Error('File storage not configured. Set SCW_TEACHER_BUCKET environment variable.')
@@ -207,14 +241,7 @@ export async function saveFile({
   }
 
   // Check if file with same name already exists in the same parent/skript
-  const existingFile = await prisma.file.findFirst({
-    where: {
-      name: filename,
-      parentId,
-      skriptId,
-      isDirectory: false
-    }
-  })
+  const existingFile = await findStoredFile(skriptId, filename, { parentId })
 
   if (existingFile && !overwrite) {
     throw new Error('File already exists. Use overwrite option or rename the file.')
@@ -276,6 +303,7 @@ export async function saveFile({
 
   return {
     id: file.id,
+    name: file.name,
     hash,
     url: getTeacherFileUrl(getS3Key(hash, extension)),
     size: buffer.length

@@ -10,6 +10,8 @@
  * to avoid pulling in Prisma dependencies in client bundles.
  */
 
+import { decodeFileRef, normalizeFileName } from './file-refs'
+
 // Types for file resolution
 export interface SkriptFile {
   id: string
@@ -69,24 +71,53 @@ export interface SkriptFilesData {
 // Utility Functions (use these to look up files)
 // ============================================================================
 
-/** Resolve a file by name */
-export function resolveFile(files: SkriptFilesData, filename: string): SkriptFile | undefined {
-  return files.files[filename]
+/**
+ * Look a reference up: the exact name, then percent-decoded (see file-refs.ts),
+ * then compared after NFC and whitespace normalization.
+ *
+ * The last step is a linear scan, O(n) per unmatched reference. It only runs
+ * when the first two miss, and it needs no index in SkriptFilesData, whose
+ * cached server payloads (unstable_cache) predate any new field.
+ *
+ * Exact first keeps a raw `![](50%25.png)` on the file of that literal name. The
+ * cost is the limitation in file-refs.ts: the same order sends the embed of
+ * "a b.png" to a sibling literally named "a%20b.png". Decoding first would
+ * instead break stored raw embeds of such literal names.
+ */
+function lookup<T>(record: Record<string, T>, ref: string): T | undefined {
+  if (record[ref]) return record[ref]
+  const decoded = decodeFileRef(ref)
+  if (record[decoded]) return record[decoded]
+  const wanted = normalizeFileName(decoded)
+  for (const name of Object.keys(record)) {
+    if (normalizeFileName(name) === wanted) return record[name]
+  }
+  return undefined
 }
 
-/** Resolve a file URL by name */
+/** Resolve a file by name or stored reference */
+export function resolveFile(files: SkriptFilesData, filename: string): SkriptFile | undefined {
+  return lookup(files.files, filename)
+}
+
+/** Resolve a file URL by name or stored reference */
 export function resolveUrl(files: SkriptFilesData, filename: string): string | undefined {
-  return files.files[filename]?.url
+  return resolveFile(files, filename)?.url
+}
+
+/** Every stored name, for repairFileRefs via compileMarkdown's `fileNames`. */
+export function skriptFileNames(files: SkriptFilesData): string[] {
+  return [...Object.keys(files.files), ...Object.keys(files.videos)]
 }
 
 /** Resolve Excalidraw light/dark SVG variants */
 export function resolveExcalidraw(files: SkriptFilesData, filename: string): { lightUrl: string; darkUrl: string } | undefined {
   // Normalize filename - remove .excalidraw or .excalidraw.md extension
-  const baseName = filename.replace(/\.excalidraw(\.md)?$/, '')
+  const baseName = filename.replace(/\.excalidraw(\.md)?$/i, '')
 
   // Look for light and dark SVG variants
-  const lightFile = files.files[`${baseName}.excalidraw.light.svg`]
-  const darkFile = files.files[`${baseName}.excalidraw.dark.svg`]
+  const lightFile = resolveFile(files, `${baseName}.excalidraw.light.svg`)
+  const darkFile = resolveFile(files, `${baseName}.excalidraw.dark.svg`)
 
   if (lightFile && darkFile) {
     // Cache-busting parameter based on updatedAt to ensure fresh content after re-export
@@ -106,7 +137,7 @@ export function resolveExcalidraw(files: SkriptFilesData, filename: string): { l
 
 /** Resolve video metadata by filename */
 export function resolveVideo(files: SkriptFilesData, filename: string): VideoInfo | undefined {
-  return files.videos[filename]
+  return lookup(files.videos, filename)
 }
 
 // ============================================================================

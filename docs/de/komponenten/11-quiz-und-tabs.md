@@ -35,7 +35,7 @@ Die Schülerinnen und Schüler sehen eine Liste mit Radio-Buttons; sie können e
 ### Multi-Choice (Checkboxen)
 
 ```html
-<question id="q-multi-demo" type="multi">
+<question id="q-multi-demo" type="multiple">
   <p>Welche davon sind in Python unveränderlich (immutable)?</p>
   <answer correct>tuple</answer>
   <answer>list</answer>
@@ -47,7 +47,7 @@ Die Schülerinnen und Schüler sehen eine Liste mit Radio-Buttons; sie können e
 
 Wird gerendert als:
 
-<question id="q-multi-demo" type="multi">
+<question id="q-multi-demo" type="multiple">
   <p>Welche davon sind in Python unveränderlich (immutable)?</p>
   <answer correct>tuple</answer>
   <answer>list</answer>
@@ -60,36 +60,40 @@ Die Schüler müssen **alle und nur** die richtigen Antworten wählen, damit die
 
 ### Freitext-Antwort
 
-```html
+````html
 <question id="q-text-demo" type="text">
   <p>Was ist die Ausgabe von <code>print(2 ** 10)</code>?</p>
-  <answer correct>1024</answer>
-</question>
+
+```expected
+1024
 ```
+</question>
+````
 
 Wird gerendert als:
 
 <question id="q-text-demo" type="text">
   <p>Was ist die Ausgabe von <code>print(2 ** 10)</code>?</p>
-  <answer correct>1024</answer>
+
+```expected
+1024
+```
 </question>
 
-Der Schüler tippt eine Antwort ein; Vergleich ohne Beachtung der Gross-/Kleinschreibung mit der/den `correct`-Antwort(en). Du kannst mehrere `<answer correct>` angeben, um Varianten zu akzeptieren:
+Die Schülerin oder der Schüler tippt eine Antwort ein. Die automatische Prüfung vergleicht sie Zeile für Zeile mit dem ```` ```expected ````-Block und gibt Teilpunkte für übereinstimmende Zeilen. Vor dem Block braucht es eine Leerzeile. Ohne `expected` wird die Frage nicht automatisch geprüft, und die Lehrperson bewertet sie von Hand.
+
+Pro Frage gibt es genau eine erwartete Ausgabe, und der Vergleich beachtet Gross-/Kleinschreibung. Mit `ignore-case="true"` oder `ignore-whitespace="true"` wird er toleranter. Bei einzeiligen Antworten geht auch `expected="Bern"` direkt im Tag. `<answer correct>` hat bei Textfragen keine Wirkung.
 
 ```html
-<question id="q-text-variants-demo" type="text">
+<question id="q-text-variants-demo" type="text" expected="Bern" ignore-case="true">
   <p>Was ist die Hauptstadt der Schweiz?</p>
-  <answer correct>Bern</answer>
-  <answer correct>Berne</answer>
 </question>
 ```
 
 Wird gerendert als:
 
-<question id="q-text-variants-demo" type="text">
+<question id="q-text-variants-demo" type="text" expected="Bern" ignore-case="true">
   <p>Was ist die Hauptstadt der Schweiz?</p>
-  <answer correct>Bern</answer>
-  <answer correct>Berne</answer>
 </question>
 
 ### Question-Attribute
@@ -102,7 +106,7 @@ Wird gerendert als:
 | `feedback` | `check` (Standard) / `instant` / `none` | Wann die Richtigkeit auf einer Nicht-Prüfungsseite angezeigt wird. `check`: ein **Check answer**-Button, nichts wird angezeigt, bis er gedrückt wird, sperrt nach Abschluss. `instant`: bei jeder Änderung. `none`: still, keine Richtigkeit (Umfragen). Prüfungsseiten ignorieren das und bleiben still, bis die Prüfung zurückgegeben wird |
 | `attempts` | Zahl (Standard 1) / `unlimited` | Check-Modus: wie viele Check-Klicks, bis die Frage sperrt. Ein falscher, nicht letzter Check markiert nur die eigene Auswahl des Schülers; die richtige Antwort bleibt verborgen. Eine richtige Antwort schliesst die Frage immer ab |
 | `showFeedback` | `true` / `false` | Veralteter Alias: `true` = `feedback="instant"`, `false` = `feedback="none"` |
-| `expected` | String | Ziel der automatischen Prüfung für Text- (als ```` ```expected ````-Block), Zahlen- und Bereichsfragen |
+| `expected` | String | Ziel der automatischen Prüfung für Text- (Attribut, oder ```` ```expected ````-Block bei mehrzeiliger Ausgabe), Zahlen- und Bereichsfragen |
 
 ```html
 <question id="q-def" type="single" points="2" attempts="2">

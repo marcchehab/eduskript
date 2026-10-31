@@ -57,6 +57,8 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         name: source.name,
         description: source.description,
         version: '1.0.0',
+        // Includes thumbnailKey: the fork looks like its source until its author
+        // changes it. The S3 object is shared and never deleted on removal.
         manifest: source.manifest as object,
         entryHtml: source.entryHtml,
         authorId: session.user.id,

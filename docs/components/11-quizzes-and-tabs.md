@@ -35,7 +35,7 @@ Students see a list with radio buttons; can pick one. Click **Check** to see if 
 ### Multi-choice (checkboxes)
 
 ```html
-<question id="q-multi-demo" type="multi">
+<question id="q-multi-demo" type="multiple">
   <p>Which of these are immutable in Python?</p>
   <answer correct>tuple</answer>
   <answer>list</answer>
@@ -47,7 +47,7 @@ Students see a list with radio buttons; can pick one. Click **Check** to see if 
 
 Renders as:
 
-<question id="q-multi-demo" type="multi">
+<question id="q-multi-demo" type="multiple">
   <p>Which of these are immutable in Python?</p>
   <answer correct>tuple</answer>
   <answer>list</answer>
@@ -60,36 +60,40 @@ Students must pick **all and only** the correct answers to be marked correct.
 
 ### Free-text answer
 
-```html
+````html
 <question id="q-text-demo" type="text">
   <p>What is the output of <code>print(2 ** 10)</code>?</p>
-  <answer correct>1024</answer>
-</question>
+
+```expected
+1024
 ```
+</question>
+````
 
 Renders as:
 
 <question id="q-text-demo" type="text">
   <p>What is the output of <code>print(2 ** 10)</code>?</p>
-  <answer correct>1024</answer>
+
+```expected
+1024
+```
 </question>
 
-Student types an answer; case-insensitive comparison against the `correct` answer(s). You can list multiple `<answer correct>` to accept variations:
+The student types an answer. The auto-check compares it line by line with the ```` ```expected ```` block and gives partial credit for matching lines. Leave a blank line before the block. Without `expected`, the question is not auto-checked and the teacher scores it by hand.
+
+There is one expected output per question, and comparison is case-sensitive. Add `ignore-case="true"` or `ignore-whitespace="true"` to relax it. For a one-line answer, `expected="Bern"` on the tag works too. `<answer correct>` has no effect on text questions.
 
 ```html
-<question id="q-text-variants-demo" type="text">
+<question id="q-text-variants-demo" type="text" expected="Bern" ignore-case="true">
   <p>What is the capital of Switzerland?</p>
-  <answer correct>Bern</answer>
-  <answer correct>Berne</answer>
 </question>
 ```
 
 Renders as:
 
-<question id="q-text-variants-demo" type="text">
+<question id="q-text-variants-demo" type="text" expected="Bern" ignore-case="true">
   <p>What is the capital of Switzerland?</p>
-  <answer correct>Bern</answer>
-  <answer correct>Berne</answer>
 </question>
 
 ### Question attributes
@@ -102,7 +106,7 @@ Renders as:
 | `feedback` | `check` (default) / `instant` / `none` | When correctness is revealed on a non-exam page. `check`: a Check answer button, nothing shown until pressed, locks when finished. `instant`: on every change. `none`: silent, no correctness (polls). Exam pages ignore this and stay silent until the exam is returned |
 | `attempts` | number (default 1) / `unlimited` | Check mode: how many Check presses before the question locks. A wrong non-final check marks only the student's own picks; the correct answer stays hidden. A correct answer always finishes the question |
 | `showFeedback` | `true` / `false` | Legacy alias: `true` = `feedback="instant"`, `false` = `feedback="none"` |
-| `expected` | string | Auto-check target for text (as an ```` ```expected ```` block), number, and range questions |
+| `expected` | string | Auto-check target for text (attribute, or an ```` ```expected ```` block for multi-line output), number, and range questions |
 
 ```html
 <question id="q-def" type="single" points="2" attempts="2">

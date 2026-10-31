@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { saveFile, MAX_FILE_SIZE, validateFile, sanitizeFilename, getFileExtension, getS3Key } from '@/lib/file-storage'
+import { saveFile, findStoredFile, MAX_FILE_SIZE, validateFile, sanitizeFilename, getFileExtension, getS3Key } from '@/lib/file-storage'
 import { getTeacherFileUrl } from '@/lib/s3'
 import { toVideoInfoMetadata } from '@/lib/skript-files'
 import sharp from 'sharp'
@@ -119,13 +119,12 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       // If file already exists, return the existing file instead of erroring
       if (err instanceof Error && err.message.includes('File already exists')) {
-        const existing = await prisma.file.findFirst({
-          where: { name: sanitizedFilename, skriptId, parentId: parentId || null, isDirectory: false },
-        })
+        const existing = await findStoredFile(skriptId, sanitizedFilename, { parentId: parentId || null })
         if (!existing) throw err
         const existingUrl = existing.hash ? getTeacherFileUrl(getS3Key(existing.hash, getFileExtension(existing.name)!)) : undefined
         savedFile = {
           id: existing.id,
+          name: existing.name,
           size: Number(existing.size),
           hash: existing.hash,
           url: existingUrl,
@@ -139,8 +138,9 @@ export async function POST(request: NextRequest) {
     // Return file info
     const fileInfo = {
       id: savedFile.id,
-      name: sanitizedFilename, // Sanitized filename for storage
-      filename: sanitizedFilename,
+      // The stored name: differs from sanitizedFilename for an older NFD row.
+      name: savedFile.name,
+      filename: savedFile.name,
       originalName: file.name, // Keep original for reference
       size: savedFile.size,
       type: file.type,

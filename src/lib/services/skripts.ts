@@ -24,6 +24,7 @@ import { getPlacingSites, revalidateSkriptOnPlacingSites } from '@/lib/site-reva
 import { fetchSkriptFiles } from '@/lib/skript-files.server'
 import { deleteFile } from '@/lib/file-storage'
 import { extractReferencedFilenames } from '@/lib/extract-file-references'
+import { matchByRefs } from '@/lib/file-refs'
 import {
   ConflictError,
   NotFoundError,
@@ -734,7 +735,7 @@ export async function deleteSkriptFileForUser(
     select: { id: true, title: true, content: true },
   })
   const referencedBy = pages
-    .filter(p => extractReferencedFilenames(p.content).includes(file.name))
+    .filter(p => matchByRefs([file], extractReferencedFilenames(p.content), f => f.name).length > 0)
     .map(p => ({ pageId: p.id, title: p.title }))
   if (referencedBy.length > 0 && !options.force) {
     throw new ConflictError(

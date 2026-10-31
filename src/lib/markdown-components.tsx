@@ -796,7 +796,7 @@ export function createMarkdownComponents(
           type={type}
           minValue={minValue}
           maxValue={maxValue}
-          expected={type === 'text' ? expected : plainExpected}
+          expected={expected ?? plainExpected}
         >
           {children}
         </StaticQuestion>
@@ -835,7 +835,7 @@ export function createMarkdownComponents(
   // Note: uses "correct" instead of "is" because "is" is a reserved React attribute
   function QuizOptionComponent({ children, correct, feedback, from }: React.HTMLAttributes<HTMLElement> & { correct?: string; feedback?: string; from?: string }) {
     return (
-      <Option correct={correct as 'true' | 'false' | undefined} feedback={feedback} from={from}>
+      <Option correct={correct} feedback={feedback} from={from}>
         {children}
       </Option>
     )
@@ -851,7 +851,7 @@ export function createMarkdownComponents(
       const file = resolveFile(files, originalHref)
       if (file) {
         return (
-          <a href={file.url} download={originalHref} {...props}>
+          <a href={file.url} download={file.name} {...props}>
             {children}
           </a>
         )

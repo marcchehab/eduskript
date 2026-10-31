@@ -1,5 +1,6 @@
 'use client'
 
+import { buildFileEmbed } from '@/lib/file-refs'
 import { useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -64,7 +65,7 @@ export function PictureDialog({ open, onOpenChange, skriptId, onInsert, onUpload
         throw new Error(err.error || 'Upload failed')
       }
       const uploaded = await response.json()
-      onInsert(`![](${uploaded.name ?? file.name})`)
+      onInsert(buildFileEmbed(uploaded.name ?? file.name))
       onUploaded?.()
       window.dispatchEvent(new Event('sidebar:refresh'))
       handleOpenChange(false)

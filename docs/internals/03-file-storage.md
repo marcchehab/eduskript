@@ -127,10 +127,21 @@ Markdown uses filenames:
 ![Diagram](schema.png)
 ```
 
-The `remarkImageResolver` plugin resolves to:
-```html
-<img src="/api/files/abc123">
-```
+`remarkImageResolver` only marks the image with `data-original-src`; `ContentImage` resolves the name to a URL through `resolveFile` at render time.
+
+Filenames are written and read through `src/lib/file-refs.ts`, on every embed path:
+
+- `buildFileEmbed` / `encodeFileRef` percent-encode only what is unsafe in markdown, attributes or fence meta (spaces, parentheses, `&`, U+202F, …): `![](Bildschirmfoto%202026.png)`. Letters and umlauts stay raw.
+- `resolveFile` tries the exact name, then percent-decoded, then NFC plus whitespace-normalized. Published pages and the editor preview share it.
+- `repairFileRefs` encodes stored embeds CommonMark rejects (`![](a b.png)`, `![](Bild (1.png)`) at render time.
+- `sanitizeFilename` stores new uploads NFC with plain spaces. `findStoredFile` treats an older NFD or U+202F row as the same file on re-upload; the row keeps its name.
+- `matchByRefs` applies the same comparison to reference lists (page copy, delete check, MCP `read_page`).
+
+S3 keys always use the lowercased extension (`getFileExtension`).
+
+## Plugin Thumbnails
+
+Plugins have no `File` row (a `File` needs a skript). A thumbnail is a 480×300 WebP/JPEG (100 KB limit, checked in `api/plugins/[owner]/[slug]/thumbnail`), stored with `uploadTeacherFile` under `files/{sha256}.{ext}`. The key sits in `Plugin.manifest.thumbnailKey`; `/api/plugins` sends the derived `thumbnailUrl`. Forks copy the key, and removing a thumbnail leaves the object in the bucket. See `src/lib/plugin-thumbnail.ts`.
 
 ## Directory Support
 

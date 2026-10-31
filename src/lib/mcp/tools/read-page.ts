@@ -7,6 +7,7 @@ import { getMcpContext } from '@/lib/mcp/context'
 import { getPageForUser } from '@/lib/services/pages'
 import { getSkriptFiles } from '@/lib/skript-files.server'
 import { extractReferencedFilenames } from '@/lib/extract-file-references'
+import { matchByRefs } from '@/lib/file-refs'
 
 export const readPageConfig = {
   title: 'Read page',
@@ -42,9 +43,7 @@ export async function readPage(args: { pageId: string }) {
 
   const skriptFiles = await getSkriptFiles(page.skript.id)
   const referenced = extractReferencedFilenames(page.content)
-  const files = referenced
-    .map((name) => skriptFiles.files[name])
-    .filter((f): f is NonNullable<typeof f> => f != null)
+  const files = matchByRefs(Object.values(skriptFiles.files), referenced, (f) => f.name)
     .map((f) => ({ name: f.name, url: f.url, kind: getFileKind(f.name) }))
 
   return {

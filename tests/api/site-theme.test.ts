@@ -25,7 +25,10 @@ vi.mock('@/lib/s3', () => ({
   getTeacherFilesUrlPrefix: () => PREFIX,
   getTeacherFileUrl: (key: string) => `https://files.test/teacher/${key}`,
 }))
-vi.mock('@/lib/file-storage', () => ({ getS3Key: (hash: string, ext: string) => `files/${hash}.${ext}` }))
+vi.mock('@/lib/file-storage', () => ({
+  getS3Key: (hash: string, ext: string) => `files/${hash}.${ext}`,
+  getFileExtension: (name: string) => name.split('.').pop()?.toLowerCase() ?? null,
+}))
 
 import { getServerSession } from 'next-auth'
 import { PUT as saveTheme } from '@/app/api/sites/[siteId]/theme/route'

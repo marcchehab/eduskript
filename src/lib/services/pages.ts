@@ -22,6 +22,7 @@ import { CACHE_TAGS } from '@/lib/cached-queries'
 import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import { checkPagePermissions, checkSkriptPermissions } from '@/lib/permissions'
 import { extractReferencedFilenames } from '@/lib/extract-file-references'
+import { matchByRefs, normalizeFileName } from '@/lib/file-refs'
 import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 import { generateSlug } from '@/lib/markdown'
@@ -859,19 +860,23 @@ export async function movePageForUser(
   }
 
   const referencedFilenames = extractReferencedFilenames(page.content)
+  // Loaded per skript and filtered here, because name IN (…) cannot match a
+  // stored U+202F or NFD name the way rendering does (matchByRefs).
   const sourceFiles = referencedFilenames.length > 0
-    ? await prisma.file.findMany({
-        where: { skriptId: page.skriptId, name: { in: referencedFilenames }, parentId: null },
-      })
+    ? matchByRefs(
+        await prisma.file.findMany({ where: { skriptId: page.skriptId, parentId: null } }),
+        referencedFilenames,
+        f => f.name,
+      )
     : []
   const existingTargetFiles = sourceFiles.length > 0
     ? await prisma.file.findMany({
-        where: { skriptId: targetSkriptId, name: { in: sourceFiles.map(f => f.name) }, parentId: null },
+        where: { skriptId: targetSkriptId, parentId: null },
         select: { name: true },
       })
     : []
-  const existingNames = new Set(existingTargetFiles.map(f => f.name))
-  const filesToCopy = sourceFiles.filter(f => !existingNames.has(f.name))
+  const existingNames = new Set(existingTargetFiles.map(f => normalizeFileName(f.name)))
+  const filesToCopy = sourceFiles.filter(f => !existingNames.has(normalizeFileName(f.name)))
 
   let finalSlug = page.slug
   await prisma.$transaction(async (tx) => {

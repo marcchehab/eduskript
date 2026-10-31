@@ -1,7 +1,7 @@
 import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
 import { pageKaraClues } from '@/lib/kara/world'
 import { createMarkdownComponents } from '@/lib/markdown-components'
-import { createEmptySkriptFiles } from '@/lib/skript-files'
+import { createEmptySkriptFiles, skriptFileNames } from '@/lib/skript-files'
 import { getSkriptFiles } from '@/lib/skript-files.server'
 import { extractStableLinkIds } from '@/lib/page-stable-link'
 import { resolveStableLinks } from '@/lib/page-stable-link.server'
@@ -62,6 +62,8 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerP
     ? await resolveStableLinks(stableIds, ownerPageSlug ?? organizationSlug ?? null)
     : undefined
 
+  const fileNames = skriptFileNames(files)
+
   // 4. Compile markdown (safe pipeline, no JS execution). When the document has
   //    <next-stage> markers, compile each stage separately and hand them to
   //    StageFlow for the sequential, hand-in-locked reveal (see splitStages).
@@ -83,10 +85,10 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerP
       const split = splitStages(content)
       stageMarkers = split.markers
       compiledStages = await Promise.all(
-        split.stages.map((s) => compileMarkdown(s, { components, resolvedStableLinks, footnoteLabel })),
+        split.stages.map((s) => compileMarkdown(s, { components, resolvedStableLinks, footnoteLabel, fileNames })),
       )
     } else {
-      rendered = await compileMarkdown(content, { components, resolvedStableLinks, footnoteLabel })
+      rendered = await compileMarkdown(content, { components, resolvedStableLinks, footnoteLabel, fileNames })
     }
     if (!isExam) {
       const slideSplit = splitSlides(content)
@@ -94,7 +96,7 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerP
       compiledSlides = await Promise.all(
         // anchors:false — slides re-render the page's content; emitting the same
         // heading ids / data-section-id again would collide in the DOM.
-        slideSplit.slides.map((s) => compileMarkdown(s, { components, resolvedStableLinks, anchors: false, footnoteLabel })),
+        slideSplit.slides.map((s) => compileMarkdown(s, { components, resolvedStableLinks, anchors: false, footnoteLabel, fileNames })),
       )
     }
   } catch (e) {

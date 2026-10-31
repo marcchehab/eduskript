@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import { createPluginForUser } from '@/lib/services/plugins'
+import { createPluginForUser, pluginThumbnailUrl } from '@/lib/services/plugins'
 import { ConflictError, ValidationError } from '@/lib/services/pages'
 
 /**
@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     // (pageSlug, pageName) so the UI components don't need a sweep.
     const plugins = pluginsRaw.map(p => ({
       ...p,
+      thumbnailUrl: pluginThumbnailUrl(p.manifest),
       author: {
         id: p.author.id,
         name: p.author.name,
