@@ -18,19 +18,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { nicknameSchema } from '@/lib/nickname'
+import { notifyNicknameChange } from '@/lib/plugin-share.server'
 
-const bodySchema = z.object({
-  name: z
-    .string()
-    .transform((s) => s.trim())
-    .pipe(
-      z
-        .string()
-        .min(3, 'Nickname must be at least 3 characters')
-        .max(32, 'Nickname must be 32 characters or fewer')
-        .regex(/^[^\x00-\x1f\x7f]+$/, 'Nickname cannot contain control characters'),
-    ),
-})
+const bodySchema = z.object({ name: nicknameSchema })
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -54,6 +45,7 @@ export async function POST(req: NextRequest) {
     where: { id: session.user.id },
     data: { name },
   })
+  await notifyNicknameChange(session.user.id)
 
   return NextResponse.json({ name })
 }

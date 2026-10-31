@@ -33,6 +33,8 @@ export interface FeedbackContext {
    * to the client; loaded server-side by feedback-solution.ts.
    */
   solution: string | null
+  /** Maximum from points="...": the model also gives a score. See feedback-marks.ts */
+  points: number | null
   /** Markdown from the preceding h1/h2 up to the tag, ai-feedback blocks stripped. */
   sectionMarkdown: string
 }
@@ -150,5 +152,8 @@ export function extractFeedbackContext(
     .replace(/<\/ai-feedback>/gi, '')
     .trim()
 
-  return { prompt, solution, sectionMarkdown }
+  const pointsMatch = tag.tagText.match(/\bpoints\s*=\s*"(\d+(?:\.\d+)?)"/i)
+  const points = pointsMatch ? Number(pointsMatch[1]) : null
+
+  return { prompt, solution, points, sectionMarkdown }
 }

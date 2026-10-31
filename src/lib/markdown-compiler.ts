@@ -128,6 +128,7 @@ export const sanitizeSchema = {
     'importer', // Link-button to /import with the supported formats (importer-button.tsx)
     'pricing', // Public price table, live plans from /api/plans (pricing-table.tsx)
     'ping', // Server-side TCP-connect "ping" terminal (not ICMP)
+    'leaderboard', // List fed by plugins with share="…", see src/lib/plugin-share.ts
     'ai-feedback', // Student-triggered AI feedback on annotation strokes / pasted screenshots
     'login-codes', // Live login-code display for an inbound-email hook (CloudMailin)
     'onlyfor', // Audience gate (auth/anon/students/class) — wraps children
@@ -202,6 +203,7 @@ export const sanitizeSchema = {
     'banner': ['id', 'dismissible', 'color', 'text'],
     'helpvideo': ['topic'],
     'ping': ['host', 'count', 'os'],
+    'leaderboard': ['source', 'value', 'limit', 'collect'],
     // AI feedback on student work. prompt is the teacher's grading instruction;
     // the server re-reads it from page content, the attr here is authoring UX.
     'ai-feedback': ['id', 'prompt', 'label'],

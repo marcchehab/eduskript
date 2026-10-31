@@ -23,6 +23,7 @@ import { useIsExamPage } from '@/contexts/exam-page-context'
 import { useStageLocked } from './stage-flow'
 import { useComponentReview } from '@/contexts/exam-review-context'
 import { ScoreBadge } from '@/components/exam/score-badge'
+import { reportScore } from '@/lib/plugin-share'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { TextAnswerHistory } from './text-answer-history'
 import { withSite } from '@/lib/site-scope-client'
@@ -450,6 +451,7 @@ function QuestionInner({
   // Skipped while reviewing/locked or empty.
   const lastSavedSigRef = useRef<string | null>(null)
   const mountedRef = useRef(false)
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const commitAutosave = () => {
     if (reviewMode || locked || isEmptyAnswer) return
@@ -462,6 +464,7 @@ function QuestionInner({
     // Snapshot text answers (exam pages only) so the teacher gets an answer
     // history. Deduped by the signature check above. Survey passes no callback.
     if (type === 'text' && isExamPage) onAutosaveCheckpoint?.(data)
+    if (!checkMode) reportForLeaderboard(data)
   }
 
   useEffect(() => {
@@ -475,6 +478,7 @@ function QuestionInner({
     }
     const delay = type === 'text' ? AUTOSAVE_TEXT_MS : AUTOSAVE_DISCRETE_MS
     const t = setTimeout(commitAutosave, delay)
+    autosaveTimerRef.current = t
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, textAnswer, numberAnswer, rangeAnswer, reviewMode, stageLocked])
@@ -546,8 +550,16 @@ function QuestionInner({
   // attempt; otherwise show a partial result and let them try again. Persisted
   // immediately (not through the debounced autosave) so a reload right after
   // the click can't lose the lock.
+  const reportForLeaderboard = (data: QuizData) => {
+    const earned = data.choiceScore ?? data.textScore ?? data.sliderScore
+    if (points != null && earned != null && componentId && !isExamPage) reportScore({ componentId, earned })
+  }
+
   const handleCheck = () => {
     if (!checkMode || locked || isEmptyAnswer) return
+    // A pending autosave closes over the unchecked state and would overwrite
+    // the record saved below, reopening the question after a reload.
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
     const used = attemptsUsed + 1
     const final = currentCorrect !== false || used >= attemptsMax
     setAttemptsUsed(used)
@@ -557,6 +569,7 @@ function QuestionInner({
     const data: QuizData = { ...buildQuizData(true), attempts: used, checked: final }
     lastSavedSigRef.current = JSON.stringify(data)
     void updateData(data, { immediate: true })
+    if (final) reportForLeaderboard(data)
   }
 
   // What the student may see right now.

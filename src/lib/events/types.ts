@@ -21,6 +21,7 @@ export type AppEvent =
   | ExamTakenBackEvent
   | StudentWorkUpdateEvent
   | LockdownChangeEvent
+  | LeaderboardUpdateEvent
 
 /**
  * Fired when a student is invited to a class (via bulk import or direct invite)
@@ -189,6 +190,14 @@ export interface EventBus {
    * @returns Unsubscribe function
    */
   subscribe(channel: string, handler: (event: AppEvent) => void): () => void
+}
+
+/** A student's value in a shared plugin list changed, see src/lib/plugin-share.ts */
+export interface LeaderboardUpdateEvent {
+  type: 'leaderboard-update'
+  /** Without siteId and list: every list (a nickname changed). */
+  siteId?: string
+  list?: string
 }
 
 /**

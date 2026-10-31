@@ -30,6 +30,7 @@ import { useSyncedUserData, useUserDataContext, type SyncedUserDataOptions } fro
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
 import { ScoreBadge } from '@/components/exam/score-badge'
+import { reportScore } from '@/lib/plugin-share'
 import { CodeScorePanel } from '@/components/exam/code-score-panel'
 import { useComponentReview } from '@/contexts/exam-review-context'
 import { cn } from '@/lib/utils'
@@ -3458,6 +3459,9 @@ export const CodeEditor = memo(function CodeEditor({
           // Persist so teacher can see class progress
           if (pageId) {
             saveVerification({ isCorrect, hasAttempted: true }, { immediate: true })
+            if (!exam && checkPoints != null) {
+              reportScore({ componentId: `sql-${id}`, earned: isCorrect ? checkPoints : 0 })
+            }
             // Local check version + synced server checkpoint in one go.
             void createCheckVersion(isCorrect ? 'check: correct' : 'check: incorrect')
           }
@@ -3983,6 +3987,9 @@ export const CodeEditor = memo(function CodeEditor({
       const passedTests = results.filter(r => r.passed).length
       const totalPoints = effectiveCheckPoints ?? totalTests
       const earned = totalTests > 0 ? Math.round((passedTests / totalTests) * totalPoints) : 0
+      if (effectiveCheckPoints != null && !exam && !isGradingCheck) {
+        reportScore({ componentId: `python-check-${id}-${currentStage}`, earned })
+      }
 
       // Trigger celebration only on a not-passing → passing transition.
       // Skips: repeat clicks while already passing, runs that don't pass, and

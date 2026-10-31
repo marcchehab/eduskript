@@ -368,6 +368,13 @@ function parseMeta(node: CodeNode): Record<string, string> {
     attributes['solution'] = escapeHtml(solutionMatch[1])
   }
 
+  // SQL: all-or-nothing points for matching `solution`. Python's points sit on
+  // the python-check block instead.
+  if (attributes['points'] && attributes['language'] === 'sql') {
+    attributes['check-points'] = attributes['points']
+    delete attributes['points']
+  }
+
   return attributes
 }
 

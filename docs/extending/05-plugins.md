@@ -125,6 +125,38 @@ plugin.getData().then(function(data) {
 
 Usually redundant with `onReady` — most plugins don't need this.
 
+### `plugin.publish(values)`
+
+Shares numbers with a class or a named list, for example a leaderboard. `setData` stays private; only what you pass here is shared. It has an effect only when the teacher sets `share` on the tag.
+
+```javascript
+plugin.publish({ score: 120 }).then(function(result) {
+  // result.stored is false when sharing is off or the viewer is not a class member
+});
+```
+
+```markdown
+<plugin src="owner/game" share="class" />
+<plugin src="owner/game" share="toplist-logarithms" keep="last" />
+<leaderboard source="toplist-logarithms" value="score" limit="10" />
+```
+
+`share="class"` shares within the student's classes; a student in two classes appears in both lists. Any other name is one list across all classes of the site. `keep` is `best` (default) or `last`. If several plugins use the same `share`, their values add up. Values must be numbers from 0 to 1,000,000.
+
+Values come from the browser, so students can forge them. Use this for leaderboards, not for grades.
+
+`<leaderboard source="kapitel-3" collect="page" />` collects without `share`: it adds `plugin.publish({ score })` and the points of every question, Python check, SQL editor and AI feedback on the page that declares `points`.
+
+### `plugin.getResults(options)`
+
+Reads the list the embedding shares into. Plugins receive nicknames and values, never real names.
+
+```javascript
+plugin.getResults({ value: 'score', limit: 10 }).then(function(r) {
+  // r.entries: [{ rank, nickname, value, isSelf }], r.self: the viewer's entry or null
+});
+```
+
 ### `plugin.onThemeChange(callback)`
 
 Called when the user toggles light/dark mode.

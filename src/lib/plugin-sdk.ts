@@ -9,6 +9,8 @@
  *   plugin.onDataChanged((data) => { ... })
  *   await plugin.getData()
  *   await plugin.setData(data)
+ *   await plugin.publish({ score: 120 })   // needs share="…" on the <plugin> tag
+ *   await plugin.getResults({ value: 'score', limit: 10 })
  */
 export const PLUGIN_SDK_SOURCE = `
 (function() {
@@ -113,6 +115,14 @@ export const PLUGIN_SDK_SOURCE = `
 
         setData: function(data) {
           sendMessage({ type: 'plugin:setData', data: data });
+        },
+
+        publish: function(values) {
+          return request('plugin:publish', { values: values });
+        },
+
+        getResults: function(options) {
+          return request('plugin:getResults', { options: options || {} });
         },
 
         resize: function(height) {

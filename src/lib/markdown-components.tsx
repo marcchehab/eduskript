@@ -38,6 +38,7 @@ import { NewsletterBox } from '@/components/markdown/newsletter-box'
 import { PageBanner } from '@/components/markdown/page-banner'
 import { HelpVideoLink } from '@/components/help-video/help-video-link'
 import { PluginContainer } from '@/components/markdown/plugin-container'
+import { Leaderboard } from '@/components/markdown/leaderboard'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
 import { Geogebra } from '@/components/markdown/geogebra'
@@ -1310,6 +1311,16 @@ export function createMarkdownComponents(
     // ownerPageSlug scopes students/class to the page owner. See only-for.tsx.
     'onlyfor': (props: Record<string, unknown>) => (
       <OnlyFor {...props} ownerPageSlug={ownerPageSlug} />
+    ),
+
+    'leaderboard': (props: Record<string, unknown>) => (
+      <Leaderboard
+        source={props.source as string | undefined}
+        value={props.value as string | undefined}
+        limit={props.limit as string | undefined}
+        collect={props.collect as string | undefined}
+        pageId={pageId}
+      />
     ),
 
     // User-created plugins (sandboxed iframes)

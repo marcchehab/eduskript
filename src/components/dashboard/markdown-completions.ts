@@ -72,6 +72,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'helpvideo', info: 'Link that opens a docked help video (help-<topic>.mp4)', apply: '<helpvideo topic="">Text</helpvideo>', cursorOffset: 17 },
   { label: 'ai-feedback', info: 'Button: send pen strokes/section content to a vision model for feedback. Reference solution: "Provide solution" below it in the preview', apply: '<ai-feedback prompt="" />', cursorOffset: 21 },
   { label: 'ping', info: 'Interactive ping terminal', apply: '<ping />' },
+  { label: 'leaderboard', info: 'List fed by plugins with share="…"', apply: '<leaderboard source="class" />' },
   { label: 'next-stage', info: 'One-way divider that hands in the previous stage and reveals the next', apply: '<next-stage label="" />', cursorOffset: 19 },
   { label: 'muxvideo', info: 'Uploaded video with playback options (gif, autoplay, loop, pin, poster)', apply: '<muxvideo src="" />', cursorOffset: 15 },
   { label: 'left', info: 'Left-align block content', apply: '<left>\n\n</left>' },
@@ -252,6 +253,12 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'host', info: 'Auto-runs a demo ping to this host' },
     { label: 'count', info: 'Ping count (e.g. 4)' },
     { label: 'os', info: 'linux | macos | windows' },
+  ],
+  'leaderboard': [
+    { label: 'source', info: '"class" or the list name used in share="…"' },
+    { label: 'value', info: 'Published value to rank by (default: score)' },
+    { label: 'limit', info: 'Rows shown (default: 10)' },
+    { label: 'collect', info: '"page": also collect points of all scored components on this page' },
   ],
   'next-stage': [
     { label: 'label', info: 'Advance/confirm button text' },

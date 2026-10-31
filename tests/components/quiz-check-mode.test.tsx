@@ -32,6 +32,19 @@ beforeEach(() => {
 })
 
 describe('check mode (non-exam default)', () => {
+  it('a pending autosave cannot overwrite a Check pressed right after picking', () => {
+    vi.useFakeTimers()
+    try {
+      renderChoice()
+      pick('23')
+      fireEvent.click(checkButton()!)
+      act(() => { vi.advanceTimersByTime(2000) })
+      expect(lastSaved()).toMatchObject({ checked: true, attempts: 1 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('renders a Check button and reveals nothing before it is pressed', () => {
     renderChoice()
     pick('21')

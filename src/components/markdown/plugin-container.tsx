@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { useSession } from 'next-auth/react'
 import { useUserData } from '@/lib/userdata/hooks'
+import { useCurrentSite } from '@/contexts/current-site-context'
 import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
+import { PLUGIN_SHARE_UPDATED, reportScore, type ShareEntry, type ShareResults } from '@/lib/plugin-share'
 
 interface PluginContainerProps {
   /** Plugin reference: "ownerPageSlug/pluginSlug" */
@@ -15,6 +17,10 @@ interface PluginContainerProps {
   height?: string | number
   /** Page ID for UserData persistence (from markdown context) */
   pageId?: string
+  /** List this embedding may publish to: "class" or a list name. See plugin-share.ts */
+  share?: string
+  /** Which value counts per student: "best" (default) or "last" */
+  keep?: string
   /** All other attributes become plugin config */
   [key: string]: unknown
 }
@@ -24,6 +30,8 @@ interface PluginMessage {
   data?: unknown
   height?: number
   requestId?: number
+  values?: unknown
+  options?: { value?: string; limit?: number }
 }
 
 const MAX_DATA_SIZE = 1_000_000 // 1MB
@@ -40,6 +48,8 @@ export function PluginContainer({
   id,
   height: heightProp,
   pageId,
+  share,
+  keep,
   ...configProps
 }: PluginContainerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -56,6 +66,7 @@ export function PluginContainer({
   const [loadAttempt, setLoadAttempt] = useState(0)
 
   const { resolvedTheme } = useTheme()
+  const { siteId } = useCurrentSite()
   // Teachers get technical details + an edit link when a plugin fails;
   // students only a neutral note (QA decision 2026-10-05).
   const { data: session } = useSession()
@@ -239,6 +250,51 @@ export function PluginContainer({
           break
         }
 
+        case 'plugin:publish': {
+          const respond = (data: unknown) => sendToPlugin({ type: 'host:data', requestId: msg.requestId, data })
+          const earned = (msg.values as { score?: unknown } | undefined)?.score
+          if (typeof earned === 'number' && Number.isFinite(earned)) reportScore({ componentId, earned })
+          if (!share || !pageId || !siteId) {
+            respond({ stored: false })
+            break
+          }
+          fetch('/api/plugin-share', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ siteId, pageId, componentId, share, keep, values: msg.values }),
+          })
+            .then((res) => (res.ok ? res.json() : { stored: false }))
+            .catch(() => ({ stored: false }))
+            .then((result) => {
+              respond(result)
+              if (result.stored) {
+                window.dispatchEvent(new CustomEvent(PLUGIN_SHARE_UPDATED, { detail: { source: share } }))
+              }
+            })
+          break
+        }
+
+        case 'plugin:getResults': {
+          const respond = (data: unknown) => sendToPlugin({ type: 'host:data', requestId: msg.requestId, data })
+          if (!share || !siteId) {
+            respond({ entries: [], self: null })
+            break
+          }
+          const params = new URLSearchParams({ siteId, source: share, value: String(msg.options?.value ?? 'score') })
+          if (msg.options?.limit) params.set('limit', String(msg.options.limit))
+          // Plugin code is third-party: it gets nicknames and values only,
+          // never the student ids and names the site owner's response carries.
+          const forPlugin = (e: ShareEntry) => ({ rank: e.rank, nickname: e.nickname, value: e.value, isSelf: e.isSelf })
+          fetch(`/api/plugin-share?${params}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .catch(() => null)
+            .then((r: ShareResults | null) => respond({
+              entries: (r?.entries ?? []).map(forPlugin),
+              self: r?.self ? forPlugin(r.self) : null,
+            }))
+          break
+        }
+
         case 'plugin:requestFullscreen': {
           if (iframeRef.current?.requestFullscreen) {
             iframeRef.current.requestFullscreen().catch(() => {
@@ -275,7 +331,7 @@ export function PluginContainer({
       window.removeEventListener('message', handleMessage)
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }
-  }, [config, userData, resolvedTheme, sendToPlugin, src, pageId, updateData])
+  }, [config, userData, resolvedTheme, sendToPlugin, src, pageId, updateData, share, keep, siteId, componentId])
 
   // Push theme changes to plugin
   useEffect(() => {

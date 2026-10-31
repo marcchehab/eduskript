@@ -201,3 +201,10 @@ describe('extractFeedbackContext — example tags in callout code blocks', () =>
     expect(extractFeedbackContext(CALLOUT_PAGE, null, 1)?.prompt).toBe('second')
   })
 })
+
+describe('points attribute', () => {
+  it('reads points from the tag', () => {
+    expect(extractFeedbackContext('# A\n\nTask\n\n<ai-feedback points="5" />', undefined, 0)?.points).toBe(5)
+    expect(extractFeedbackContext('# A\n\nTask\n\n<ai-feedback />', undefined, 0)?.points).toBeNull()
+  })
+})

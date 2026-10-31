@@ -17,6 +17,9 @@
  * server locates once it closes and sends one `marks` event. The client hides
  * the block; the marks appear about 1 s after the text.
  *
+ * With points="…" on the tag, the block also holds one {"score": n} line. It
+ * is an estimate by the model, used for leaderboards only (plugin-share.ts).
+ *
  * @see src/app/api/ai/feedback/route.ts
  * @see src/components/markdown/ai-feedback-marks.tsx
  */
@@ -111,6 +114,24 @@ export function parseQuotedMarks(answer: string): QuotedMark[] {
     }
   }
   return marks
+}
+
+/** The model's {"score": n} line, clamped to 0..max; null when missing. */
+export function parseMarksScore(answer: string, max: number): number | null {
+  const start = answer.indexOf(MARKS_FENCE)
+  if (start < 0) return null
+  const end = blockEnd(answer, start)
+  for (const line of answer.slice(start + MARKS_FENCE.length, end < 0 ? undefined : end).split('\n')) {
+    try {
+      const { score } = JSON.parse(line.trim().replace(/`+$/, '')) as { score?: unknown }
+      if (typeof score === 'number' && Number.isFinite(score)) {
+        return Math.round(Math.min(max, Math.max(0, score)) * 10) / 10
+      }
+    } catch {
+      // not a JSON line
+    }
+  }
+  return null
 }
 
 const LOCATE_PROMPT = `Locate each quoted piece of writing in the image. Answer with one JSON object per line: {"i": <index>, "bbox_2d": [x1, y1, x2, y2]}, coordinates 0-1000 relative to the image width and height, tight boxes. Skip a quote you cannot find. No other text.`

@@ -86,7 +86,7 @@ const VERBATIM_TAGS = new Set([
   'code', 'pre', 'kbd', 'samp', 'script', 'style', 'textarea', 'title',
   'svg', 'math', 'iframe',
   'plugin', 'kara-archive', 'code-editor', 'mermaid-diagram', 'function-plot',
-  'ping', 'login-codes',
+  'ping', 'login-codes', 'leaderboard',
 ])
 
 /** Offset ranges of `raw` (author HTML) nodes, captured before rehype-raw. */

@@ -34,6 +34,13 @@ if (typeof window.eduskript !== 'undefined') {
   // Request current saved state
   plugin.getData().then(function(data) { /* ... */ });
 
+  // Share a result, e.g. for a leaderboard. setData stays private; only this is shared.
+  // Stored only if the teacher set share="…" on the tag or the page has a collecting
+  // leaderboard, so always call it when a game or exercise ends. Numbers from 0 to 1000000;
+  // use the key "score". The best value per student counts unless the tag says keep="last".
+  plugin.publish({ score: 120 }).then(function(r) { /* r.stored */ });
+  plugin.getResults({ value: 'score', limit: 10 }).then(function(r) { /* r.entries: { rank, nickname, value, isSelf } */ });
+
   // React to theme changes
   plugin.onThemeChange(function(theme) { /* "light" or "dark" */ });
 
@@ -57,6 +64,8 @@ if (typeof window.eduskript !== 'undefined') {
   :root[data-theme="dark"] { ... } (and fall back to prefers-color-scheme for
   when there's no host). Still call onThemeChange for anything canvas/JS-drawn.
 - Use 'var' instead of 'let/const' for maximum browser compatibility in the sandbox
+- Don't declare globals named top, parent, self, name, status or location: they clash with window properties (a top-level 'function top()' is a SyntaxError that stops the whole script). Wrap your code in a function
+- Games and scored exercises: call plugin.publish({ score }) at the end, and tell the teacher they can embed it with <plugin src="…" share="class" /> and show results with <leaderboard source="class" value="score" />
 - Keep it simple, educational, and visually polished
 - Always feature-detect window.eduskript before calling init()/onReady()`
 

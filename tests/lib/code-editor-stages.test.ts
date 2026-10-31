@@ -96,3 +96,19 @@ describe('remarkCodeEditor — staged python-check', () => {
     expect(stages).toHaveLength(1)
   })
 })
+
+describe('sql points', () => {
+  const html = (meta: string) => {
+    const tree = unified().use(remarkParse).parse(`\`\`\`${meta}\nSELECT 1\n\`\`\``)
+    ;(remarkCodeEditor as any)()(tree)
+    return findNode(tree, (n) => n.type === 'html')?.value ?? ''
+  }
+
+  it('passes points on a SQL editor as check points', () => {
+    expect(html('sql editor solution="SELECT 1" points="5"')).toContain('data-check-points="5"')
+  })
+
+  it('leaves points on other editors alone', () => {
+    expect(html('python editor points="5"')).not.toContain('data-check-points')
+  })
+})

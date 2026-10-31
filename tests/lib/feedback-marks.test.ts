@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { feedbackText, marksBlockClosed, parseQuotedMarks } from '@/lib/ai/feedback-marks'
+import { feedbackText, marksBlockClosed, parseQuotedMarks, parseMarksScore } from '@/lib/ai/feedback-marks'
 
 const ANSWER = `Good work on a).
 
@@ -42,5 +42,25 @@ describe('parseQuotedMarks', () => {
   it('keeps only the last step of a quote joined across lines', () => {
     const a = '```marks\n{"quote": "3x + 5 = 20 → 3x = 15 → x = 3", "kind": "wrong", "text": "t"}\n```'
     expect(parseQuotedMarks(a)[0].quote).toBe('x = 3')
+  })
+})
+
+describe('parseMarksScore', () => {
+  const block = (line: string) => `Text\n\n\`\`\`marks\n{"quote":"a","kind":"correct","text":"t"}\n${line}\n\`\`\``
+
+  it('reads the score line and leaves the marks alone', () => {
+    expect(parseMarksScore(block('{"score": 3.5}'), 5)).toBe(3.5)
+    expect(parseQuotedMarks(block('{"score": 3.5}'))).toHaveLength(1)
+    expect(feedbackText(block('{"score": 3.5}'), true)).toBe('Text')
+  })
+
+  it('clamps to the maximum', () => {
+    expect(parseMarksScore(block('{"score": 9}'), 5)).toBe(5)
+    expect(parseMarksScore(block('{"score": -1}'), 5)).toBe(0)
+  })
+
+  it('is null without a usable score', () => {
+    expect(parseMarksScore('no block', 5)).toBeNull()
+    expect(parseMarksScore(block('{"score": "many"}'), 5)).toBeNull()
   })
 })

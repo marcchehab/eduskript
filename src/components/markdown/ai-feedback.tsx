@@ -50,6 +50,7 @@ import {
 import type { ChatStreamEvent } from '@/lib/ai/types'
 import { feedbackText, type FeedbackMark } from '@/lib/ai/feedback-marks'
 import { AIFeedbackMarks } from './ai-feedback-marks'
+import { reportScore } from '@/lib/plugin-share'
 
 interface AIFeedbackProps {
   pageId?: string
@@ -239,6 +240,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           } else if (event.type === 'marks' && event.marks) {
             located = event.marks
             setLiveMarks(located)
+            if (event.score != null && storageKey) reportScore({ componentId: storageKey, earned: event.score })
           } else if (event.type === 'continuing') {
             setContinuing(true)
           } else if (event.type === 'truncated') {

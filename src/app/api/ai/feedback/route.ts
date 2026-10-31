@@ -32,7 +32,7 @@ import { extractFeedbackContext } from '@/lib/ai/feedback-context'
 import { loadSolutionImage } from '@/lib/ai/feedback-solution'
 import { recordMetric } from '@/lib/metrics/buffer'
 import { aiConfigured, aiModel } from '@/lib/ai/provider'
-import { locateMarks, marksBlockClosed, parseQuotedMarks } from '@/lib/ai/feedback-marks'
+import { locateMarks, marksBlockClosed, parseMarksScore, parseQuotedMarks } from '@/lib/ai/feedback-marks'
 import type OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
@@ -258,6 +258,9 @@ export async function POST(request: Request) {
     }
 
     systemPrompt += `\n\n${MARKS_PROMPT}`
+    if (context.points != null) {
+      systemPrompt += `\n- Add one more line to the block: {"score": <points>}, the points the student earned out of ${context.points}. Do not mention the score in your feedback text.`
+    }
 
     // A missing/unreadable solution file degrades to plain feedback rather
     // than failing the student's request (logged in loadSolutionImage).
@@ -311,7 +314,8 @@ export async function POST(request: Request) {
         } catch (err) {
           console.warn('[ai-feedback] locating marks failed:', err)
         }
-        await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'marks', marks })}\n\n`))
+        const score = context.points != null ? parseMarksScore(answer, context.points) : null
+        await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'marks', marks, ...(score != null ? { score } : {}) })}\n\n`))
       })()
     }
 

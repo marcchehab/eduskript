@@ -18,6 +18,7 @@ export interface ChatStreamEvent {
   error?: string
   /** type 'marks' (ai-feedback only): located marks, see src/lib/ai/feedback-marks.ts */
   marks?: FeedbackMark[]
+  score?: number
 }
 
 export interface SkriptContext {
