@@ -160,7 +160,7 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
         className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors inline-flex items-center justify-center"
       >
         {session.user?.image ? (
-          // Show profile picture (OAuth image passed through session, not stored for students)
+          // Show profile picture (teachers only; students have no image in the session)
           <div className="absolute inset-0 overflow-hidden rounded-md">
             <Image
               src={session.user.image}

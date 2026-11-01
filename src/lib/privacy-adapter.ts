@@ -44,7 +44,7 @@
  *
  * 1. Student emails are NEVER stored in the database
  * 2. Pseudonyms are one-way hashes (cannot recover email from pseudonym)
- * 3. OAuth profile images are passed through but not persisted
+ * 3. OAuth profile images are not used for students (token.image is null, see auth.ts)
  * 4. Students choose whether to reveal identity to specific teachers
  *
  * ## Known Limitations
