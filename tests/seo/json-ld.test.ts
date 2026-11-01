@@ -246,7 +246,7 @@ interface PageModule {
 // First cold dynamic import of a Next.js app-router page module under Vite
 // can blow past the 5000ms default while the transitive React tree gets
 // transformed. Match the budget used by metadata.test.ts.
-const ROUTE_TEST_TIMEOUT_MS = 20000
+const ROUTE_TEST_TIMEOUT_MS = 60000
 
 describe('JSON-LD wiring on public pages', () => {
   it('eduskript org frontpage embeds Organization JSON-LD', async () => {

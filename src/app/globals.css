@@ -326,6 +326,15 @@
   padding: 4rem 1.25rem !important;
   box-shadow: none !important;
 }
+/* <fullwidth>: negative margins equal to the paper's horizontal padding, in
+   both layouts (fixed paper px-48 above, reflow 1.25rem). An inline -192px in
+   reflow overflowed the 48rem column by 192px on each side. */
+.fullwidth {
+  margin-inline: -192px;
+}
+.reflow-mode .fullwidth {
+  margin-inline: -1.25rem;
+}
 /* Column width handle: only in reflow mode, not on phones (column is already
    full width there). */
 .reflow-width-handle {

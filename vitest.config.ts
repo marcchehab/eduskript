@@ -8,6 +8,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    // Default 5s fails bcrypt and first dynamic imports of route modules when
+    // the machine is loaded (full run, load average above core count).
+    testTimeout: 30_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

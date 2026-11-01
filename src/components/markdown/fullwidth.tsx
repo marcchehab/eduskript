@@ -1,6 +1,7 @@
 /**
- * <fullwidth> component — breaks out of #paper's px-48 (192px) padding
- * so children span the full 1280px paper width.
+ * <fullwidth> component — breaks out of #paper's padding so children span the
+ * full paper width. The negative margins live in globals.css (.fullwidth), as
+ * they differ in reflow mode: 192px on the fixed paper, 1.25rem in reflow.
  *
  * Usage in markdown:
  *   <fullwidth>
@@ -18,10 +19,6 @@ export function Fullwidth({ children, className, ...dataAttrs }: {
   return (
     <div
       className={className ? `fullwidth ${className}` : 'fullwidth'}
-      style={{
-        marginLeft: '-192px',
-        marginRight: '-192px',
-      }}
       {...dataAttrs}
     >
       {children}

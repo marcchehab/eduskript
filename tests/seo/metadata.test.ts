@@ -303,7 +303,7 @@ function hasFileOgImage(label: string): boolean {
 // (PublicSiteLayout, ServerMarkdownRenderer, …) gets transformed. The
 // assertion itself is cheap — only the import is heavy. Give every test in
 // this file a generous budget so the gate never flakes on cold starts.
-const ROUTE_TEST_TIMEOUT_MS = 20000
+const ROUTE_TEST_TIMEOUT_MS = 60000
 
 describe('SEO hygiene gate', () => {
   for (const route of PUBLIC_ROUTES) {
