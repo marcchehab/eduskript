@@ -36,3 +36,19 @@ describe('remarkCodeCopy', () => {
     expect(dataCopyFor('```python editor\nx\n```')).toBeUndefined()
   })
 })
+
+describe('remarkCodeCopy filename', () => {
+  const run = (meta: string) => {
+    const node = { type: 'code', meta, value: 'x' } as Code
+    remarkCodeCopy()({ type: 'root', children: [node] } as Root)
+    return node.data?.hProperties
+  }
+
+  it('carries filename and keeps the copy directive', () => {
+    expect(run('filename="window.py"')).toEqual({ dataFilename: 'window.py' })
+    expect(run('filename=a.py no-copy')).toEqual({ dataFilename: 'a.py', dataCopy: 'false' })
+    expect(run('filename="my file.py"')).toEqual({ dataFilename: 'my file.py' })
+    expect(run('copy')).toEqual({ dataCopy: 'true' })
+    expect(run('')).toBeUndefined()
+  })
+})

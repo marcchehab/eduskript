@@ -248,7 +248,7 @@ export const sanitizeSchema = {
     // Mark attributes (text highlighting)
     'mark': ['className'],
     // Code attributes
-    'code': ['className', 'dataCopy', 'data-copy', 'dataLang', 'data-lang', 'dataAdd', 'data-add', 'dataDel', 'data-del', 'dataHighlight', 'data-highlight', 'dataFocus', 'data-focus', 'dataTint', 'data-tint'],
+    'code': ['className', 'dataCopy', 'data-copy', 'dataFilename', 'data-filename', 'dataLang', 'data-lang', 'dataAdd', 'data-add', 'dataDel', 'data-del', 'dataHighlight', 'data-highlight', 'dataFocus', 'data-focus', 'dataTint', 'data-tint'],
     'pre': ['className'],
     // Span for KaTeX
     'span': ['className', 'style'],

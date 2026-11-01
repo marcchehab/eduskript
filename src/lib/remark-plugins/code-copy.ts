@@ -12,7 +12,10 @@ import type { Root, Code } from 'mdast'
  *   ```python copy=true    → dataCopy="true"
  *
  * No directive → no attribute → the renderer's default applies (shown normally,
- * hidden on exam pages). Runs after remarkCodeEditor, so ```lang editor blocks
+ * hidden on exam pages).
+ *
+ * Also carries `filename="window.py"` (quotes optional without spaces) as
+ * `dataFilename`, shown as a title bar above the block. Runs after remarkCodeEditor, so ```lang editor blocks
  * (already transformed to <code-editor>) are never matched here.
  */
 export function remarkCodeCopy() {
@@ -26,9 +29,15 @@ export function remarkCodeCopy() {
         const m = meta.match(/\bcopy(?:=(true|false))?\b/i)
         if (m) copy = m[1] ? m[1].toLowerCase() : 'true'
       }
-      if (copy === undefined) return
+      const filename = meta.match(/\bfilename=(?:"([^"]+)"|'([^']+)'|(\S+))/i)
+      const name = filename?.[1] ?? filename?.[2] ?? filename?.[3]
+      if (copy === undefined && !name) return
       const data = (node.data ??= {})
-      data.hProperties = { ...(data.hProperties ?? {}), dataCopy: copy }
+      data.hProperties = {
+        ...(data.hProperties ?? {}),
+        ...(copy !== undefined ? { dataCopy: copy } : {}),
+        ...(name ? { dataFilename: name } : {}),
+      }
     })
   }
 }

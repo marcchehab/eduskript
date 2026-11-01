@@ -18,6 +18,8 @@ export interface CodeLineMarks {
 interface CodeBlockProps {
   code: string
   language?: string
+  /** Shown as a title bar above the code. */
+  filename?: string
   className?: string
   /** Show the copy-to-clipboard button. Default true; callers hide it on exams. */
   showCopy?: boolean
@@ -25,7 +27,7 @@ interface CodeBlockProps {
   marks?: CodeLineMarks
 }
 
-function CodeBlockInner({ code, language, className, showCopy = true, marks }: CodeBlockProps) {
+function CodeBlockInner({ code, language, filename, className, showCopy = true, marks }: CodeBlockProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<unknown>(null)
   const [isMounted, setIsMounted] = useState(false)
@@ -204,15 +206,20 @@ function CodeBlockInner({ code, language, className, showCopy = true, marks }: C
   }, [isMounted, isDark, code, language, stableMarks])
 
   return (
-    <div className={`code-block relative rounded-lg overflow-hidden${stableMarks?.focus?.length ? ' code-block-focus' : ''} ${className || ''}`}>
+    <div className={`code-block relative my-4 rounded-lg border border-border overflow-hidden${stableMarks?.focus?.length ? ' code-block-focus' : ''} ${className || ''}`}>
       {showCopy && (
         <button
           onClick={handleCopy}
-          className="absolute top-2 right-2 z-10 p-1.5 rounded bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          className={`absolute z-10 rounded bg-muted/80 ${filename ? 'top-0.5 right-1 p-1' : 'top-2 right-2 p-1.5'} hover:bg-muted text-muted-foreground hover:text-foreground transition-colors`}
           title="Copy code"
         >
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
         </button>
+      )}
+      {filename && (
+        <div className="border-b border-border bg-muted px-3 py-1.5 pr-10 font-mono text-xs text-muted-foreground">
+          {filename}
+        </div>
       )}
       <div ref={containerRef}>
         <pre className="p-3 bg-muted text-sm font-mono"><code>{code}</code></pre>

@@ -160,6 +160,7 @@ function CodeComponent({ children, className, isExam, ...props }: React.HTMLAttr
   const dataProps = props as Record<string, unknown>
   const copyAttr = (dataProps['dataCopy'] ?? dataProps['data-copy']) as string | undefined
   const showCopy = copyAttr != null ? copyAttr !== 'false' : !isExam
+  const filename = (dataProps['dataFilename'] ?? dataProps['data-filename']) as string | undefined
 
   // Diff / highlight / focus line marks (remarkCodeAnnotations), as "1,4,5".
   const lineList = (a: string, b: string): number[] | undefined => {
@@ -189,7 +190,7 @@ function CodeComponent({ children, className, isExam, ...props }: React.HTMLAttr
   const hasMarks = Boolean(marks.add || marks.del || marks.highlight || marks.focus || marks.tint)
 
   // Use CodeMirror-based CodeBlock for syntax highlighting
-  return <CodeBlock code={code} language={language} showCopy={showCopy} marks={hasMarks ? marks : undefined} />
+  return <CodeBlock code={code} language={language} filename={filename} showCopy={showCopy} marks={hasMarks ? marks : undefined} />
 }
 
 // Heading factory

@@ -967,6 +967,8 @@ export function getCondensedSyntaxReference(): string {
 
 **Slide presentations:** any page can be presented full-screen as slides, split from the markdown itself (same source reads as a page OR a deck). A new slide starts at each \`#\`/\`##\` heading, each \`---\` (also a horizontal rule on the page), or \`---/\` (invisible break — splits slides, draws no rule). A \`---x\` line drops the following content from the deck until the next break/heading (still shown on the page) — for background prose you don't want projected. Markers go on their own line outside code blocks; empty slides are dropped; exam pages aren't presentable.
 
+**Code-block file name:** \`\`\`python filename="window.py" shows the name in a title bar above the block.
+
 **Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
 
 **Code-block line annotations:** in plain \`\`\`lang blocks, a trailing \`# [!code ++]\` marks a line as added (green), \`[!code --]\` removed (red), \`[!code highlight]\` highlighted, \`[!code focus]\` focused (rest blurred until hover), \`[!code red|green|blue|yellow|purple]\` colour-tinted (no diff sign, e.g. \`red={2} blue={4}\`). The marker and its comment are stripped from the rendered code. \`[!code ++:3]\` covers 3 lines; info-string ranges work too: \`\`\`python {2,5-7} add={3} del={9}\`\`\`. Not available in \`editor\` blocks.
