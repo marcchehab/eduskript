@@ -34,6 +34,18 @@ interface FlexItemProps {
 }
 
 /**
+ * A percentage width is the item's share of the row with the gaps taken out:
+ * each item gives up (1 - W) of one gap, so shares summing to 100% fill a row
+ * exactly at any container width and any item count (33/33/34), and 50% x 4
+ * still wraps into 2 x 2. Other units (px, rem) pass through unchanged.
+ */
+function itemWidth(width: string): string {
+  const percent = width.trim().match(/^(\d+(?:\.\d+)?)%$/)?.[1]
+  if (percent === undefined) return width
+  return `calc(${percent}% - var(--flex-gap, 0px) * ${1 - Number(percent) / 100})`
+}
+
+/**
  * Flex.Item - Child component for flex layouts.
  * When `grow` and no `width` is set, applies `basis-0` so items divide remaining
  * space equally regardless of content length (otherwise flex-grow sizes from
@@ -55,7 +67,7 @@ export function FlexItem({ children, className, style, width, grow = true, ...da
         width && 'w-full md:w-(--flex-item-width)',
         className
       )}
-      style={{ ...(width ? { '--flex-item-width': width } as CSSProperties : {}), ...style }}
+      style={{ ...(width ? { '--flex-item-width': itemWidth(width) } as CSSProperties : {}), ...style }}
       {...dataAttrs}
     >
       {children}
@@ -84,6 +96,9 @@ export function Flex({
     medium: 'gap-4',
     large: 'gap-8'
   }
+
+  // Same values as gapMap; FlexItem needs the length for its width calc.
+  const gapLength = { none: '0px', small: '0.5rem', medium: '1rem', large: '2rem' }
 
   const justifyMap = {
     start: 'justify-start',
@@ -117,7 +132,7 @@ export function Flex({
         'flex-col md:flex-row',
         className
       )}
-      style={style}
+      style={{ '--flex-gap': gapLength[gap], ...style } as CSSProperties}
       {...dataAttrs}
     >
       {children}

@@ -114,18 +114,16 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
   if (kind === 'welcome') {
     const dashboardUrl = `${ctx.baseUrl}/dashboard`
     const intro =
-      'Schön, dass du Eduskript ausprobierst! Ich bin Marc und unterrichte Informatik in Zürich. Ich habe Eduskript gebaut, weil ich meine Skripts lieber als interaktive Website abgebe, die ich aktualisieren kann – du hoffentlich auch 😊'
+      'Schön, dass du Eduskript ausprobierst! Ich bin Marc und unterrichte Informatik in Zürich. Ich habe Eduskript gebaut, weil ich meine Skripts an einem Ort auf einer interaktiven Website bereitstellen wollte.'
     const tour = (dashboard: string) =>
-      `Wie geht's weiter? Im ${dashboard} führt dich eine kurze Erklär-Tour durch die ersten Schritte. Wenn du sie meisterst, verdoppelt sich deine Testzeit auf ${ctx.trialDays * 2} Tage – es lohnt sich also!`
+      `Wie geht's weiter? Im ${dashboard} führt dich eine kurze Erklär-Tour durch die ersten Schritte. Wenn du sie meisterst, verdoppelt sich deine Testzeit auf ${ctx.trialDays * 2} Tage – es lohnt sich also 😊`
     const plan = `Du hast jetzt ${ctx.trialDays} Tage lang alle Funktionen – inklusive KI und Klassenverwaltung. Danach läuft dein Konto im Gratis-Plan weiter.`
-    const ps = 'PS: Warum ging das interaktive Skript erneut zum Arzt? Es hatte zu viele Seiten-Effekte 🤷'
     const html = layout([
       greeting(name),
       intro,
       tour(`<a href="${dashboardUrl}" style="color:#2563eb">Dashboard</a>`),
       plan,
       'Fragen? Antworte einfach auf diese Mail.<br>Marc',
-      ps,
     ])
     const text = [
       greeting(ctx.firstName),
@@ -139,7 +137,6 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
       'Fragen? Antworte einfach auf diese Mail.',
       'Marc',
       '',
-      ps,
     ].join('\n')
     return { subject: 'Willkommen bei Eduskript', htmlContent: html, textContent: text }
   }

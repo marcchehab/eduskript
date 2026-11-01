@@ -421,7 +421,7 @@ Side-by-side columns that stack on mobile (\`flex-col\` below md, \`flex-row\` a
 - \`style="..."\` and \`class="..."\` pass through
 
 **\`<flex-item>\` attributes** (all optional):
-- \`width="49%"\` — explicit width (overrides equal-share distribution)
+- \`width="33%"\` — explicit width (overrides equal-share distribution). Percentages are shares of the row after gaps, so 33/33/34 fills one row exactly
 - \`grow="false"\` — opt out of growing
 - \`style="..."\` (e.g. \`background-color\`, \`padding\`) and \`class="..."\` pass through
 

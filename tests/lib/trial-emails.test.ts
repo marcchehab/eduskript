@@ -43,7 +43,6 @@ describe('trial emails', () => {
     expect(mail.textContent).toContain('verdoppelt sich deine Testzeit auf 30 Tage')
     expect(mail.textContent).toContain('Du hast jetzt 15 Tage lang alle Funktionen')
     expect(mail.htmlContent).toContain('<a href="https://eduskript.org/dashboard"')
-    expect(mail.textContent).toContain('Seiten-Effekte')
   })
   it('renders the tips mail with the classes link', () => {
     const mail = renderTrialEmail('tips', ctx)
