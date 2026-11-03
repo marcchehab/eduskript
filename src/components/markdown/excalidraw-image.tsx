@@ -6,6 +6,9 @@ import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveExcalidraw, resolveFile } from '@/lib/skript-files'
 import { ResizableWrapper } from './resizable-wrapper'
 import { ImageLightbox } from './image-lightbox'
+import { usePrintMode } from '@/lib/print/print-mode'
+import { applyPrintEdit, usePrintEditing } from '@/lib/print/print-edit-state'
+import { normalizePrintWidth, setImagePrintWidth } from '@/lib/print/print-edits'
 
 interface ExcalidrawImageProps {
   src: string // Filename (e.g., "drawing.excalidraw")
@@ -27,9 +30,11 @@ interface ExcalidrawImageProps {
   // Source line tracking for editor sync
   sourceLineStart?: string
   sourceLineEnd?: string
+  /** Width in the print view only ("60%"), from print-width. */
+  printWidth?: string
 }
 
-export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align = 'center', wrap = false, lightonly = false, nozoom = false, files, sourceLineStart, sourceLineEnd }: ExcalidrawImageProps) {
+export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align = 'center', wrap = false, lightonly = false, nozoom = false, files, sourceLineStart, sourceLineEnd, printWidth }: ExcalidrawImageProps) {
   const filename = src
   const caption = alt || ''
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -89,15 +94,30 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
     if (nozoom) {
       props += ` nozoom`
     }
+    // Keep the print-only width when the online layout is rewritten.
+    if (printWidth) {
+      props += ` print-width="${printWidth}"`
+    }
 
     return `<excali ${props} />`
-  }, [alt, filename, align, wrap, forceLight, nozoom, initialWidth])
+  }, [alt, filename, align, wrap, forceLight, nozoom, initialWidth, printWidth])
 
   // Handle layout changes from the wrapper
   const handleLayoutChange = useCallback((layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => {
     if (!onWidthChange) return
     onWidthChange(buildExcaliTag(layout))
   }, [onWidthChange, buildExcaliTag])
+
+  // Print view: print-width overrides the online width; editors resize it in
+  // "Edit layout" mode (print-edit-state.ts). Same as content-image.tsx.
+  const printing = usePrintMode()
+  const printEditing = usePrintEditing()
+  const printLine = Number(sourceLineStart)
+  const canPrintEdit = printing && printEditing && Number.isFinite(printLine) && printLine > 0
+  const printLineEnd = Number(sourceLineEnd) || printLine
+  const setPrintWidth = useCallback((value: string | null) =>
+    applyPrintEdit((c) => setImagePrintWidth(c, { kind: 'drawing', src: filename, startLine: printLine, endLine: printLineEnd }, value)),
+  [printLine, printLineEnd, filename])
 
   const handleLightOnlyToggle = useCallback(() => {
     const next = !forceLight
@@ -122,13 +142,27 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
 
   return (
     <ResizableWrapper
-      initialWidth={initialWidth}
+      initialWidth={printing && printWidth ? parseFloat(printWidth) : initialWidth}
       align={align}
       wrap={wrap}
-      onLayoutChange={onWidthChange ? handleLayoutChange : undefined}
+      onLayoutChange={printing
+        ? (canPrintEdit ? (layout) => setPrintWidth(normalizePrintWidth(layout.width)) : undefined)
+        : onWidthChange ? handleLayoutChange : undefined}
       className="excalidraw-wrapper group/excalidraw"
       dataAttributes={dataAttributes}
-      extraControls={
+      widthOnly={printing}
+      markOnlineHeight={!!printWidth}
+      extraControls={printing ? (
+        printWidth ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); void setPrintWidth(null) }}
+            className="px-1.5 py-1 rounded font-sans text-xs text-muted-foreground hover:bg-accent"
+            title="Use the online width when printing"
+          >
+            Reset print width
+          </button>
+        ) : undefined
+      ) : 
         // Force-light-theme toggle — lives in the wrapper's control group.
         <button
           onClick={(e) => {
@@ -160,7 +194,7 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
 
       {/* Fullscreen — published view only; useless in the editor preview and
           it collided with the wrapper's control group. */}
-      {!nozoom && !onWidthChange && (
+      {!nozoom && !onWidthChange && !canPrintEdit && (
         <button
           onClick={() => setLightboxOpen(true)}
           className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"

@@ -173,9 +173,9 @@ export const sanitizeSchema = {
     // hands them over camelCased (autoPlay) and as booleans — allow both
     // spellings (cf. the bool() reader in markdown-components.tsx).
     'muxvideo': ['src', 'alt', 'poster', 'pin', 'gif', 'autoplay', 'autoPlay', 'loop'],
-    'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap'],
+    'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap', 'print-width', 'printWidth'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
-    'excali': ['src', 'alt', 'width', 'align', 'wrap', 'lightonly'],
+    'excali': ['src', 'alt', 'width', 'align', 'wrap', 'lightonly', 'print-width', 'printWidth'],
     // <spacer> writing area. id keys the round-trip find/replace on edit.
     'spacer': ['id', 'height', 'pattern', 'printHeight', 'print-height'],
     'solution': ['title', 'hidden'],
@@ -228,6 +228,8 @@ export const sanitizeSchema = {
     'img': [
       ...(defaultSchema.attributes?.['img'] || []),
       'align', 'wrap', 'invert', 'saturate', 'inline',
+      // Print-only width (print preview layout editing, src/lib/print/print-edits.ts)
+      'print-width', 'printWidth', 'dataPrintWidth', 'data-print-width',
       'dataOriginalSrc', 'data-original-src',
       'dataAlign', 'data-align',
       'dataWrap', 'data-wrap',

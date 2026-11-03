@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { type PublicAnnotation, type PublicSnap } from '@/components/public/annotation-wrapper'
+import { PrintEditSource } from '@/components/print/print-edit-source'
 import { ReflowGate } from '@/components/public/reflow-gate'
 import { ReflowWidthHandle } from '@/components/public/reflow-width-handle'
 import { ForkAttribution } from '@/components/public/fork-attribution'
@@ -68,6 +69,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
         <ReflowWidthHandle />
+        <PrintEditSource pageId={page.id} content={page.content} />
         <article className="prose-theme">
           <ReflowGate
             pageId={page.id}

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react'
-import { AlignLeft, AlignCenter, AlignRight, WrapText } from 'lucide-react'
+import { AlignLeft, AlignCenter, AlignRight, MoveDiagonal2, WrapText } from 'lucide-react'
+import { usePrintMode } from '@/lib/print/print-mode'
 
 interface ResizableWrapperProps {
   children: ReactNode
@@ -11,8 +12,10 @@ interface ResizableWrapperProps {
   align?: 'left' | 'center' | 'right'
   /** Initial wrap setting */
   wrap?: boolean
-  /** Called when width/align/wrap changes. If not provided, gizmos are hidden. */
-  onLayoutChange?: (layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => void
+  /** Called when width/align/wrap changes. If not provided, gizmos are hidden.
+      May resolve false (change not saved): the width then snaps back to
+      initialWidth. */
+  onLayoutChange?: (layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => void | Promise<boolean>
   /** Additional className for the container */
   className?: string
   /** Additional style for the container */
@@ -28,6 +31,13 @@ interface ResizableWrapperProps {
       divider (e.g. the image invert toggle). Editor mode only — the group is
       hidden without onLayoutChange. */
   extraControls?: ReactNode
+  /** Width handle only, no align/wrap buttons (print preview layout editing). */
+  widthOnly?: boolean
+  /** In the print view, carry the height measured online as
+      data-print-online-height, so strokes below move with a print-only size
+      change (src/lib/print/stroke-shift.ts). Missing when the page was opened
+      with ?print (never laid out online). */
+  markOnlineHeight?: boolean
 }
 
 export function ResizableWrapper({
@@ -41,8 +51,41 @@ export function ResizableWrapper({
   dataAttributes,
   naturalMaxWidth,
   extraControls,
+  widthOnly = false,
+  markOnlineHeight = false,
 }: ResizableWrapperProps) {
   const containerRef = useRef<HTMLSpanElement>(null)
+  const printing = usePrintMode()
+  const [onlineHeight, setOnlineHeight] = useState<number | null>(null)
+  // Measured whenever shown online (not only with markOnlineHeight), so a
+  // print width set later in the preview still has the online height.
+  useEffect(() => {
+    const el = containerRef.current
+    if (printing || !el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setOnlineHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [printing])
+  // widthOnly: distance from the wrapper's bottom to the image's bottom, so
+  // the corner handle sits on the image, not below a caption. Visible <img>s
+  // only (Excalidraw renders a hidden light/dark twin). Paper px (the print
+  // paper may be scaled by a transform).
+  const [mediaInset, setMediaInset] = useState(0)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!widthOnly || !el || typeof ResizeObserver === 'undefined') return
+    const measure = () => {
+      const box = el.getBoundingClientRect()
+      const scale = el.offsetHeight ? box.height / el.offsetHeight : 1
+      const bottoms = [...el.querySelectorAll('img')].map((img) => img.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => r.bottom)
+      setMediaInset(bottoms.length ? Math.max(0, (box.bottom - Math.max(...bottoms)) / (scale || 1)) : 0)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    el.querySelectorAll('img').forEach((img) => ro.observe(img))
+    return () => ro.disconnect()
+  }, [widthOnly])
   const [isDragging, setIsDragging] = useState(false)
   const [currentAlign, setCurrentAlign] = useState<'left' | 'center' | 'right'>(align)
   const [currentWrap, setCurrentWrap] = useState(wrap)
@@ -125,7 +168,12 @@ export function ResizableWrapper({
   const handleMouseUp = useCallback(() => {
     if (isDragging && dragStartRef.current) {
       if (dragStartRef.current.moved) {
-        onLayoutChange?.({ width: currentWidth, align: currentAlign, wrap: currentWrap })
+        const saved = onLayoutChange?.({ width: currentWidth, align: currentAlign, wrap: currentWrap })
+        if (saved instanceof Promise) {
+          void saved.then((ok) => {
+            if (!ok) setCurrentWidth(typeof initialWidth === 'number' ? initialWidth : typeof initialWidth === 'string' && initialWidth.includes('%') ? parseFloat(initialWidth) : 100)
+          })
+        }
       } else {
         // Click without movement: restore the pre-drag width so a naturally
         // capped element (width 100% + naturalMaxWidth) doesn't get its
@@ -135,7 +183,7 @@ export function ResizableWrapper({
     }
     setIsDragging(false)
     dragStartRef.current = null
-  }, [isDragging, currentWidth, currentAlign, currentWrap, onLayoutChange])
+  }, [isDragging, currentWidth, currentAlign, currentWrap, onLayoutChange, initialWidth])
 
   const handleAlignChange = useCallback((alignment: 'left' | 'center' | 'right') => {
     setCurrentAlign(alignment)
@@ -197,6 +245,7 @@ export function ResizableWrapper({
           : {}),
       }}
       {...dataProps}
+      data-print-online-height={markOnlineHeight && printing && onlineHeight !== null ? onlineHeight : undefined}
     >
       {/* Content */}
       {children}
@@ -204,19 +253,33 @@ export function ResizableWrapper({
       {/* Gizmos - only show when onLayoutChange is provided (editor mode) */}
       {onLayoutChange && (
         <>
-          {/* Resize handle */}
+          {/* Resize handle. widthOnly (print preview): a round corner handle at
+              the bottom right like <stickme>'s; else a bar along the edge. */}
+          {widthOnly ? (
           <span
             onMouseDown={handleMouseDown}
-            className={`block absolute top-0 bottom-0 ${currentAlign === 'right' ? 'left-0' : 'right-0'} w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 hover:bg-primary/20 transition-all ${
+            title="Drag to resize for print"
+            style={{ bottom: mediaInset - 12 }}
+            className={`print:hidden absolute ${currentAlign === 'right' ? '-left-3 cursor-nesw-resize' : '-right-3 cursor-nwse-resize'} z-10 flex h-7 w-7 items-center justify-center rounded-full border border-background/60 bg-foreground/85 text-background shadow-md transition-opacity ${
+              isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            <MoveDiagonal2 className={`h-3.5 w-3.5 ${currentAlign === 'right' ? 'rotate-90' : ''}`} />
+          </span>
+          ) : (
+          <span
+            onMouseDown={handleMouseDown}
+            className={`print:hidden block absolute top-0 bottom-0 ${currentAlign === 'right' ? 'left-0' : 'right-0'} w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 hover:bg-primary/20 transition-all ${
               isDragging ? 'opacity-100 bg-primary/30' : ''
             }`}
           >
             <span className="block absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-8 bg-white dark:bg-black rounded-full transition-colors shadow-[0_0_0_2px_rgba(0,0,0,0.4)] dark:shadow-[0_0_0_2px_rgba(255,255,255,0.4)]" />
           </span>
+          )}
 
           {/* Width indicator */}
           {(isDragging || currentWidth !== 100) && (
-            <span className={`block absolute -top-8 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm border border-border/50 px-2 py-1 rounded text-[10px] font-mono text-foreground z-10 pointer-events-none transition-opacity ${
+            <span className={`print:hidden block absolute -top-8 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm border border-border/50 px-2 py-1 rounded text-[10px] font-mono text-foreground z-10 pointer-events-none transition-opacity ${
               isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}>
               {Math.round(currentWidth)}%
@@ -226,7 +289,9 @@ export function ResizableWrapper({
           {/* Alignment and wrap controls. Components hide their own top-right
               overlays (fullscreen) in editor mode and put editor-only toggles
               here via extraControls instead. */}
-          <span className="absolute top-2 right-2 bg-background/95 backdrop-blur-sm border border-border/50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-0.5 p-0.5">
+          {(!widthOnly || extraControls) && (
+          <span className="print:hidden absolute top-2 right-2 bg-background/95 backdrop-blur-sm border border-border/50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-0.5 p-0.5">
+            {!widthOnly && (<>
             <button
               onClick={() => handleAlignChange('left')}
               className={`p-1.5 rounded hover:bg-accent transition-colors ${
@@ -264,13 +329,15 @@ export function ResizableWrapper({
             >
               <WrapText className="w-3.5 h-3.5" />
             </button>
+            </>)}
             {extraControls && (
               <>
-                <span className="w-px bg-border mx-0.5" />
+                {!widthOnly && <span className="w-px bg-border mx-0.5" />}
                 {extraControls}
               </>
             )}
           </span>
+          )}
         </>
       )}
     </span>

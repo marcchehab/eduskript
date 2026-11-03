@@ -32,9 +32,11 @@
  * @see src/lib/print/geometry.ts, src/lib/print/print-mode.ts, globals.css (.print-layout)
  */
 
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { Printer, X } from 'lucide-react'
+import { Loader2, PencilRuler, Printer, Undo2, X } from 'lucide-react'
+import { PrintEditOverlay } from '@/components/print/print-edit-overlay'
+import { setPrintEditing, undoPrintEdit, usePrintEditState } from '@/lib/print/print-edit-state'
 import { FontSizeControls } from '@/components/public/font-size-controls'
 import { bumpPrintLayout, initPrintFromUrl, setPrintState, usePrintState, type SolutionMode } from '@/lib/print/print-mode'
 import { solutionLabel, useSolutionEntries } from '@/lib/print/solutions'
@@ -299,33 +301,58 @@ export function PrintView({ pageId }: { pageId?: string }) {
     initPrintFromUrl()
   }, [])
 
+  const edit = usePrintEditState()
+
   // Re-paginate whenever the content settles (fonts, images, editors loading).
+  // While a mouse button is held (dragging a layout handle) nothing runs; on
+  // release it runs at once instead of after the debounce. After a layout
+  // edit's refresh (edit.revision) it runs again in place, without tearing
+  // the pagination down first: a new <pagebreak /> has no height of its own,
+  // so the ResizeObserver alone wouldn't notice it. paginate() clears and
+  // re-lays out in one task, so each run is one paint.
+  const runNow = useRef<(() => void) | null>(null)
   useEffect(() => {
     const paper = document.getElementById('paper')
     if (!active || !paper) return
     let timer: ReturnType<typeof setTimeout> | null = null
     let lastHeight = -1
     let busy = false
+    let pressed = false
     const run = () => {
+      if (timer) clearTimeout(timer)
+      timer = null
       busy = true
       paginate(paper)
       lastHeight = paper.querySelector('.markdown-content')?.getBoundingClientRect().height ?? 0
       bumpPrintLayout()
       requestAnimationFrame(() => { busy = false })
     }
+    const changed = () => {
+      const h = paper.querySelector('.markdown-content')?.getBoundingClientRect().height ?? 0
+      return Math.abs(h - lastHeight) >= 1
+    }
     const schedule = () => {
       // Printing re-lays out with zoom (print media); the gaps computed on screen must stay.
-      if (busy || window.matchMedia('print').matches) return
-      const h = paper.querySelector('.markdown-content')?.getBoundingClientRect().height ?? 0
-      if (Math.abs(h - lastHeight) < 1) return
+      if (busy || pressed || window.matchMedia('print').matches || !changed()) return
       if (timer) clearTimeout(timer)
       timer = setTimeout(run, 400)
     }
+    const onDown = () => { pressed = true }
+    const onUp = () => {
+      pressed = false
+      if (changed()) requestAnimationFrame(run)
+    }
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('pointerup', onUp, true)
     const observer = new ResizeObserver(schedule)
     const content = paper.querySelector('.markdown-content')
     if (content) observer.observe(content)
     const first = setTimeout(run, 300)
+    runNow.current = run
     return () => {
+      runNow.current = null
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('pointerup', onUp, true)
       observer.disconnect()
       clearTimeout(first)
       if (timer) clearTimeout(timer)
@@ -333,8 +360,14 @@ export function PrintView({ pageId }: { pageId?: string }) {
       bumpPrintLayout()
     }
   }, [active, entries.length])
+  useEffect(() => {
+    if (edit.revision) runNow.current?.()
+  }, [edit.revision])
+
+  const canEditLayout = canEdit && !!edit.content && edit.pageId === pageId
 
   const close = () => {
+    setPrintEditing(false)
     setPrintState({ active: false, solutions: 'online' })
     const url = new URL(window.location.href)
     if (url.searchParams.has('print')) {
@@ -356,8 +389,9 @@ export function PrintView({ pageId }: { pageId?: string }) {
   return (
     <>
       {paper && createPortal(<PrintSolutions />, paper)}
+      {canEditLayout && edit.editing && <PrintEditOverlay />}
       {createPortal(
-        <div className="print-bar fixed left-1/2 top-4 z-[60] flex max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+        <div className="print-bar fixed left-1/2 top-4 z-[60] flex w-max max-w-[calc(100vw-1rem)] font-sans -translate-x-1/2 flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
           <span className="font-medium">Print preview (A4)</span>
           <FontSizeControls />
           {canEdit && (
@@ -375,6 +409,24 @@ export function PrintView({ pageId }: { pageId?: string }) {
               </select>
             </label>
           )}
+          {canEditLayout && (
+            <button
+              type="button"
+              onClick={() => setPrintEditing(!edit.editing)}
+              aria-pressed={edit.editing}
+              title="Resize images for print and add or remove page breaks. Changes are saved to the page."
+              className={`flex items-center gap-1.5 rounded border px-2.5 py-1 ${edit.editing ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'}`}
+            >
+              <PencilRuler className="h-4 w-4" /> Edit layout
+            </button>
+          )}
+          {canEditLayout && edit.editing && edit.undo.length > 0 && (
+            <button type="button" onClick={() => void undoPrintEdit()} disabled={edit.saving} title="Undo the last layout change" className="flex items-center gap-1 rounded border border-border px-2 py-1 hover:bg-muted disabled:opacity-50">
+              <Undo2 className="h-4 w-4" /> Undo
+            </button>
+          )}
+          {edit.saving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Saving" />}
+          {edit.error && <span className="max-w-xs text-xs text-destructive">{edit.error}</span>}
           <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded bg-primary px-2.5 py-1 text-primary-foreground">
             <Printer className="h-4 w-4" /> Print / PDF
           </button>

@@ -378,7 +378,7 @@ Wrong: \`$\\color{orange}8 \\cdot 1 + \\color{blue}4 \\cdot 1 \\color{black} = .
 - \`saturate="70"\` — Saturation adjustment when inverted
 - \`nozoom="true"\` — Suppress the fullscreen/zoom button and lightbox (e.g. a UI screenshot that's itself a link)
 
-A \`{key=value;key2}\` attribute block right after the image (e.g. \`{invert}\`, \`{invert=light;saturate=70}\`) IS implemented, but only for \`invert\`/\`saturate\` — \`{width=...}\` is parsed but silently has no effect (use \`style="width: X%"\` instead).
+A \`{key=value;key2}\` attribute block right after the image (e.g. \`{invert}\`, \`{invert=light;saturate=70}\`) IS implemented, but only for \`invert\`/\`saturate\`/\`print-width\` — \`{width=...}\` is parsed but silently has no effect (use \`style="width: X%"\` instead).
 
 Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-detects light/dark SVG variants. Use \`<excali src="name" lightonly />\` (or the \`lightonly\` attribute on the shorthand) to always show the light variant regardless of viewer theme, e.g. for diagrams without a meaningful dark version. Use \`<excali src="name" nozoom />\` to suppress the fullscreen/zoom button and lightbox.`)
 
@@ -981,7 +981,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Solutions:** \`<solution title="Aufgabe 3">markdown</solution>\` is a collapsed solution box (no \`> \` prefixes needed, math and code work inside). Hidden for students on exam pages. \`<solution hidden>\` is never shown to students, only sent to a neighbouring \`<ai-feedback>\` as its reference solution (not printed). Prefer it over \`> [!solution]-\` callouts; both move to the end in the print view.
 
-**Printing (A4 print view, Print button on every page):** \`<pagebreak />\` starts a new printed page (invisible online). \`<spacer … print-height="6cm" />\` gives a writing area a different height on paper. \`<blank width="6cm" />\` is an inline fill-in line (default 4cm). With \`label\` it is a form field; several in one paragraph form one row whose lines shrink instead of wrapping: \`<blank label="Name:" width="6cm" /> <blank label="Klasse:" width="2cm" /> <blank label="Datum:" width="3cm" />\`. \`<onlyfor print>…</onlyfor>\` shows content only on paper, \`<onlyfor screen>…</onlyfor>\` only online. Videos, plugins and simulations print as a QR code to the page; quiz answer keys and solutions are listed at the end when they would be visible online.
+**Printing (A4 print view, Print button on every page):** \`<pagebreak />\` starts a new printed page (invisible online). \`<spacer … print-height="6cm" />\` gives a writing area a different height on paper. Images and drawings take a print-only width: \`![](a.png){print-width=50%}\`, \`<img src="a.png" data-print-width="50%" />\`, \`<excali src="d" print-width="50%" />\` (editors can also drag it in the print preview, "Edit layout"). \`<blank width="6cm" />\` is an inline fill-in line (default 4cm). With \`label\` it is a form field; several in one paragraph form one row whose lines shrink instead of wrapping: \`<blank label="Name:" width="6cm" /> <blank label="Klasse:" width="2cm" /> <blank label="Datum:" width="3cm" />\`. \`<onlyfor print>…</onlyfor>\` shows content only on paper, \`<onlyfor screen>…</onlyfor>\` only online. Videos, plugins and simulations print as a QR code to the page; quiz answer keys and solutions are listed at the end when they would be visible online.
 
 **Code-block file name:** \`\`\`python filename="window.py" shows the name in a title bar above the block.
 

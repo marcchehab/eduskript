@@ -1,4 +1,5 @@
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
+import { PrintEditSource } from '@/components/print/print-edit-source'
 import { currentSlugForAlias } from '@/lib/site-slugs'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
@@ -176,6 +177,7 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
           />
         </div>
       )}
+      <PrintEditSource pageId={page.id} content={page.content} />
       <article className="prose-theme">
         <ReflowGate pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
           <ServerMarkdownRenderer

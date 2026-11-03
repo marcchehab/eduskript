@@ -1583,11 +1583,16 @@ body.stickme-pinned .floating-page-controls {
   background: transparent;
 }
 
+/* Whole cells only: `round` stretches the 23px tile (per axis, so cells stay
+   within a few % of square) until a whole number fits the width and height;
+   the inset shadow draws the closing right and bottom lines. */
 .spacer-checkered {
   background-image:
     linear-gradient(var(--spacer-line-color) 1px, transparent 1px),
     linear-gradient(90deg, var(--spacer-line-color) 1px, transparent 1px);
   background-size: 23px 23px;
+  background-repeat: round;
+  box-shadow: inset -1px -1px 0 var(--spacer-line-color);
 }
 
 .spacer-lines {

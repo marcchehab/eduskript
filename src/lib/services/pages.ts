@@ -120,7 +120,7 @@ interface ActorContext {
 /**
  * Page with all relations needed for permission checks + cache invalidation.
  */
-async function loadPageForActor(pageId: string, userId: string, isAdmin: boolean) {
+export async function loadPageForActor(pageId: string, userId: string, isAdmin: boolean) {
   return prisma.page.findFirst({
     where: {
       id: pageId,

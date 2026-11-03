@@ -345,6 +345,7 @@ export function createMarkdownComponents(
     const dataSaturate = (dataProps['data-saturate'] as string) || (dataProps['dataSaturate'] as string) || (dataProps['saturate'] as string)
     const dataInline = (dataProps['data-inline'] as string) || (dataProps['dataInline'] as string) || (dataProps['inline'] as string)
     const dataNozoom = (dataProps['data-nozoom'] as string) || (dataProps['dataNozoom'] as string) || (dataProps['nozoom'] as string)
+    const dataPrintWidth = (dataProps['data-print-width'] as string) || (dataProps['dataPrintWidth'] as string) || (dataProps['print-width'] as string) || (dataProps['printWidth'] as string)
 
     const srcStr = typeof src === 'string' ? src : ''
 
@@ -367,6 +368,7 @@ export function createMarkdownComponents(
         onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(originalSrc || srcStr, markdown) : undefined}
         sourceLineStart={sourceLineStart}
         sourceLineEnd={sourceLineEnd}
+        printWidth={dataPrintWidth || undefined}
       />
     )
   }
@@ -657,6 +659,7 @@ export function createMarkdownComponents(
     // Check both kebab-case (from HTML) and camelCase formats
     const sourceLineStart = (props['data-source-line-start'] as string) || (props['dataSourceLineStart'] as string) || undefined
     const sourceLineEnd = (props['data-source-line-end'] as string) || (props['dataSourceLineEnd'] as string) || undefined
+    const printWidth = (props['print-width'] as string) || (props['printWidth'] as string) || undefined
 
     return (
       <ExcalidrawImage
@@ -670,6 +673,7 @@ export function createMarkdownComponents(
         onEdit={onExcalidrawEdit}
         sourceLineStart={sourceLineStart}
         sourceLineEnd={sourceLineEnd}
+        printWidth={printWidth}
       />
     )
   }
@@ -1036,8 +1040,14 @@ export function createMarkdownComponents(
       wrap?: boolean
       lightonly?: boolean
       nozoom?: boolean
+      'print-width'?: string
+      printWidth?: string
+      'data-source-line-start'?: string | number
+      'data-source-line-end'?: string | number
     }) {
       const { src, alt = '', width, align = 'center' } = props
+      const printWidth = props['print-width'] ?? props.printWidth
+      const lineStart = props['data-source-line-start']
       // Bare boolean attrs (`<excali wrap />`) parse as the empty string —
       // HTML boolean-attribute presence, but falsy in JS — so a plain
       // truthy check would treat every hand-written `wrap`/`lightonly` as off.
@@ -1059,6 +1069,9 @@ export function createMarkdownComponents(
           files={files}
           onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(filename, markdown) : undefined}
           onEdit={onExcalidrawEdit}
+          printWidth={printWidth || undefined}
+          sourceLineStart={lineStart != null ? String(lineStart) : undefined}
+          sourceLineEnd={props['data-source-line-end'] != null ? String(props['data-source-line-end']) : undefined}
         />
       )
     },
@@ -1117,6 +1130,13 @@ export function createMarkdownComponents(
         }
         return undefined
       }
+      const line = (...keys: string[]): string | undefined => {
+        for (const k of keys) {
+          const v = props[k]
+          if (typeof v === 'string' || typeof v === 'number') return String(v)
+        }
+        return undefined
+      }
       const id = str('id')
       // `height` is a known HTML property, so property-information delivers it as
       // a NUMBER; `pattern` is custom and stays a string. Accept both shapes.
@@ -1135,8 +1155,9 @@ export function createMarkdownComponents(
           pattern={pattern}
           printHeight={str('print-height', 'printHeight')}
           onChange={onSpacerChange}
-          sourceLineStart={str('data-source-line-start', 'dataSourceLineStart')}
-          sourceLineEnd={str('data-source-line-end', 'dataSourceLineEnd')}
+          // Line numbers arrive as numbers (data-* with numeric values).
+          sourceLineStart={line('data-source-line-start', 'dataSourceLineStart')}
+          sourceLineEnd={line('data-source-line-end', 'dataSourceLineEnd')}
         />
       )
     },
@@ -1370,7 +1391,10 @@ export function createMarkdownComponents(
     },
 
     // The editor flag: onTagAttributeChange is only passed by the editor preview.
-    'pagebreak': () => <PageBreak editor={!!onTagAttributeChange} />,
+    'pagebreak': (props: Record<string, unknown>) => {
+      const line = props['data-source-line-start'] ?? props['dataSourceLineStart']
+      return <PageBreak editor={!!onTagAttributeChange} line={line != null ? String(line) : undefined} />
+    },
     // Inline fill-in line; width in cm/mm/px like spacer print-height.
     // Fill-in line. `width`: length of the line in cm on paper (default 4cm).
     // Plain <blank> is an inline-block, for blanks inside running text.

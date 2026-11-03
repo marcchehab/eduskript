@@ -10,6 +10,9 @@ import { resolveFile, resolveUrl } from '@/lib/skript-files'
 import { decodeFileRef, isLocalFileRef } from '@/lib/file-refs'
 import { ResizableWrapper } from './resizable-wrapper'
 import { ImageLightbox } from './image-lightbox'
+import { usePrintMode } from '@/lib/print/print-mode'
+import { applyPrintEdit, usePrintEditing } from '@/lib/print/print-edit-state'
+import { normalizePrintWidth, setImagePrintWidth } from '@/lib/print/print-edits'
 
 /**
  * Parse markdown links [text](url) in a string and return React elements
@@ -67,9 +70,11 @@ interface ContentImageProps {
   // Source line tracking for editor sync
   sourceLineStart?: string
   sourceLineEnd?: string
+  /** Width in the print view only ("60%"), from print-width / data-print-width. */
+  printWidth?: string
 }
 
-export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, nozoom = false, files, sourceLineStart, sourceLineEnd }: ContentImageProps) {
+export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, nozoom = false, files, sourceLineStart, sourceLineEnd, printWidth }: ContentImageProps) {
   const filename = originalSrc || src
   const { resolvedTheme: themeResolved, forcedTheme } = useTheme()
   const resolvedTheme = forcedTheme ?? themeResolved
@@ -138,14 +143,29 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
     if (nozoom) {
       attrs += ` data-nozoom="true"`
     }
+    // Keep the print-only width when the online layout is rewritten.
+    if (printWidth) {
+      attrs += ` data-print-width="${printWidth}"`
+    }
     return `<img ${attrs} />`
-  }, [alt, filename, align, wrap, currentInvert, initialWidth, saturate, nozoom])
+  }, [alt, filename, align, wrap, currentInvert, initialWidth, saturate, nozoom, printWidth])
 
   // Handle layout changes from the wrapper
   const handleLayoutChange = useCallback((layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => {
     if (!onWidthChange) return
     onWidthChange(buildImgTag(layout))
   }, [onWidthChange, buildImgTag])
+
+  // Print view: print-width overrides the online width; editors resize it
+  // with the same handle in "Edit layout" mode (print-edit-state.ts).
+  const printing = usePrintMode()
+  const printEditing = usePrintEditing()
+  const printLine = Number(sourceLineStart)
+  const canPrintEdit = printing && printEditing && Number.isFinite(printLine) && printLine > 0
+  const printLineEnd = Number(sourceLineEnd) || printLine
+  const setPrintWidth = useCallback((value: string | null) =>
+    applyPrintEdit((c) => setImagePrintWidth(c, { kind: 'image', src: filename, startLine: printLine, endLine: printLineEnd }, value)),
+  [printLine, printLineEnd, filename])
 
   // Cycle invert mode: off → dark → light → always → off
   const handleInvertCycle = useCallback(() => {
@@ -198,13 +218,27 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
 
   return (
     <ResizableWrapper
-      initialWidth={initialWidth}
+      initialWidth={printing && printWidth ? parseFloat(printWidth) : initialWidth}
       align={align}
       wrap={wrap}
-      onLayoutChange={onWidthChange ? handleLayoutChange : undefined}
+      onLayoutChange={printing
+        ? (canPrintEdit ? (layout) => setPrintWidth(normalizePrintWidth(layout.width)) : undefined)
+        : onWidthChange ? handleLayoutChange : undefined}
       dataAttributes={dataAttributes}
       naturalMaxWidth={imgWidth}
-      extraControls={
+      widthOnly={printing}
+      markOnlineHeight={!!printWidth}
+      extraControls={printing ? (
+        printWidth ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); void setPrintWidth(null) }}
+            className="px-1.5 py-1 rounded font-sans text-xs text-muted-foreground hover:bg-accent"
+            title="Use the online width when printing"
+          >
+            Reset print width
+          </button>
+        ) : undefined
+      ) : 
         // Invert gizmo — cycles off → dark → light → always and persists as
         // data-invert on the <img> tag. Lives in the wrapper's control group.
         !isMissing ? (
@@ -232,7 +266,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
       <span className="block relative group/img">
         {/* Fullscreen — published view only; useless in the editor preview and
             it collided with the wrapper's control group. */}
-        {!isMissing && !nozoom && !onWidthChange && (
+        {!isMissing && !nozoom && !onWidthChange && !canPrintEdit && (
           <button
             onClick={() => setLightboxOpen(true)}
             className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"

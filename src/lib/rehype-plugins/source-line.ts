@@ -59,6 +59,8 @@ export function rehypeSourceLine(lineMap?: number[]) {
       'table', 'div', 'section', 'article', 'figure', 'span',
       'code-editor', // Interactive code editor blocks
       'excalidraw-image', // Excalidraw drawings
+      'excali', // <excali src>: keys print-preview layout edits (print-edits.ts)
+      'pagebreak', // "Page break ×" in the print preview
       'spacer', // <spacer> writing area
       'ai-feedback', // keys the editor's "Provide solution" gizmo
       'leaderboard', 'plugin', // key the editor's list gizmo

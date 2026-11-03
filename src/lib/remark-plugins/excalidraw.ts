@@ -32,7 +32,11 @@ export function remarkExcalidraw() {
       // The ExcalidrawImage component will handle file resolution
       const mutableNode = node as Record<string, unknown>
       mutableNode.type = 'html'
-      mutableNode.value = `<excalidraw-image src="${escapeHtmlAttr(url)}" alt="${escapeHtmlAttr(alt)}"></excalidraw-image>`
+      // `{print-width=…}` (remarkImageAttrs, runs first) would be lost with
+      // the hProperties, so carry it over as an attribute.
+      const printWidth = node.data?.hProperties?.['print-width']
+      const pw = typeof printWidth === 'string' && printWidth ? ` print-width="${escapeHtmlAttr(printWidth)}"` : ''
+      mutableNode.value = `<excalidraw-image src="${escapeHtmlAttr(url)}" alt="${escapeHtmlAttr(alt)}"${pw}></excalidraw-image>`
       delete mutableNode.url
       delete mutableNode.alt
       delete mutableNode.children

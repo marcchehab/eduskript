@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { PrintEditSource } from '@/components/print/print-edit-source'
 import { notFound } from 'next/navigation'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
@@ -300,6 +301,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
             />
           </div>
         )}
+        <PrintEditSource pageId={page.id} content={page.content} />
         <article className="prose-theme">
           <ReflowGate pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
             <ServerMarkdownRenderer

@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Printer, Trash2 } from 'lucide-react'
+import { MoveVertical, Printer, Trash2 } from 'lucide-react'
 import { usePrintMode } from '@/lib/print/print-mode'
+import { applyPrintEdit, usePrintEditing } from '@/lib/print/print-edit-state'
+import { setSpacerPrintHeight } from '@/lib/print/print-edits'
 import { MAX_SPACER_PRINT_PX, PAPER_PX_PER_MM, formatPrintLengthCm, parsePrintLength } from '@/lib/print/geometry'
 
 /**
@@ -16,6 +18,9 @@ import { MAX_SPACER_PRINT_PX, PAPER_PX_PER_MM, formatPrintLengthCm, parsePrintLe
  * public render omits both. Edits round-trip to the markdown source by emitting
  * a full replacement `<spacer .../>` tag — see stableOnSpacerChange in
  * markdown-renderer.client.tsx.
+ *
+ * Print preview with "Edit layout" (print-edit-state.ts): a round handle at
+ * the bottom sets `print-height` in the source (setSpacerPrintHeight), in cm.
  */
 
 export type SpacerPattern = 'blank' | 'checkered' | 'lines' | 'dots'
@@ -61,9 +66,47 @@ export function ContentSpacer({ id, height, pattern, printHeight, onChange, sour
   const [printDraft, setPrintDraft] = useState(cmText(printHeight))
   // Re-sync the field when the source changes (reset during render, no effect).
   const [printSyncedFor, setPrintSyncedFor] = useState(printHeight)
+  // Print-preview drag height (paper px), kept until the saved print-height arrives.
+  const [printDrag, setPrintDrag] = useState<number | null>(null)
   if (printSyncedFor !== printHeight) {
     setPrintSyncedFor(printHeight)
     setPrintDraft(cmText(printHeight))
+    setPrintDrag(null)
+  }
+  const printEditing = usePrintEditing()
+  const lineStart = Number(sourceLineStart)
+  const lineEnd = Number(sourceLineEnd) || lineStart
+  const canPrintEdit = printing && printEditing && Number.isFinite(lineStart) && lineStart > 0
+  const savePrintHeight = useCallback(async (value: string | null) => {
+    const ok = await applyPrintEdit((c) => setSpacerPrintHeight(c, lineStart, lineEnd, value))
+    // Failed, or nothing changed (same value after rounding): drop the drag height.
+    if (!ok || (value ?? undefined) === printHeight) setPrintDrag(null)
+  }, [lineStart, lineEnd, printHeight])
+  const printDragRef = useRef<{ startY: number; startHeight: number; scale: number; el: HTMLElement } | null>(null)
+  const onPrintHandleDown = (e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault()
+    const el = e.currentTarget.parentElement as HTMLElement
+    // The paper may be scaled by a transform: move in paper px.
+    const scale = el.offsetHeight ? el.getBoundingClientRect().height / el.offsetHeight : 1
+    printDragRef.current = { startY: e.clientY, startHeight: el.offsetHeight, scale: scale || 1, el }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setPrintDrag(el.offsetHeight)
+  }
+  const onPrintHandleMove = (e: React.PointerEvent<HTMLElement>) => {
+    const d = printDragRef.current
+    if (!d) return
+    setPrintDrag(Math.round(Math.max(MIN_HEIGHT, Math.min(MAX_SPACER_PRINT_PX, d.startHeight + (e.clientY - d.startY) / d.scale))))
+  }
+  const onPrintHandleUp = () => {
+    const d = printDragRef.current
+    printDragRef.current = null
+    if (!d || printDrag === null) return
+    if (printDrag === d.startHeight) { setPrintDrag(null); return }
+    // Snap to the saved 0.1cm value now, so the refresh doesn't change the
+    // height again (one more reflow).
+    const value = formatPrintLengthCm(printDrag)
+    setPrintDrag(parsePrintLength(value) ?? printDrag)
+    void savePrintHeight(value)
   }
   const commitPrintHeight = () => {
     const draft = printDraft.trim()
@@ -128,12 +171,45 @@ export function ContentSpacer({ id, height, pattern, printHeight, onChange, sour
   return (
     <div
       className={`spacer-element spacer-${pattern} group relative my-4 rounded-md ${onChange ? 'ring-1 ring-border/60' : ''}`}
-      style={{ height: `${printing && printPx ? printPx : currentHeight}px` }}
+      style={{ height: `${printing ? (printDrag ?? printPx ?? currentHeight) : currentHeight}px` }}
       // Print view: strokes below this spacer move by the height difference
       // (section-anchored-strokes.tsx, data-print-online-height).
-      data-print-online-height={printing && printPx ? currentHeight : undefined}
+      data-print-online-height={printing && (printDrag ?? printPx) ? currentHeight : undefined}
       {...dataAttrs}
     >
+      {/* Print preview "Edit layout": height handle at the bottom. */}
+      {canPrintEdit && (
+        <>
+          <span className={`print:hidden pointer-events-none absolute left-2 top-2 z-10 rounded bg-background/95 px-1.5 py-0.5 font-sans text-[11px] text-foreground transition-opacity ${
+            printDrag !== null ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}>
+            {printDrag !== null || printPx ? `${formatPrintLengthCm(printDrag ?? printPx!)} printed` : 'Same height as online'}
+          </span>
+          {printHeight && printDrag === null && (
+            <button
+              type="button"
+              onClick={() => void savePrintHeight(null)}
+              title="Use the online height when printing"
+              className="print:hidden absolute right-2 top-2 z-10 rounded border border-border/50 bg-background/95 px-1.5 py-1 font-sans text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-accent group-hover:opacity-100"
+            >
+              Reset print height
+            </button>
+          )}
+          <span
+            onPointerDown={onPrintHandleDown}
+            onPointerMove={onPrintHandleMove}
+            onPointerUp={onPrintHandleUp}
+            title="Drag to change the printed height"
+            style={{ touchAction: 'none' }}
+            className={`print:hidden absolute -bottom-3.5 left-1/2 z-10 flex h-7 w-7 -translate-x-1/2 cursor-ns-resize items-center justify-center rounded-full border border-background/60 bg-foreground/85 text-background shadow-md transition-opacity ${
+              printDrag !== null ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            <MoveVertical className="h-3.5 w-3.5" />
+          </span>
+        </>
+      )}
+
       {/* Editor chrome — only when onChange is provided */}
       {onChange && (
         <>

@@ -7,7 +7,7 @@
  * A <span> (display:block via CSS), not a <div>: consecutive tags or a tag
  * next to text end up inside a <p>, where a <div> is invalid HTML.
  */
-export function PageBreak({ editor }: { editor?: boolean }) {
+export function PageBreak({ editor, line }: { editor?: boolean; line?: string }) {
   if (editor) {
     return (
       <span className="my-4 flex items-center gap-2 text-xs text-muted-foreground" aria-label="Page break">
@@ -17,5 +17,6 @@ export function PageBreak({ editor }: { editor?: boolean }) {
       </span>
     )
   }
-  return <span className="print-pagebreak" data-pagebreak="" aria-hidden="true" />
+  // data-source-line-start: the print preview's "Page break ×" (print-edit-overlay.tsx).
+  return <span className="print-pagebreak" data-pagebreak="" data-source-line-start={line} aria-hidden="true" />
 }
