@@ -25,6 +25,12 @@
  * completed answer is saved; an aborted/failed request keeps the previous one.
  * Index-keyed records drift if the teacher inserts another <ai-feedback> above.
  *
+ * Print: a QR code linking to `<page>?fb=<id or index>` replaces the
+ * buttons (PrintFallback). Opening that link scrolls to this tag and
+ * highlights the "take a picture" button; the camera itself can't open
+ * without a tap (browsers require a user gesture for file inputs).
+ * Index links drift like index-keyed records (see above).
+ *
  * Section scoping duplicates the live-position math of
  * section-anchored-strokes.tsx in read-only form: a stroke's current y =
  * stored y + (live section top − stored sectionOffsetY).
@@ -39,6 +45,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Sparkles, Loader2, AlertCircle, ClipboardPaste, Camera } from 'lucide-react'
+import { PrintFallback } from '@/components/print/print-fallback'
 import { userDataService, useSyncedUserData } from '@/lib/userdata'
 import type { AIFeedbackData, AnnotationData } from '@/lib/userdata/types'
 import { parseStrokes } from '@/hooks/use-stroke-animation'
@@ -143,15 +150,24 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   const [storageKey, setStorageKey] = useState<string | null>(
     feedbackId ? `ai-feedback-${feedbackId}` : null
   )
+  // Link target of the printed QR code (`?fb=`): the id, else the DOM index.
+  const [linkKey, setLinkKey] = useState<string | null>(feedbackId ?? null)
+  const [linked, setLinked] = useState(false)
   useEffect(() => {
-    if (feedbackId) {
-      setStorageKey(`ai-feedback-${feedbackId}`)
-      return
-    }
     const index = containerRef.current
       ? [...document.querySelectorAll('[data-ai-feedback]')].indexOf(containerRef.current)
       : -1
-    setStorageKey(index >= 0 ? `ai-feedback-idx${index}` : null)
+    const key = feedbackId ?? (index >= 0 ? String(index) : null)
+    setLinkKey(key)
+    setStorageKey(feedbackId ? `ai-feedback-${feedbackId}` : index >= 0 ? `ai-feedback-idx${index}` : null)
+    // Opened from the printed QR code: bring this tag into view.
+    const fb = new URLSearchParams(window.location.search).get('fb')
+    if (key !== null && fb === key && !new URLSearchParams(window.location.search).has('print')) {
+      setLinked(true)
+      // After layout settles (images, editors above may still grow).
+      const t = window.setTimeout(() => containerRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 600)
+      return () => window.clearTimeout(t)
+    }
   }, [feedbackId])
   const { data: saved, updateData: saveFeedback } = useSyncedUserData<AIFeedbackData>(
     storageKey && pageId ? pageId : '',
@@ -483,8 +499,22 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     return () => document.removeEventListener('paste', onPaste, true)
   }, [])
 
+  // Same page URL without ?print etc.; set when printing (client only).
+  const printHref = linkKey !== null && typeof window !== 'undefined'
+    ? `${window.location.origin}${window.location.pathname}?fb=${encodeURIComponent(linkKey)}`
+    : undefined
+
+  // The wrapper with data-ai-feedback renders in print too, so the DOM index
+  // (request routing, storage key, QR link) is the same in both modes.
   return (
-    <div ref={containerRef} className="my-6 not-prose" data-ai-feedback={feedbackId || true}>
+    <div ref={containerRef} data-ai-feedback={feedbackId || true}>
+    <PrintFallback label="AI feedback? Scan the QR code, then photograph your solution." href={printHref} compact>
+    <div className="my-6 not-prose">
+      {linked && (
+        <p className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
+          <Camera className="h-4 w-4" /> Take a picture of your solution on paper:
+        </p>
+      )}
       <div className="flex flex-wrap items-stretch gap-3">
         <button
           type="button"
@@ -519,7 +549,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           onClick={() => fileInputRef.current?.click()}
           disabled={busy}
           aria-label="Take a picture for AI feedback"
-          className="inline-flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/40 px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          className={`inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 ${linked ? 'border-primary bg-primary/10 font-medium text-primary ring-2 ring-primary/40' : 'border-dashed border-muted-foreground/40 text-muted-foreground hover:border-muted-foreground hover:text-foreground'}`}
         >
           <Camera className="h-4 w-4" />
           …or take a picture
@@ -570,6 +600,8 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
         </div>
       )}
 
+    </div>
+    </PrintFallback>
     </div>
   )
 }

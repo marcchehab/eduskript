@@ -13,8 +13,9 @@ import { usePrintMode } from '@/lib/print/print-mode'
  * difference (section-anchored-strokes.tsx). Opened directly with ?print the
  * embed never laid out online, so that correction is missing.
  * `image`: a preview (e.g. the video thumbnail) printed before the QR code.
+ * `compact`: smaller QR code, no URL line (<ai-feedback>, one per exercise).
  */
-export function PrintFallback({ label, href, image, children }: { label: string; href?: string; image?: string; children: ReactNode }) {
+export function PrintFallback({ label, href, image, compact, children }: { label: string; href?: string; image?: string; compact?: boolean; children: ReactNode }) {
   const printing = usePrintMode()
   const [qr, setQr] = useState<string | null>(null)
   const [url, setUrl] = useState('')
@@ -44,18 +45,18 @@ export function PrintFallback({ label, href, image, children }: { label: string;
   return (
     // my-4 like the embeds: their margins collapse through the online wrapper
     // and are not part of its measured height, so neither are these.
-    <div className="my-4 flex w-fit max-w-full items-center gap-4 rounded-lg border border-border p-3" data-print-online-height={onlineHeight ?? undefined}>
+    <div className={`my-4 flex w-fit max-w-full items-center rounded-lg border border-border ${compact ? 'gap-3 p-2' : 'gap-4 p-3'}`} data-print-online-height={onlineHeight ?? undefined}>
       {image && (
         // eslint-disable-next-line @next/next/no-img-element -- external thumbnail, printed as is
         <img src={image} alt="" className="!m-0 !h-24 !w-auto !max-w-none shrink-0 rounded" />
       )}
       {qr
         // eslint-disable-next-line @next/next/no-img-element -- data URL, nothing to optimize
-        ? <img src={qr} alt="" className="!m-0 !h-24 !w-24 !max-w-none shrink-0" />
-        : <QrCode className="h-24 w-24 shrink-0 text-muted-foreground" />}
+        ? <img src={qr} alt="" className={`!m-0 !max-w-none shrink-0 ${compact ? '!h-16 !w-16' : '!h-24 !w-24'}`} />
+        : <QrCode className={`shrink-0 text-muted-foreground ${compact ? 'h-16 w-16' : 'h-24 w-24'}`} />}
       <div className="text-sm">
         <div className="font-medium">{label}</div>
-        <div className="break-all text-muted-foreground">{url}</div>
+        {!compact && <div className="break-all text-muted-foreground">{url}</div>}
       </div>
     </div>
   )
