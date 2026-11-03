@@ -9,6 +9,11 @@
  * work: either strokes rendered client-side or a pasted screenshot. An
  * optional solution="..." file (Excalidraw drawing or image in the skript) is
  * loaded here and sent as a second image — see feedback-solution.ts.
+ * <solution> blocks linked to the tag (feedback-context.ts linkedSolutions)
+ * are sent as the teacher's reference solution: their markdown as text, their
+ * <excali src> / ![](file) images loaded like solution="...". A visible
+ * <solution> may be revealed (the student can open it anyway); a
+ * <solution hidden> may not.
  *
  * Streams SSE events in the same { type: 'content' | 'error' | 'done' } shape
  * as /api/ai/chat.
@@ -58,6 +63,16 @@ function checkRateLimit(key: string): boolean {
 
 // ~6MB of base64 ≈ 4.5MB image — far beyond a reasonable screenshot
 const MAX_IMAGE_CHARS = 6_000_000
+// Reference images per request (solution="..." + images in <solution> blocks)
+const MAX_SOLUTION_IMAGES = 4
+
+/** Skript file names of the images in a <solution> block: <excali src>, ![](file). External URLs are skipped. */
+function solutionImageNames(markdown: string): string[] {
+  const names: string[] = []
+  for (const m of markdown.matchAll(/<excali\b[^>]*\bsrc\s*=\s*"([^"]+)"/gi)) names.push(m[1])
+  for (const m of markdown.matchAll(/!\[[^\]]*\]\(\s*<?([^)\s>]+)/g)) names.push(m[1])
+  return names.filter((n) => !/^[a-z]+:/i.test(n)).map((n) => n.replace(/^\.\//, ''))
+}
 const IMAGE_DATA_URL_PREFIX_RE = /^data:image\/(png|jpeg|webp);base64,/
 // Checked as "contains a non-base64 char" rather than one anchored [..]+$
 // over the whole URL: that pattern threw "Maximum call stack size exceeded"
@@ -76,7 +91,7 @@ You receive:
 
 Guidelines:
 - First read the student's work carefully. If the handwriting is ambiguous, say what you read it as (briefly) so misreadings are visible.
-- Give feedback on the student's approach and each step. Point out where an error occurs and why it is an error, but do NOT hand over the full correct solution unless the teacher's instructions say otherwise.
+- Give feedback on the student's approach and each step. Point out where an error occurs and why it is an error, but do NOT hand over the full correct solution unless the teacher's instructions say otherwise or a reference solution below is marked as visible to the student.
 - If the student's answer is correct, say so plainly. Do not invent doubts, hint at a "possibly better" answer, or ask them to double-check work that is right.
 - Be encouraging and concrete. Short paragraphs or a short list, not an essay.
 - Use LaTeX ($...$) for mathematical expressions.
@@ -270,6 +285,36 @@ export async function POST(request: Request) {
       systemPrompt += `\n\nYou also receive the teacher's reference solution as an image, marked as such. The student cannot see it. It is authoritative: compare the student's work against it, and if the work matches it in substance, confirm it as correct. Differences in drawing style, layout, size, or labelling that don't change the meaning are not errors. Don't mention that a reference image exists, and don't reveal its content beyond what the guidelines above allow.`
     }
 
+    // <solution> blocks: text + their images, each marked visible or hidden.
+    let imageBudget = MAX_SOLUTION_IMAGES - (solutionImage ? 1 : 0)
+    const solutionParts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = []
+    for (const sol of context.solutions) {
+      const head = sol.hidden
+        ? "Teacher's reference solution (HIDDEN from the student). Do not write the correct result or any correct step, also not ones you work out yourself; only say which step is wrong and why:"
+        : "Teacher's reference solution (VISIBLE to the student, who can open it on the page; you may refer to it and reveal it):"
+      solutionParts.push({ type: 'text', text: `${head}\n\n${sol.markdown || '(images only)'}` })
+      for (const name of skriptId ? solutionImageNames(sol.markdown) : []) {
+        if (imageBudget <= 0) break
+        const url = await loadSolutionImage(skriptId!, name)
+        if (!url) continue
+        imageBudget--
+        solutionParts.push({ type: 'image_url', image_url: { url } })
+      }
+    }
+    if (context.solutions.length) {
+      systemPrompt += `\n\nYou also receive the teacher's reference solution, marked as such. It is authoritative: compare the student's work against it, and if the work matches it in substance, confirm it as correct. Differences in style, layout or notation that don't change the meaning are not errors.`
+      if (context.solutions.some((sol) => sol.hidden)) {
+        // Tested 2026-11-03 (Qwen3.5, "2x+3=11 → 2x=14 → x=7"): this system
+        // line alone still gave "also x = 4" in 3/3 runs (so did a request
+        // with no solution at all, 3/3); with the rule repeated in the
+        // HIDDEN header in the user message below: 0/4.
+        systemPrompt += ` Parts marked HIDDEN are not visible to the student: don't mention that they exist. Never state the correct result, a correct intermediate step, or any value from a HIDDEN solution, not even as "correct would be …". Name the wrong step and why it is wrong, so the student can correct it themselves.`
+      }
+      if (context.solutions.some((sol) => !sol.hidden)) {
+        systemPrompt += ` Parts marked VISIBLE can be opened by the student on the page: you may refer to them and show the correct steps from them.`
+      }
+    }
+
     const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
       {
         type: 'text',
@@ -282,6 +327,7 @@ export async function POST(request: Request) {
         { type: 'image_url', image_url: { url: solutionImage } }
       )
     }
+    userContent.push(...solutionParts)
     userContent.push(
       { type: 'text', text: 'My work on this exercise. Please give me feedback.' },
       { type: 'image_url', image_url: { url: image } }

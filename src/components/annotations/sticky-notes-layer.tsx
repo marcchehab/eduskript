@@ -1031,10 +1031,10 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
         onMouseDown={positionMutable ? handleDragStart : undefined}
       >
         {readOnly
-          ? <span title="From teacher"><Radio className="w-3 h-3 opacity-50 shrink-0" aria-hidden /></span>
-          : <GripVertical className="w-3 h-3 opacity-30 shrink-0" aria-hidden />
+          ? <span title="From teacher"><Radio className="print-invisible w-3 h-3 opacity-50 shrink-0" aria-hidden /></span>
+          : <GripVertical className="print-invisible w-3 h-3 opacity-30 shrink-0" aria-hidden />
         }
-        <StickyNoteIcon className="w-3 h-3 opacity-50 shrink-0" aria-hidden />
+        <StickyNoteIcon className="print-invisible w-3 h-3 opacity-50 shrink-0" aria-hidden />
 
         {/* Preview of content when minimized / label when empty */}
         <span
@@ -1052,7 +1052,8 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
 
         {/* Action buttons (hidden in read-only mode) */}
         {!readOnly && (
-          <div className="flex items-center gap-0.5 ml-1 shrink-0" onMouseDown={e => e.stopPropagation()}>
+          // print-invisible: the print view keeps the controls' space, not the controls.
+          <div className="print-invisible flex items-center gap-0.5 ml-1 shrink-0" onMouseDown={e => e.stopPropagation()}>
             {/* Color picker toggle */}
             <button
               onClick={() => setShowColorPicker(v => !v)}
@@ -1146,7 +1147,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
               to students) hide it. */}
           {positionMutable && (
             <div
-              className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-30 hover:opacity-70 flex items-end justify-end pb-0.5 pr-0.5 transition-opacity"
+              className="print-invisible absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-30 hover:opacity-70 flex items-end justify-end pb-0.5 pr-0.5 transition-opacity"
               onMouseDown={handleResizeStart}
               title="Resize"
             >

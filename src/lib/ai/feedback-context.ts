@@ -10,6 +10,14 @@
  * Other <ai-feedback> blocks in that range are removed entirely (tag and any
  * inner content); the requested tag's own prompt is returned separately.
  *
+ * Reference solutions: `<solution>` blocks are not exercise text. They are
+ * removed from sectionMarkdown and the tag's own ones are returned in
+ * `solutions` (linkedSolutions below): a <solution> belongs to the last
+ * <ai-feedback> above it in the same h1/h2 section, or, with none above, to
+ * the first one below it. So "exercise, ai-feedback, solution" and
+ * "exercise, solution, ai-feedback" both link; solutions BELOW the tag reach
+ * the model this way, unlike other content below it.
+ *
  * Runs server-side so students can't tamper with the teacher prompt or the
  * exercise text: the client only sends pageId + feedbackId, the server
  * re-derives everything from the stored page content.
@@ -35,11 +43,28 @@ export interface FeedbackContext {
   solution: string | null
   /** Maximum from points="...": the model also gives a score. See feedback-marks.ts */
   points: number | null
-  /** Markdown from the preceding h1/h2 up to the tag, ai-feedback blocks stripped. */
+  /** Markdown from the preceding h1/h2 up to the tag, ai-feedback and solution blocks stripped. */
   sectionMarkdown: string
+  /** <solution> blocks linked to this tag, in source order. */
+  solutions: LinkedSolution[]
+}
+
+export interface LinkedSolution {
+  /** Inner markdown of the block. */
+  markdown: string
+  title: string | null
+  /** <solution hidden>: never shown to students, so the model must not reveal it. */
+  hidden: boolean
+  /** 0-based line of the opening tag. */
+  line: number
 }
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|svg)$/i
+
+/** Whether a solution name is an image file (else an Excalidraw drawing name). */
+export function isSolutionImageFile(name: string): boolean {
+  return IMAGE_EXT_RE.test(name.trim())
+}
 
 /**
  * Map a solution="..." value to the stored filename:
@@ -100,6 +125,76 @@ function findTags(lines: string[], inFence: boolean[]): Array<{ line: number; co
   return tags
 }
 
+const SOLUTION_OPEN_RE = /<solution\b([^>]*)>/i
+const SOLUTION_CLOSE_RE = /<\/solution>/i
+
+/** <solution>…</solution> blocks outside fences. Unclosed blocks run to the end. */
+function findSolutions(lines: string[], inFence: boolean[]): LinkedSolution[] {
+  const out: LinkedSolution[] = []
+  for (let i = 0; i < lines.length; i++) {
+    if (inFence[i]) continue
+    const open = lines[i].match(SOLUTION_OPEN_RE)
+    if (!open || open.index === undefined) continue
+    const attrs = open[1]
+    const parts: string[] = []
+    let rest = lines[i].slice(open.index + open[0].length)
+    let j = i
+    for (;;) {
+      const close = rest.search(SOLUTION_CLOSE_RE)
+      if (close !== -1) { parts.push(rest.slice(0, close)); break }
+      parts.push(rest)
+      if (++j >= lines.length) break
+      rest = lines[j]
+    }
+    out.push({
+      markdown: parts.join('\n').trim(),
+      title: attrs.match(/\btitle\s*=\s*"([^"]*)"/i)?.[1] ?? null,
+      hidden: /(^|\s)hidden(\s|=|\/|$)/i.test(attrs),
+      line: i,
+    })
+    i = j
+  }
+  return out
+}
+
+/** Index of the h1/h2 section (count of headings at or above `line`). */
+function sectionOf(line: number, headings: number[]): number {
+  let k = 0
+  while (k < headings.length && headings[k] <= line) k++
+  return k
+}
+
+function headingLines(lines: string[], inFence: boolean[]): number[] {
+  const out: number[] = []
+  for (let i = 0; i < lines.length; i++) if (!inFence[i] && HEADING_RE.test(lines[i])) out.push(i)
+  return out
+}
+
+/**
+ * The <solution> blocks belonging to the <ai-feedback> tag on 0-based line
+ * `tagLine`: in the same h1/h2 section, owned by the last tag above them, or
+ * by the first tag below when none is above. O(solutions × tags).
+ * Also used by the editor gizmo (ai-feedback-solution-gizmo.tsx), so the
+ * editor shows exactly what the server sends.
+ */
+export function linkedSolutions(content: string, tagLine: number): LinkedSolution[] {
+  const lines = content.split('\n')
+  const inFence = fencedLines(lines)
+  return linkedSolutionsIn(lines, inFence, findTags(lines, inFence).map((t) => t.line), tagLine)
+}
+
+function linkedSolutionsIn(lines: string[], inFence: boolean[], tagLines: number[], tagLine: number): LinkedSolution[] {
+  const headings = headingLines(lines, inFence)
+  const section = sectionOf(tagLine, headings)
+  const tagsHere = tagLines.filter((l) => sectionOf(l, headings) === section)
+  return findSolutions(lines, inFence).filter((sol) => {
+    if (sectionOf(sol.line, headings) !== section) return false
+    const above = tagsHere.filter((l) => l < sol.line)
+    const owner = above.length ? above[above.length - 1] : tagsHere.find((l) => l > sol.line)
+    return owner === tagLine
+  })
+}
+
 /**
  * @param feedbackId - match by tag id when given (explicit override)
  * @param feedbackIndex - otherwise pick the nth tag in source order. The
@@ -150,10 +245,14 @@ export function extractFeedbackContext(
     .replace(/<ai-feedback\b[^>]*[^/]>[\s\S]*?<\/ai-feedback>/gi, '')
     .replace(/<ai-feedback\b[^>]*>/gi, '')
     .replace(/<\/ai-feedback>/gi, '')
+    // Solutions go to the model separately (`solutions`), marked as such.
+    .replace(/<solution\b[^>]*>[\s\S]*?(<\/solution>|$)/gi, '')
     .trim()
 
   const pointsMatch = tag.tagText.match(/\bpoints\s*=\s*"(\d+(?:\.\d+)?)"/i)
   const points = pointsMatch ? Number(pointsMatch[1]) : null
 
-  return { prompt, solution, points, sectionMarkdown }
+  const solutions = linkedSolutionsIn(lines, inFence, tags.map((t) => t.line), tag.line)
+
+  return { prompt, solution, points, sectionMarkdown, solutions }
 }

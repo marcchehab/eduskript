@@ -208,3 +208,49 @@ describe('points attribute', () => {
     expect(extractFeedbackContext('# A\n\nTask\n\n<ai-feedback />', undefined, 0)?.points).toBeNull()
   })
 })
+
+describe('linked <solution> blocks', () => {
+  const page = [
+    '## A',                                   // 0
+    'Task A.',                                // 1
+    '<solution title="Before">',              // 2
+    'Pre $x=1$',                              // 3
+    '</solution>',                            // 4
+    '<ai-feedback id="a1" />',                // 5
+    '<solution hidden>',                      // 6
+    '![](a.png)',                             // 7
+    '</solution>',                            // 8
+    'Task A2.',                               // 9
+    '<ai-feedback id="a2" />',                // 10
+    '<solution title="A2">x = 2</solution>',  // 11
+    '```',                                    // 12
+    '<solution>in a fence</solution>',        // 13
+    '```',                                    // 14
+    '## B',                                   // 15
+    '<solution>orphan, no tag in B</solution>', // 16
+  ].join('\n')
+
+  it('links solutions above the first tag and below each tag, per section', () => {
+    const a1 = extractFeedbackContext(page, 'a1')!
+    expect(a1.solutions.map((s) => [s.title, s.hidden, s.markdown])).toEqual([
+      ['Before', false, 'Pre $x=1$'],
+      [null, true, '![](a.png)'],
+    ])
+    const a2 = extractFeedbackContext(page, 'a2')!
+    expect(a2.solutions.map((s) => s.markdown)).toEqual(['x = 2'])
+  })
+
+  it('removes solutions from the exercise text', () => {
+    const a2 = extractFeedbackContext(page, 'a2')!
+    expect(a2.sectionMarkdown).toContain('Task A.')
+    expect(a2.sectionMarkdown).toContain('Task A2.')
+    expect(a2.sectionMarkdown).not.toContain('Pre $x=1$')
+    expect(a2.sectionMarkdown).not.toContain('a.png')
+  })
+
+  it('linkedSolutions matches the server for a tag line (editor gizmo)', async () => {
+    const { linkedSolutions } = await import('@/lib/ai/feedback-context')
+    expect(linkedSolutions(page, 10).map((s) => s.title)).toEqual(['A2'])
+    expect(linkedSolutions(page, 5)).toHaveLength(2)
+  })
+})

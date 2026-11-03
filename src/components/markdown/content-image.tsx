@@ -71,7 +71,8 @@ interface ContentImageProps {
 
 export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, nozoom = false, files, sourceLineStart, sourceLineEnd }: ContentImageProps) {
   const filename = originalSrc || src
-  const { resolvedTheme } = useTheme()
+  const { resolvedTheme: themeResolved, forcedTheme } = useTheme()
+  const resolvedTheme = forcedTheme ?? themeResolved
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
   // Resolve the image URL and dimensions

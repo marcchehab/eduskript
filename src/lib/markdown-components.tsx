@@ -40,6 +40,11 @@ import { HelpVideoLink } from '@/components/help-video/help-video-link'
 import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Leaderboard } from '@/components/markdown/leaderboard'
 import { ShareListOptions } from '@/components/markdown/share-list-options'
+import { HiddenSolutionMarker, Solution } from '@/components/markdown/solution'
+import { PageBreak } from '@/components/print/page-break'
+import { PrintFallback } from '@/components/print/print-fallback'
+import { parsePrintLength } from '@/lib/print/geometry'
+import { MediaOnly } from '@/components/print/media-only'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
 import { Geogebra } from '@/components/markdown/geogebra'
@@ -214,6 +219,22 @@ function createHeading(level: 1 | 2 | 3 | 4 | 5 | 6) {
       </Tag>
     )
   }
+}
+
+/** Watch URL for the printed QR code of a <youtube> embed; undefined → the page URL. */
+/** Same thumbnail the online embed shows (youtube.tsx); playlists have none. */
+function youtubeThumb(props: Record<string, unknown>): string | undefined {
+  const custom = (props['data-thumbnail'] ?? props['dataThumbnail']) as string | undefined
+  const id = (props['data-id'] ?? props['dataId']) as string | undefined
+  return custom || (id ? `https://img.youtube.com/vi/${encodeURIComponent(id)}/hqdefault.jpg` : undefined)
+}
+
+function youtubeUrl(props: Record<string, unknown>): string | undefined {
+  const id = (props['data-id'] ?? props['dataId']) as string | undefined
+  const playlist = (props['data-playlist'] ?? props['dataPlaylist']) as string | undefined
+  if (id) return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`
+  if (playlist) return `https://www.youtube.com/playlist?list=${encodeURIComponent(playlist)}`
+  return undefined
 }
 
 // Blockquote component - uses client Callout for interactive callouts
@@ -920,7 +941,9 @@ export function createMarkdownComponents(
     'code-editor': CodeEditorComponent,
     'tabs-container': TabsContainerComponent,
     'tab-item': TabItem,
-    'youtube-embed': YoutubeEmbedComponent,
+    'youtube-embed': (props: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) => (
+      <PrintFallback label={(props['data-caption'] ?? props['dataCaption'] ?? 'Video') as string} href={youtubeUrl(props)} image={youtubeThumb(props)}><YoutubeEmbedComponent {...props} /></PrintFallback>
+    ),
     'flag-icon': FlagIconComponent,
     'mermaid-diagram': (props: { 'data-definition'?: string }) => {
       const encoded = props['data-definition'] ?? ''
@@ -954,7 +977,9 @@ export function createMarkdownComponents(
     'function-plot': (props: { 'data-spec'?: string; dataSpec?: string }) => (
       <FunctionPlot spec={props['data-spec'] ?? props.dataSpec ?? ''} />
     ),
-    'muxvideo': MuxVideoComponent,
+    'muxvideo': (props: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) => (
+      <PrintFallback label="Video"><MuxVideoComponent {...props} /></PrintFallback>
+    ),
     'excalidraw-image': ExcalidrawImageComponent,
     'question': QuizQuestionComponent,
     'quiz-option': QuizOptionComponent,
@@ -1108,6 +1133,7 @@ export function createMarkdownComponents(
           id={id}
           height={height}
           pattern={pattern}
+          printHeight={str('print-height', 'printHeight')}
           onChange={onSpacerChange}
           sourceLineStart={str('data-source-line-start', 'dataSourceLineStart')}
           sourceLineEnd={str('data-source-line-end', 'dataSourceLineEnd')}
@@ -1230,6 +1256,7 @@ export function createMarkdownComponents(
       }
       const toBool = (v?: string) => v === 'true' || v === ''
       return (
+        <PrintFallback label="GeoGebra applet">
         <Geogebra
           materialId={str('material-id', 'materialId', 'data-material-id')}
           src={str('src', 'data-src')}
@@ -1241,6 +1268,7 @@ export function createMarkdownComponents(
           pageId={pageId}
           files={files}
         />
+        </PrintFallback>
       )
     },
 
@@ -1248,7 +1276,11 @@ export function createMarkdownComponents(
     'phet': (props: Record<string, unknown>) => {
       const str = (k: string): string | undefined =>
         typeof props[k] === 'string' ? (props[k] as string) : undefined
-      return <PhetSim sim={str('sim')} locale={str('locale')} height={str('height')} title={str('title')} />
+      return (
+        <PrintFallback label={`Simulation${str('title') ? `: ${str('title')}` : ''}`}>
+          <PhetSim sim={str('sim')} locale={str('locale')} height={str('height')} title={str('title')} />
+        </PrintFallback>
+      )
     },
 
     // Public price table (live plans). See pricing-table.tsx.
@@ -1312,9 +1344,53 @@ export function createMarkdownComponents(
 
     // Audience gate: <onlyfor auth|anon|students|class="3a">…children…</onlyfor>.
     // ownerPageSlug scopes students/class to the page owner. See only-for.tsx.
-    'onlyfor': (props: Record<string, unknown>) => (
-      <OnlyFor {...props} ownerPageSlug={ownerPageSlug} />
-    ),
+    'onlyfor': (props: Record<string, unknown>) => {
+      // print / screen: media, not audience. CSS shows them per view (globals.css).
+      const flag = (k: string) => props[k] !== undefined && props[k] !== false && props[k] !== 'false'
+      // onTagAttributeChange is only passed by the editor preview.
+      if (flag('print')) return <MediaOnly media="print" editor={!!onTagAttributeChange}>{props.children as React.ReactNode}</MediaOnly>
+      if (flag('screen')) return <MediaOnly media="screen">{props.children as React.ReactNode}</MediaOnly>
+      return <OnlyFor {...props} ownerPageSlug={ownerPageSlug} />
+    },
+
+    // <solution hidden>: reference solution for <ai-feedback> only. Its
+    // children are dropped HERE, on the server, so they are not in the HTML or
+    // the RSC payload. Not a secret though: the raw page markdown also reaches
+    // the client (AnnotationWrapper's `content` prop). Editors see a marker.
+    'solution': (props: Record<string, unknown>) => {
+      const title = typeof props.title === 'string' ? props.title : undefined
+      if (props.hidden != null && props.hidden !== false) {
+        return onTagAttributeChange ? <HiddenSolutionMarker title={title} /> : null
+      }
+      return (
+        <Solution title={title} pageId={pageId}>
+          {props.children as React.ReactNode}
+        </Solution>
+      )
+    },
+
+    // The editor flag: onTagAttributeChange is only passed by the editor preview.
+    'pagebreak': () => <PageBreak editor={!!onTagAttributeChange} />,
+    // Inline fill-in line; width in cm/mm/px like spacer print-height.
+    // Fill-in line. `width`: length of the line in cm on paper (default 4cm).
+    // Plain <blank> is an inline-block, for blanks inside running text.
+    // With `label` ("Name:") it is a form field: label + line kept together,
+    // and a paragraph holding such fields becomes one flex row
+    // (globals.css .blank-field), where the lines shrink proportionally
+    // instead of wrapping when the row is wider than the column (larger
+    // font, narrower screen). Fields never wrap; the line has a 1.5em minimum.
+    'blank': (props: Record<string, unknown>) => {
+      const px = parsePrintLength(props.width as string | undefined) ?? parsePrintLength('4cm')!
+      const label = typeof props.label === 'string' ? props.label : undefined
+      const line = <span aria-hidden="true" className="blank-line" style={{ width: px }}>{'\u00a0'}</span>
+      if (!label) return line
+      return (
+        <span className="blank-field">
+          <span className="whitespace-nowrap">{label}</span>
+          {line}
+        </span>
+      )
+    },
 
     'leaderboard': (props: Record<string, unknown>) => {
       const line = Number(props['data-source-line-start'] ?? props['dataSourceLineStart'])
@@ -1358,6 +1434,7 @@ export function createMarkdownComponents(
 
       const line = Number(props['data-source-line-start'] ?? props['dataSourceLineStart'])
       return (
+        <PrintFallback label="Interactive exercise">
         <PluginContainer
           onShareChange={onTagAttributeChange && line > 0
             ? (v: string | null) => onTagAttributeChange('plugin', line, 'share', v)
@@ -1368,6 +1445,7 @@ export function createMarkdownComponents(
           pageId={pageId}
           {...configProps}
         />
+        </PrintFallback>
       )
     },
   }

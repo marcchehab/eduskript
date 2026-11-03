@@ -616,7 +616,19 @@ A button students press to get AI feedback on what they drew or wrote by hand on
 <ai-feedback id="fb-quadratics" label="Check my solution" prompt="..." />
 \`\`\`
 
-**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`solution\` — reference solution the AI compares against, never shown to students: an Excalidraw drawing name (as in \`<excali src>\`) or an image file from the skript, e.g. \`solution="kraefte-loesung"\` below a task drawing \`<excali src="kraefte-aufgabe" />\` that students draw on; \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag after the exercise and the space students write in; with several tags under one h2, each sees everything above it (other tags' prompts excluded). Works for logged-out visitors too; requests are rate-limited per user or IP.`)
+**Reference solution:** put it in a \`<solution>\` block next to the tag — the AI uses the \`<solution>\` blocks between the tag and the next \`<ai-feedback>\` or h1/h2; the first tag of an h2 section also gets those above it in that section. Text, math and images (\`<excali src>\`, \`![](file.png)\`) inside are all sent. A normal \`<solution>\` stays a collapsible box students can open, so the AI may reveal it; \`<solution hidden>\` is shown to no student (only the AI gets it) and the AI won't reveal it:
+
+\`\`\`markdown
+<ai-feedback prompt="Check the forces." />
+
+<solution hidden>
+
+<excali src="kraefte-loesung" />
+
+</solution>
+\`\`\`
+
+**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`solution\` — legacy: a hidden reference drawing/image name; prefer a \`<solution hidden>\` block; \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag after the exercise and the space students write in; with several tags under one h2, each sees everything above it (other tags' prompts excluded). Works for logged-out visitors too; requests are rate-limited per user or IP.`)
 
   // Ping terminal
   sections.push(`## Ping Terminal
@@ -967,6 +979,10 @@ export function getCondensedSyntaxReference(): string {
 
 **Slide presentations:** any page can be presented full-screen as slides, split from the markdown itself (same source reads as a page OR a deck). A new slide starts at each \`#\`/\`##\` heading, each \`---\` (also a horizontal rule on the page), or \`---/\` (invisible break — splits slides, draws no rule). A \`---x\` line drops the following content from the deck until the next break/heading (still shown on the page) — for background prose you don't want projected. Markers go on their own line outside code blocks; empty slides are dropped; exam pages aren't presentable.
 
+**Solutions:** \`<solution title="Aufgabe 3">markdown</solution>\` is a collapsed solution box (no \`> \` prefixes needed, math and code work inside). Hidden for students on exam pages. \`<solution hidden>\` is never shown to students, only sent to a neighbouring \`<ai-feedback>\` as its reference solution (not printed). Prefer it over \`> [!solution]-\` callouts; both move to the end in the print view.
+
+**Printing (A4 print view, Print button on every page):** \`<pagebreak />\` starts a new printed page (invisible online). \`<spacer … print-height="6cm" />\` gives a writing area a different height on paper. \`<blank width="6cm" />\` is an inline fill-in line (default 4cm). With \`label\` it is a form field; several in one paragraph form one row whose lines shrink instead of wrapping: \`<blank label="Name:" width="6cm" /> <blank label="Klasse:" width="2cm" /> <blank label="Datum:" width="3cm" />\`. \`<onlyfor print>…</onlyfor>\` shows content only on paper, \`<onlyfor screen>…</onlyfor>\` only online. Videos, plugins and simulations print as a QR code to the page; quiz answer keys and solutions are listed at the end when they would be visible online.
+
 **Code-block file name:** \`\`\`python filename="window.py" shows the name in a title bar above the block.
 
 **Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
@@ -997,7 +1013,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Banner:** \`<banner [id="..."] [dismissible="false"] [color="orange|muted|paper|#hex"] [text="text|red|#hex"]>inline markdown</banner>\` on its own lines, first on the page — sticky announcement bar at the top edge; viewers can dismiss it (remembered per browser, keyed by id or text).
 
-**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [solution="excalidraw-name-or-image-file"] [id="fb1"] [label="Check my solution"] />\` — \`solution\` is a hidden reference drawing/image the AI compares against;button for students: sends their pen strokes above the tag back to the previous h1/h2 (rendered to an image) + that markdown; nothing below the tag to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
+**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — reference solution = the \`<solution>\` blocks after the tag up to the next tag or h1/h2 (the first tag of an h2 also gets those above it); \`<solution hidden>\` = AI only, not revealed; visible \`<solution>\` = the AI may reveal it. Button for students: sends their pen strokes above the tag back to the previous h1/h2 (rendered to an image) + that markdown; nothing below the tag to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
 
 **Ping:** \`<ping [host="wairualodge.co.nz"] [count="4"] [os="linux|macos|windows"] />\` — interactive terminal; students type \`ping [-c N] host\`. Server-side TCP connect (not ICMP; works where school wifi blocks ICMP). RTT/IP/loss are real; \`host\` auto-runs a demo; requires login; private addresses blocked; top-right button switches OS style.
 

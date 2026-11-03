@@ -4,6 +4,22 @@ import { useEffect, useMemo, useRef, memo, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Check, Copy } from 'lucide-react'
 import type { Extension } from '@codemirror/state'
+import { isPrintActive, usePrintMode } from '@/lib/print/print-mode'
+
+/**
+ * Print view: render every line. CodeMirror only renders the lines near the
+ * viewport and estimates the height of the rest, so a long block has a
+ * different height on screen than in print, and the paginator would place the
+ * page breaks after it wrongly. `viewState.printing` is CodeMirror's internal
+ * switch for exactly this (it sets it for 500ms on `beforeprint`); not public
+ * API, re-check on @codemirror/view upgrades.
+ */
+function setRenderAllLines(view: unknown, on: boolean) {
+  const v = view as { viewState?: { printing?: boolean }; requestMeasure?: () => void } | null
+  if (!v?.viewState || !v.requestMeasure) return
+  v.viewState.printing = on
+  v.requestMeasure()
+}
 
 /** 1-based line numbers per annotation kind (from remarkCodeAnnotations). */
 export interface CodeLineMarks {
@@ -32,8 +48,10 @@ function CodeBlockInner({ code, language, filename, className, showCopy = true, 
   const editorRef = useRef<unknown>(null)
   const [isMounted, setIsMounted] = useState(false)
   const [copied, setCopied] = useState(false)
-  const { resolvedTheme } = useTheme()
+  const { resolvedTheme: themeResolved, forcedTheme } = useTheme()
+  const resolvedTheme = forcedTheme ?? themeResolved
   const isDark = resolvedTheme === 'dark'
+  const printing = usePrintMode()
 
   // Callers build `marks` inline on every render; without this the editor would
   // be torn down and rebuilt each time. Key on the content, not the identity.
@@ -193,6 +211,7 @@ function CodeBlockInner({ code, language, filename, className, showCopy = true, 
       })
 
       editorRef.current = view
+      if (isPrintActive()) setRenderAllLines(view, true)
     }
 
     init()
@@ -205,12 +224,18 @@ function CodeBlockInner({ code, language, filename, className, showCopy = true, 
     }
   }, [isMounted, isDark, code, language, stableMarks])
 
+  useEffect(() => {
+    if (!printing) return
+    setRenderAllLines(editorRef.current, true)
+    return () => setRenderAllLines(editorRef.current, false)
+  }, [printing])
+
   return (
     <div className={`code-block relative my-4 rounded-lg border border-border overflow-hidden${stableMarks?.focus?.length ? ' code-block-focus' : ''} ${className || ''}`}>
       {showCopy && (
         <button
           onClick={handleCopy}
-          className={`absolute z-10 rounded bg-muted/80 ${filename ? 'top-0.5 right-1 p-1' : 'top-2 right-2 p-1.5'} hover:bg-muted text-muted-foreground hover:text-foreground transition-colors`}
+          className={`print-hide absolute z-10 rounded bg-muted/80 ${filename ? 'top-0.5 right-1 p-1' : 'top-2 right-2 p-1.5'} hover:bg-muted text-muted-foreground hover:text-foreground transition-colors`}
           title="Copy code"
         >
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}

@@ -44,3 +44,15 @@ describe('ai-feedback solution in source', () => {
     expect(out).toBe('<ai-feedback prompt="p" solution="a.png"></ai-feedback>')
   })
 })
+
+describe('insertHiddenSolution', () => {
+  it('inserts a hidden block after the tag, excali for drawings, ![]() for images', async () => {
+    const { insertHiddenSolution } = await import('@/lib/ai-feedback-solution-source')
+    const src = 'Task\n<ai-feedback prompt="x" />\nNext'
+    expect(insertHiddenSolution(src, 2, 'forces')).toBe(
+      'Task\n<ai-feedback prompt="x" />\n\n<solution hidden>\n\n<excali src="forces" />\n\n</solution>\nNext',
+    )
+    expect(insertHiddenSolution(src, 2, 'a.png')).toContain('![](a.png)')
+    expect(insertHiddenSolution(src, 1, 'a.png')).toBeNull()
+  })
+})

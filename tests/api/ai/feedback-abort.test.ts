@@ -35,7 +35,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/ai/feedback-context', () => ({
-  extractFeedbackContext: () => ({ prompt: null, sectionMarkdown: 'Exercise', solution: null }),
+  extractFeedbackContext: () => ({ prompt: null, sectionMarkdown: 'Exercise', solution: null, solutions: [] }),
 }))
 vi.mock('@/lib/ai/feedback-solution', () => ({ loadSolutionImage: vi.fn(async () => null) }))
 vi.mock('@/lib/metrics/buffer', () => ({ recordMetric: vi.fn() }))

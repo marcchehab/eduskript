@@ -417,6 +417,33 @@
   margin-left: calc(-1.25rem + 5px);
   margin-right: calc(-1.25rem + 5px);
 }
+/* <blank> fill-in lines (markdown-components.tsx). Plain: inline-block line
+   in running text. With label: a form field; a paragraph holding fields is a
+   flex row, the lines shrink (from their width, flex-shrink 1) instead of wrapping. */
+.blank-line {
+  display: inline-block;
+  min-width: 1.5em;
+  border-bottom: 1px solid currentColor;
+  margin-right: 0.75rem;
+  line-height: 1;
+}
+.blank-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.blank-field .blank-line {
+  margin-right: 0;
+  flex: 0 1 auto;
+}
+p:has(> .blank-field) {
+  display: flex;
+  align-items: baseline;
+  column-gap: 1.25rem;
+}
+
 @media print {
   .es-banner {
     display: none;
@@ -538,6 +565,184 @@
 
   @page {
     margin: 1.5cm; /* size omitted → respects the user's chosen paper */
+  }
+}
+
+/*
+ * Print view (html.print-layout, src/components/print/print-view.tsx). The
+ * screen shows exactly what prints: 1280px paper, page edges every
+ * PAGE_HEIGHT_PX (src/lib/print/geometry.ts), gaps pushing blocks to the next
+ * page. In print the paper is zoomed so its 992px (text column + 48px margins)
+ * = 180mm (A4 minus 15mm margins); keep zoom and @page margins in sync with
+ * geometry.ts.
+ */
+.print-pagebreak,
+.only-print {
+  display: none;
+}
+.print-layout .print-pagebreak,
+.print-layout .only-print {
+  display: block;
+}
+.print-layout .only-screen,
+.print-layout .print-hide,
+/* No drawing in the print view: strokes would be stored in print coordinates. */
+.print-layout [data-annotation-toolbar],
+.print-layout #annotation-toolbar-aside {
+  display: none !important;
+}
+.print-layout .annotation-canvas {
+  pointer-events: none !important;
+}
+/* Kept in the layout (same height as online), not shown. */
+.print-layout .print-invisible {
+  visibility: hidden !important;
+}
+/* Measurements must not catch a folding callout halfway. */
+.print-layout #paper * {
+  transition: none !important;
+}
+.print-layout main {
+  transform: none !important;
+}
+/* No transform override: on narrow screens the paper keeps its --paper-scale
+   and the paginator divides it out. */
+.print-layout .paper-responsive {
+  width: 1280px !important;
+  max-width: none !important;
+  padding-left: 12rem !important;
+  padding-right: 12rem !important;
+  padding-top: 2rem !important;
+}
+/* Printed paper is the text column plus 48px margins (see @media print). */
+.print-layout .fullwidth {
+  margin-inline: -48px;
+}
+.print-page-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px dashed hsl(var(--border));
+  pointer-events: none;
+  z-index: 5;
+}
+.print-page-edge::after {
+  content: 'Page ' attr(data-page);
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+@media print {
+  .only-print {
+    display: block;
+  }
+  .only-screen,
+  .print-hide,
+  .print-bar,
+  /* App chrome (quest widget, help video, toolbars) is position: fixed. */
+  html.print-layout .fixed,
+  /* The drawing canvas has an intrinsic width (paper px) wider than the A4
+     page, so Chrome would shrink the whole print to fit. Committed strokes are
+     section-anchored SVGs and still print. */
+  .print-layout .annotation-canvas,
+  .print-page-edge {
+    display: none !important;
+  }
+  /* Below the last paper line the page shows the app background (gray). */
+  html.print-layout,
+  html.print-layout body,
+  html.print-layout main,
+  html.print-layout .bg-background {
+    background: #fff !important;
+  }
+  /* Text column 896px + 48px margins = 992px onto 180mm (src/lib/print/geometry.ts).
+     overflow: clip — the stroke SVGs are as wide as the 1280px screen paper;
+     unclipped, Chrome shrinks the whole print to fit them. Strokes beyond the
+     48px margin are cut. */
+  /* Rainbow title shadow: Chrome prints background-clip:text with the
+     gradient box (or its anti-aliased edges) visible. Not printed; the shadow
+     layer keeps its space. */
+  .prose-theme h1.color-title-js .color-title-shadow {
+    visibility: hidden !important;
+  }
+  .prose-theme h1::before {
+    display: none !important;
+  }
+  /* Quiz text inputs print empty, without the "Enter your answer" hint. */
+  html.print-layout textarea::placeholder,
+  html.print-layout input::placeholder {
+    color: transparent !important;
+  }
+  html.print-layout #paper {
+    overflow: clip !important;
+    width: 992px !important;
+    padding-left: 48px !important;
+    padding-right: 48px !important;
+    transform: none !important;
+    zoom: 0.685801; /* 180mm / 992px */
+    /* Page margins 15mm top, 18mm bottom in zoomed px (mm × 3.7795 / zoom),
+       repeated on every page; 15mm left as margin. */
+    margin-left: 82.66px !important;
+    margin-right: 0 !important;
+    padding-top: 82.66px !important;
+    padding-bottom: 99.2px !important;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    /* Under zoom Chrome rounds glyph advances to whole px of the small print
+       font size; bold text came out visibly letter-spaced. */
+    text-rendering: geometricPrecision;
+  }
+  /* Gaps and page breaks become forced breaks: every page starts where the
+     screen shows it, even when the print layout runs a few px longer. */
+  html.print-layout .print-gap,
+  html.print-layout .print-pagebreak {
+    height: 0 !important;
+    break-before: page;
+  }
+  /* A break with nothing before it on its page does not break. */
+  html.print-layout .print-pagebreak.print-noop {
+    break-before: auto;
+  }
+  /* Second break in a row: a 1px element holds the blank page. */
+  html.print-layout .print-pagebreak.print-blank {
+    height: 1px !important;
+    break-before: auto;
+    break-after: page;
+  }
+  /* Scroll containers are monolithic in Chrome's print layout: a code block
+     that does not fit would move to the next page as a whole. */
+  html.print-layout #paper .cm-scroller,
+  html.print-layout #paper .overflow-auto,
+  html.print-layout #paper .overflow-x-auto {
+    overflow: clip !important;
+  }
+  /* Chrome repeats a table header on every page; the screen layout has it once. */
+  html.print-layout #paper thead {
+    display: table-row-group;
+  }
+  /* The paginator already placed every break; browser-chosen breaks would
+     shift content away from its annotations. */
+  html.print-layout img,
+  html.print-layout figure,
+  html.print-layout table {
+    break-inside: auto;
+  }
+  html.print-layout h1,
+  html.print-layout h2,
+  html.print-layout h3 {
+    break-after: auto;
+  }
+  /* Margin 0 leaves the browser no room for its own header and footer
+     (title, URL, date). The page margins come from #paper's padding, cloned
+     onto every page fragment. Costs the page number: CSS margin boxes need a
+     page margin. */
+  @page {
+    size: A4;
+    margin: 0;
   }
 }
 

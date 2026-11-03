@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { registerEditor } from './mounted-registry'
+import { usePrintMode } from '@/lib/print/print-mode'
 
 // When true, descendant DeferredMounts skip lazy deferral and mount immediately.
 // Set by contexts where deferred mounting is unsafe because content is revealed
@@ -54,6 +55,14 @@ export function DeferredMount({
   const forcedEager = useContext(EagerMountContext)
   const [mounted, setMounted] = useState(eager || forcedEager)
   const ref = useRef<HTMLDivElement>(null)
+  const printing = usePrintMode()
+
+  // The print view lays out the whole page as it will print; a placeholder's
+  // estimated height would put every page break after it in the wrong place.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot, mirrors the beforeprint path below
+    if (printing) setMounted(true)
+  }, [printing])
 
   // Keep this editor id in the mounted-registry for the whole block lifetime so
   // orphan detection doesn't flag a not-yet-scrolled-to editor as orphaned.

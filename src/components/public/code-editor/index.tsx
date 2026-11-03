@@ -372,7 +372,8 @@ export const CodeEditor = memo(function CodeEditor({
   // locally right after saving, so briefing and panel show it without a reload.
   const [karaWorldEdited, setKaraWorldEdited] = useState<string | null>(null)
   const karaWorldSource = karaWorldEdited ?? karaWorldProp
-  const { resolvedTheme } = useTheme()
+  const { resolvedTheme: themeResolved, forcedTheme } = useTheme()
+  const resolvedTheme = forcedTheme ?? themeResolved
   const { data: session } = useSession()
   const { selectedClass, selectedStudent, isTeacher } = useTeacherClass()
   const dialog = useAlertDialog()

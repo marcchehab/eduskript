@@ -15,7 +15,8 @@ import { CoupledVideoProvider } from './coupled-video-context'
 import { StickMeProvider } from './stick-me'
 import { pageKaraClues } from '@/lib/kara/world'
 import { fencedRanges } from '@/lib/markdown-fences'
-import { getAiFeedbackSolution, setAiFeedbackSolution } from '@/lib/ai-feedback-solution-source'
+import { getAiFeedbackSolution, setAiFeedbackSolution, insertHiddenSolution } from '@/lib/ai-feedback-solution-source'
+import { linkedSolutions } from '@/lib/ai/feedback-context'
 
 interface MarkdownRendererProps {
   content: string
@@ -217,6 +218,15 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       if (!notify) return
       const newContent = setAiFeedbackSolution(contentRef.current, line, solution)
       if (newContent !== null && newContent !== contentRef.current) notify(newContent)
+    },
+    solutions: (line: number) => linkedSolutions(contentRef.current, line - 1),
+    addHidden: (line: number, name: string) => {
+      const notify = onContentChangeRef.current
+      if (!notify) return
+      // Replaces a legacy solution="…" attribute: one source of truth.
+      const base = setAiFeedbackSolution(contentRef.current, line, null) ?? contentRef.current
+      const newContent = insertHiddenSolution(base, line, name)
+      if (newContent !== null) notify(newContent)
     },
     onUploaded: () => onFilesChangedRef.current?.(),
   }), [])

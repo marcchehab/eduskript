@@ -36,7 +36,8 @@ export const HtmlPreviewEditor = memo(function HtmlPreviewEditor({
   initialCode,
   height = 400,
 }: HtmlPreviewEditorProps) {
-  const { resolvedTheme } = useTheme()
+  const { resolvedTheme: themeResolved, forcedTheme } = useTheme()
+  const resolvedTheme = forcedTheme ?? themeResolved
   const [mounted, setMounted] = useState(false)
   const [code, setCode] = useState(initialCode)
   const [previewSrc, setPreviewSrc] = useState(initialCode)

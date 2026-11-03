@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Printer, Trash2 } from 'lucide-react'
+import { usePrintMode } from '@/lib/print/print-mode'
+import { MAX_SPACER_PRINT_PX, PAPER_PX_PER_MM, formatPrintLengthCm, parsePrintLength } from '@/lib/print/geometry'
 
 /**
  * Author-placed writing area baked into page content (unlike the per-user
@@ -32,19 +34,46 @@ interface ContentSpacerProps {
   id?: string
   height: number
   pattern: SpacerPattern
+  /** Height in the print view, as written: "6cm", "6" (cm), "60mm" or "400px". Unset = same as online. Capped at MAX_SPACER_PRINT_PX. */
+  printHeight?: string
   /** Called with the id and the full replacement tag string (empty = delete). If omitted, the component is read-only (public render). */
   onChange?: (id: string | undefined, markdown: string) => void
   sourceLineStart?: string
   sourceLineEnd?: string
 }
 
-function buildTag(id: string | undefined, height: number, pattern: SpacerPattern): string {
+function buildTag(id: string | undefined, height: number, pattern: SpacerPattern, printHeight?: string): string {
   const idAttr = id ? ` id="${id}"` : ''
-  return `<spacer${idAttr} pattern="${pattern}" height="${Math.round(height)}" />`
+  const printAttr = printHeight ? ` print-height="${printHeight}"` : ''
+  return `<spacer${idAttr} pattern="${pattern}" height="${Math.round(height)}"${printAttr} />`
 }
 
-export function ContentSpacer({ id, height, pattern, onChange, sourceLineStart, sourceLineEnd }: ContentSpacerProps) {
+export function ContentSpacer({ id, height, pattern, printHeight, onChange, sourceLineStart, sourceLineEnd }: ContentSpacerProps) {
   const [currentHeight, setCurrentHeight] = useState(height)
+  const printing = usePrintMode()
+  const parsedPrintPx = parsePrintLength(printHeight)
+  const printPx = parsedPrintPx === undefined ? undefined : Math.min(parsedPrintPx, MAX_SPACER_PRINT_PX)
+  // The gizmo shows and takes centimetres; "60mm" in the source shows as "6".
+  const cmText = (v: string | undefined) => {
+    const px = parsePrintLength(v)
+    return px === undefined ? (v ?? '') : String(Math.round((px / PAPER_PX_PER_MM / 10) * 10) / 10)
+  }
+  const [printDraft, setPrintDraft] = useState(cmText(printHeight))
+  // Re-sync the field when the source changes (reset during render, no effect).
+  const [printSyncedFor, setPrintSyncedFor] = useState(printHeight)
+  if (printSyncedFor !== printHeight) {
+    setPrintSyncedFor(printHeight)
+    setPrintDraft(cmText(printHeight))
+  }
+  const commitPrintHeight = () => {
+    const draft = printDraft.trim()
+    const px = draft ? parsePrintLength(draft) : undefined
+    // Unparseable input reverts to the current value.
+    if (draft && px === undefined) { setPrintDraft(cmText(printHeight)); return }
+    const normalized = px === undefined ? undefined : formatPrintLengthCm(Math.min(px, MAX_SPACER_PRINT_PX))
+    setPrintDraft(cmText(normalized))
+    if ((normalized ?? '') !== (printHeight ?? '')) onChange?.(id, buildTag(id, currentHeight, pattern, normalized))
+  }
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef<{ startY: number; startHeight: number } | null>(null)
 
@@ -68,11 +97,11 @@ export function ContentSpacer({ id, height, pattern, onChange, sourceLineStart, 
 
   const handleMouseUp = useCallback(() => {
     if (isDragging && onChange) {
-      onChange(id, buildTag(id, currentHeight, pattern))
+      onChange(id, buildTag(id, currentHeight, pattern, printHeight))
     }
     setIsDragging(false)
     dragStartRef.current = null
-  }, [isDragging, onChange, id, currentHeight, pattern])
+  }, [isDragging, onChange, id, currentHeight, pattern, printHeight])
 
   useEffect(() => {
     if (!isDragging) return
@@ -85,8 +114,8 @@ export function ContentSpacer({ id, height, pattern, onChange, sourceLineStart, 
   }, [isDragging, handleMouseMove, handleMouseUp])
 
   const changePattern = useCallback((p: SpacerPattern) => {
-    onChange?.(id, buildTag(id, currentHeight, p))
-  }, [onChange, id, currentHeight])
+    onChange?.(id, buildTag(id, currentHeight, p, printHeight))
+  }, [onChange, id, currentHeight, printHeight])
 
   const handleDelete = useCallback(() => {
     onChange?.(id, '')
@@ -99,7 +128,10 @@ export function ContentSpacer({ id, height, pattern, onChange, sourceLineStart, 
   return (
     <div
       className={`spacer-element spacer-${pattern} group relative my-4 rounded-md ${onChange ? 'ring-1 ring-border/60' : ''}`}
-      style={{ height: `${currentHeight}px` }}
+      style={{ height: `${printing && printPx ? printPx : currentHeight}px` }}
+      // Print view: strokes below this spacer move by the height difference
+      // (section-anchored-strokes.tsx, data-print-online-height).
+      data-print-online-height={printing && printPx ? currentHeight : undefined}
       {...dataAttrs}
     >
       {/* Editor chrome — only when onChange is provided */}
@@ -122,6 +154,20 @@ export function ContentSpacer({ id, height, pattern, onChange, sourceLineStart, 
                 </span>
               </button>
             ))}
+            <span className="mx-0.5 w-px self-stretch bg-border" />
+            <label className="flex items-center gap-0.5 px-1 text-[11px] text-muted-foreground" title={`Height when printed, in cm, at most ${formatPrintLengthCm(MAX_SPACER_PRINT_PX).replace('cm', '')} (empty = same as online)`}>
+              <Printer className="h-3.5 w-3.5" />
+              <input
+                aria-label="Print height in cm"
+                value={printDraft}
+                placeholder="auto"
+                onChange={(e) => setPrintDraft(e.target.value)}
+                onBlur={commitPrintHeight}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitPrintHeight() } }}
+                className="w-9 rounded border border-border bg-background px-1 py-0 text-[11px]"
+              />
+              cm
+            </label>
             <span className="mx-0.5 w-px self-stretch bg-border" />
             <button
               type="button"

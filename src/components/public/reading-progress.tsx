@@ -236,7 +236,7 @@ export function ReadingProgress() {
   const chapterFills = getChapterFills(chapters, progress)
 
   return (
-    <div className="fixed top-0 left-0 w-full z-50 flex items-start gap-[2px] px-[2px]">
+    <div className="print-hide print:hidden fixed top-0 left-0 w-full z-50 flex items-start gap-[2px] px-[2px]">
       {chapters.map((chapter, i) => {
         const isActive = i === activeIndex
         const isHovered = i === hoveredIndex

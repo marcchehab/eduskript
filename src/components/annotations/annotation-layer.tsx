@@ -3354,7 +3354,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           composite it (otherwise the indicator would scale with the page). */}
       {mounted && process.env.NODE_ENV === 'development' && createPortal(
         <div
-          className="fixed bottom-4 right-4 bg-black/80 text-white text-xs font-mono px-2 py-1 rounded pointer-events-none"
+          className="print-hide print:hidden fixed bottom-4 right-4 bg-black/80 text-white text-xs font-mono px-2 py-1 rounded pointer-events-none"
           style={{ zIndex: 99999 }}
         >
           zoom {(zoom * 100).toFixed(1)}%

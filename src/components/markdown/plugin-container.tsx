@@ -69,7 +69,8 @@ export function PluginContainer({
   // Bumped by Retry so the fetch effect runs again.
   const [loadAttempt, setLoadAttempt] = useState(0)
 
-  const { resolvedTheme } = useTheme()
+  const { resolvedTheme: themeResolved, forcedTheme } = useTheme()
+  const resolvedTheme = forcedTheme ?? themeResolved
   const { siteId } = useCurrentSite()
   // Teachers get technical details + an edit link when a plugin fails;
   // students only a neutral note (QA decision 2026-10-05).

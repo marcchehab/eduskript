@@ -2,6 +2,7 @@
 
 import { useState, Children, ReactNode, ReactElement, isValidElement } from 'react'
 import { cn } from '@/lib/utils'
+import { usePrintMode } from '@/lib/print/print-mode'
 
 interface TabsProps {
   items: string[]
@@ -26,6 +27,7 @@ interface TabsProps {
  */
 function TabsComponent({ items, children, tabContents: preExtractedContents, className, sourceLineStart, sourceLineEnd }: TabsProps) {
   const [activeTab, setActiveTab] = useState(0)
+  const printing = usePrintMode()
 
   // Use pre-extracted contents if provided, otherwise collect from children
   let tabContents: ReactNode[] = preExtractedContents || []
@@ -70,6 +72,15 @@ function TabsComponent({ items, children, tabContents: preExtractedContents, cla
           heading) so it doesn't add dead space under the tab strip. */}
       <div className="p-4 bg-card [&>*:first-child]:mt-0!">
         {tabContents[activeTab]}
+        {/* Print view: the other tabs follow the active one, which stays where
+            it is online. data-print-online-height="0": strokes below move by
+            the added height (section-anchored-strokes.tsx). */}
+        {printing && tabContents.map((content, index) => index === activeTab ? null : (
+          <div key={index} data-print-online-height="0" className="mt-4 border-t border-border pt-2">
+            <p className="m-0 text-sm font-semibold text-muted-foreground">{items[index]}</p>
+            {content}
+          </div>
+        ))}
       </div>
     </div>
   )

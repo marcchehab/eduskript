@@ -115,6 +115,9 @@ export const sanitizeSchema = {
     'image', // Alias for <img> — passes through sanitizer, mapped to img handler
     'excali', // <excali> shorthand for excalidraw drawings
     'spacer', // <spacer> author-placed writing area (blank/checkered/lines/dots)
+    'solution', // <solution title> collapsed online, moved to the end in the print view
+    'pagebreak', // <pagebreak /> new printed page, invisible online
+    'blank', // <blank width="5cm" /> inline fill-in line (worksheets: Name, Datum)
     'evidence-board', // <evidence-board> Kara evidence collected in this skript
     'kara-archive', // <kara-archive of="level"> student's archived winning Kara code (kara-archive.tsx)
     'theme-toggle', // <theme-toggle> inline light/dark switch (same button as the page toolbar)
@@ -174,7 +177,9 @@ export const sanitizeSchema = {
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
     'excali': ['src', 'alt', 'width', 'align', 'wrap', 'lightonly'],
     // <spacer> writing area. id keys the round-trip find/replace on edit.
-    'spacer': ['id', 'height', 'pattern'],
+    'spacer': ['id', 'height', 'pattern', 'printHeight', 'print-height'],
+    'solution': ['title', 'hidden'],
+    'blank': ['width', 'label'],
     'evidence-board': ['title', 'levels'],
     'kara-archive': ['of', 'title', 'fallback'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)
@@ -209,7 +214,7 @@ export const sanitizeSchema = {
     'ai-feedback': ['id', 'prompt', 'label'],
     'login-codes': ['hook', 'interval'],
     // class="3a" arrives as className (allowed on *); these are the rest.
-    'onlyfor': ['auth', 'anon', 'students', 'prompt', 'class'],
+    'onlyfor': ['auth', 'anon', 'students', 'prompt', 'class', 'print', 'screen'],
     'question': ['id', 'type', 'showfeedback', 'feedback', 'attempts', 'expected', 'tolerance', 'window', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback', 'from'],
@@ -453,7 +458,7 @@ function normalizeQuestionSpacing(markdown: string): string {
  */
 const CONTAINER_TAGS = [
   'flex', 'flex-item', 'tabs-container', 'tab-item',
-  'fullwidth', 'stickme', 'left', 'center', 'right', 'question', 'kara-archive',
+  'fullwidth', 'stickme', 'left', 'center', 'right', 'question', 'kara-archive', 'solution',
 ]
 
 /**
@@ -523,7 +528,14 @@ function delimitContainerTags(markdown: string): string {
     if (!inFence && openRe.test(line)) {
       if (out.length > 0 && !blank(out[out.length - 1])) out.push('')
       out.push(line)
+      // Also inside: without it the first lines become raw HTML text and a
+      // closing tag right after a paragraph line is swallowed by the paragraph
+      // (CommonMark: HTML type 7 cannot interrupt a paragraph), leaving the
+      // container open to the end of the page. <question> keeps its raw
+      // prompt text (see rehypeMarkdownChildren).
+      if (!/^\s*<(question|kara-archive)\b/i.test(line) && !blank(lines[i + 1])) out.push('')
     } else if (!inFence && closeRe.test(line)) {
+      if (!/^\s*<\/(question|kara-archive)>/i.test(line) && out.length > 0 && !blank(out[out.length - 1])) out.push('')
       out.push(line)
       if (!blank(lines[i + 1])) out.push('')
     } else {

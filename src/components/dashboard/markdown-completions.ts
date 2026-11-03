@@ -66,6 +66,9 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'pricing', info: 'Public price table with live plan prices', apply: '<pricing lang="de" />' },
   { label: 'phet', info: 'Embed a PhET simulation (Insert → PhET to browse)', apply: '<phet sim="" locale="de" />', cursorOffset: 11 },
   { label: 'spacer', info: 'Blank writing area for students to solve on by hand', apply: '<spacer pattern="checkered" height="200" />' },
+  { label: 'solution', info: 'Collapsed solution; in the print view moved to the end', apply: '<solution>\n\n</solution>' },
+  { label: 'blank', info: 'Fill-in line; with label="Name:" a form field', apply: '<blank label="Name:" width="6cm" />' },
+  { label: 'pagebreak', info: 'New page when printed; invisible online', apply: '<pagebreak />' },
   { label: 'cta', info: 'Call-to-action link styled as a button', apply: '<cta href="">Text</cta>', cursorOffset: 11 },
   { label: 'newsletter', info: 'Sign-up box for Eduskript product updates', apply: '<newsletter />' },
   { label: 'banner', info: 'Sticky announcement bar at the top of the page', apply: '<banner>\n\n</banner>' },
@@ -214,6 +217,15 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'pattern', info: 'checkered | lines | dots | blank' },
     { label: 'height', info: 'Height in px (e.g. 200)' },
     { label: 'id', info: 'Unique spacer ID' },
+    { label: 'print-height', info: 'Height when printed, e.g. 6cm (default: same as online)' },
+  ],
+  'blank': [
+    { label: 'width', info: 'Line length: "6cm", "40mm" (default 4cm)' },
+    { label: 'label', info: 'Form field, e.g. label="Name:" — fields in one paragraph stay on one row, lines shrink to fit' },
+  ],
+  'solution': [
+    { label: 'title', info: 'Shown in the heading and in the printed solutions list' },
+    { label: 'hidden', info: 'Only for the neighbouring <ai-feedback>: never shown to students, the AI will not reveal it' },
   ],
   'cta': [
     { label: 'href', info: 'Link target' },
@@ -283,6 +295,8 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'students', info: 'Your students (any class)' },
     { label: 'class', info: 'Students of one class (name or invite code)' },
     { label: 'prompt', info: 'Text shown to everyone else' },
+    { label: 'print', info: 'Only in the print view and on paper' },
+    { label: 'screen', info: 'Only online, never printed' },
   ],
   'audio': [
     { label: 'src', info: 'Audio filename' },

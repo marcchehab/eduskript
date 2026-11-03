@@ -9,6 +9,7 @@
  */
 
 import { fencedRanges } from '@/lib/markdown-fences'
+import { isSolutionImageFile } from '@/lib/ai/feedback-context'
 
 const TAG_RE = /<ai-feedback\b[^>]*>/gi
 const SOLUTION_RE = /\s+solution\s*=\s*"[^"]*"/i
@@ -41,4 +42,25 @@ export function setAiFeedbackSolution(content: string, line: number, solution: s
     text = text.replace(/\s*(\/?>)$/, ` solution="${value}" $1`).replace(/ +>$/, '>')
   }
   return content.slice(0, tag.start) + text + content.slice(tag.start + tag.text.length)
+}
+
+/**
+ * Content with a `<solution hidden>` block holding the drawing/image `name`
+ * inserted after the tag on `line` (after its closing tag when it has one);
+ * null when no tag is on that line. Images use ![](name), anything else
+ * <excali src>, the same split as solutionFilename().
+ */
+export function insertHiddenSolution(content: string, line: number, name: string): string | null {
+  const tag = findTag(content, line)
+  if (!tag) return null
+  let end = tag.start + tag.text.length
+  if (!tag.text.endsWith('/>')) {
+    const close = content.slice(end).search(/<\/ai-feedback>/i)
+    if (close !== -1) end += close + '</ai-feedback>'.length
+  }
+  const eol = content.indexOf('\n', end)
+  const at = eol === -1 ? content.length : eol
+  const ref = name.replace(/"/g, '')
+  const body = isSolutionImageFile(ref) ? `![](${ref})` : `<excali src="${ref}" />`
+  return `${content.slice(0, at)}\n\n<solution hidden>\n\n${body}\n\n</solution>${content.slice(at)}`
 }

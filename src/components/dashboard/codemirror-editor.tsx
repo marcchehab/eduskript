@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Strikethrough, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music, Megaphone, Orbit, Trophy } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Strikethrough, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music, Megaphone, Orbit, Trophy, ScissorsLineDashed, CheckCircle2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1578,6 +1578,29 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertPing = () => insertBlockTemplate('<ping />\n')
   const insertMolecule = () => insertBlockTemplate('<molecule smiles="CC(=O)Oc1ccccc1C(=O)O" name="Aspirin" />\n')
   const insertReaction = () => insertBlockTemplate('$$\\ce{2H2 + O2 -> 2H2O}$$\n')
+  const insertPageBreak = () => insertBlockTemplate('<pagebreak />\n')
+  // Wraps the selected lines; without a selection inserts a box with its
+  // placeholder text selected for overtyping.
+  const insertSolution = () => {
+    const view = editorViewRef.current
+    if (view && !useSimpleEditor && !view.state.selection.main.empty) {
+      const { from, to } = view.state.selection.main
+      const start = view.state.doc.lineAt(from).from
+      const end = view.state.doc.lineAt(to).to
+      const body = view.state.doc.sliceString(start, end)
+      const insert = `<solution>\n${body}\n</solution>`
+      view.dispatch({
+        changes: { from: start, to: end, insert },
+        selection: { anchor: start + '<solution>\n'.length, head: start + '<solution>\n'.length + body.length },
+        scrollIntoView: true,
+      })
+      onChange(view.state.doc.toString())
+      view.focus()
+      return
+    }
+    const placeholder = 'Solution text'
+    insertBlockTemplate(`<solution>\n${placeholder}\n</solution>\n`, ['<solution>\n'.length, '<solution>\n'.length + placeholder.length])
+  }
   const insertLeaderboard = () => insertBlockTemplate('<leaderboard />\n')
   const insertAiFeedback = () => insertBlockTemplate('<ai-feedback prompt="Check the work in this section. Point out the first error, do not reveal the solution." />\n')
   const insertCta = () => insertBlockTemplate('<cta href="https://eduskript.org">Visit Eduskript</cta>\n')
@@ -2162,6 +2185,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 </RibbonGroup>
                 <RibbonGroup caption="Interactive">
                   <RibbonBigButton icon={<CircleHelp />} label="Quiz" title="Add Quiz Question" onClick={insertQuiz} />
+                  <RibbonBigButton icon={<CheckCircle2 />} label="Solution" title="Collapsed solution; printed at the end" onClick={insertSolution} />
                   <RibbonBigButton icon={<Sparkles />} label="AI Feedback" title="AI feedback on drawings, plots, and photos in this section" onClick={insertAiFeedback} />
                   <RibbonBigButton icon={<Trophy />} label="Leaderboard" title="Class ranking with all points on this page" onClick={insertLeaderboard} />
                   <RibbonBigButton icon={<AppWindow />} label="Tabs" title="Insert tabbed sections" onClick={insertTabsContainer} />
@@ -2337,6 +2361,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 </RibbonGroup>
                 <RibbonGroup caption="Page">
                   <RibbonBigButton icon={<Megaphone />} label="Banner" title="Sticky announcement bar at the top of the page (banner)" onClick={insertBanner} />
+                  <RibbonBigButton icon={<ScissorsLineDashed />} label="Page break" title="Start a new page when printed (invisible online)" onClick={insertPageBreak} />
                 </RibbonGroup>
                 {layoutRibbonExtra}
               </>

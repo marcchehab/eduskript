@@ -4,7 +4,8 @@ import { useEffect, useId, useState } from 'react'
 import { useTheme } from 'next-themes'
 
 export function MermaidDiagram({ definition }: { definition: string }) {
-  const { resolvedTheme } = useTheme()
+  const { resolvedTheme: themeResolved, forcedTheme } = useTheme()
+  const resolvedTheme = forcedTheme ?? themeResolved
   const [svg, setSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const rawId = useId()

@@ -17,6 +17,7 @@ import type { SiteTheme } from '@/lib/site-theme'
 import { PublicThemeToggle } from './theme-toggle'
 import { PublicSoundToggle } from './sound-toggle'
 import { ReflowToggle } from './reflow-toggle'
+import { PrintButton } from '@/components/print/print-view'
 import { AuthButton } from './auth-button'
 import { FontSizeControls } from './font-size-controls'
 import { SyncStatusButton } from '@/components/ui/sync-status'
@@ -497,11 +498,12 @@ export function PublicSiteLayout({
         {customCss && <style data-site-custom-css="" dangerouslySetInnerHTML={{ __html: customCss }} />}
         {showReadingProgress && <ReadingProgress />}
 
-      {/* Top-right controls - always visible when sidebar is hidden, otherwise only on mobile */}
-      <div className={`floating-page-controls print:hidden ${hideSidebar ? '' : 'min-[1344px]:hidden '}fixed top-8 right-4 z-50 flex items-center gap-2`}>
+      {/* Top-right page controls, on every screen size (the sidebar has no copy) */}
+      <div className="floating-page-controls print:hidden fixed top-8 right-4 z-50 flex items-center gap-2">
         <AdminToolbox pageId={pageId} />
         <FontSizeControls />
         <ReflowToggle />
+        <PrintButton />
         <PublicSoundToggle />
         <PublicThemeToggle />
         <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
@@ -570,23 +572,21 @@ export function PublicSiteLayout({
                 >
                   <ChevronRight className="w-5 h-5" />
                 </Button>
-                <AdminToolbox pageId={pageId} />
-                <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
-                <ReflowToggle />
-                <PublicSoundToggle />
-        <PublicThemeToggle />
-                <FontSizeControls orientation="vertical" />
               </div>
             ) : (
               /* Expanded sidebar header */
               <>
-                {/* Row 1: wide logo, or Icon + Page name - clickable as home link */}
+                {/* Row 1: wide logo, or Icon + Page name (home link), collapse button on the right.
+                    No balancing spacer on the left: it would cost 36px and truncate names like
+                    "informatikgarten.ch" (icon + name = 226px of 272px). The title is therefore
+                    centred in the space left of the button, ~20px left of the sidebar centre. */}
+                <div className="flex items-center gap-1">
                 <button
                   onClick={() => {
                     router.push(getHomeUrl())
                     setIsSidebarOpen(false)
                   }}
-                  className="flex items-center justify-center gap-3 cursor-pointer w-full"
+                  className="flex min-w-0 flex-1 items-center justify-center gap-3 cursor-pointer"
                   title="Go to homepage"
                 >
                   {teacher.titleStyle === 'logo' && teacher.logoUrl ? (
@@ -627,6 +627,16 @@ export function PublicSiteLayout({
                     </>
                   )}
                 </button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                  className="w-9 shrink-0 p-2"
+                  title="Collapse sidebar"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </Button>
+                </div>
 
                 {/* Row 2: Description (if exists) - supports markdown links */}
                 {teacher.pageDescription && (
@@ -634,28 +644,6 @@ export function PublicSiteLayout({
                     <InlineMarkdown>{teacher.pageDescription}</InlineMarkdown>
                   </p>
                 )}
-
-                {/* Row 3: Controls centered, collapse on right */}
-                <div className="flex items-center mt-6">
-                  {/* Spacer to balance the collapse button */}
-                  <div className="w-9" />
-                  <div className="flex-1 flex items-center justify-center gap-2">
-                    <AdminToolbox pageId={pageId} />
-                    <FontSizeControls />
-                    <ReflowToggle />
-                    <PublicSoundToggle />
-        <PublicThemeToggle />
-                    <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                    className="p-2"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </Button>
-                </div>
 
               </>
             )}

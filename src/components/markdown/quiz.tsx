@@ -27,6 +27,8 @@ import { reportScore } from '@/lib/plugin-share'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { TextAnswerHistory } from './text-answer-history'
 import { withSite } from '@/lib/site-scope-client'
+import { usePrintState } from '@/lib/print/print-mode'
+import { useRegisterSolution } from '@/lib/print/solutions'
 
 interface QuestionProps {
   children: ReactNode
@@ -639,8 +641,46 @@ function QuestionInner({
       </div>
     )
 
+  // Print view: the answer key goes to the solutions at the end when feedback
+  // would reveal it online (not with feedback="none", exams or surveys), always
+  // in solution mode 'all' (except surveys), never in 'none'. The key renders
+  // the answers' own nodes, so math and formatting survive.
+  const { active: printing, solutions: solutionMode } = usePrintState()
+  const printRef = useRef<HTMLDivElement>(null)
+  const printKey: ReactNode = (() => {
+    if (type === 'single' || type === 'multiple') {
+      const correct = Children.toArray(children).filter(isAnswerElement).filter((el) => isCorrect(el.props))
+      if (correct.length === 0) return null
+      return (
+        <ul className="m-0">
+          {correct.map((el, i) => <li key={i} className="my-0">{splitAnswerContent(el.props).label}</li>)}
+        </ul>
+      )
+    }
+    if (type === 'text') return expected != null ? String(expected) : null
+    return sliderTarget ?? null
+  })()
+  const keyVisible = mode === 'check' || mode === 'instant' || mode === 'review'
+  const keyInPrint = solutionMode === 'all' ? !surveyMode : solutionMode === 'online' && keyVisible
+  const printN = useRegisterSolution(
+    printing && printKey != null && keyInPrint,
+    printRef,
+    printKey != null ? <div className="font-medium">{printKey}</div> : null,
+    undefined,
+    prompt ?? 'Question',
+  )
+  // Rows that only make sense online (Check button, "Saved") stay in the
+  // layout but invisible while printing, so the card keeps its online height
+  // and strokes below it stay on their text.
+  const printInvisible = printing ? 'invisible' : ''
+
   return (
-    <div className="space-y-4 border rounded-lg p-4 shadow-xs bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
+    <div ref={printRef} className="relative space-y-4 border rounded-lg p-4 shadow-xs bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
+      {/* Absolute in the bottom padding: adds no height (see printInvisible).
+          First child: space-y-* margins key on the last child. */}
+      {printing && printN != null && (
+        <div className="absolute bottom-0.5 right-4 m-0! text-xs text-green-700">{printN} <span className="text-muted-foreground">(at the end)</span></div>
+      )}
       {/* Single/Multiple Choice */}
       {(type === 'single' || type === 'multiple') && (
         <div className="space-y-2">
@@ -958,7 +998,7 @@ function QuestionInner({
           verdict line once a check happened. Locked questions show nothing —
           the marked answers speak for themselves. */}
       {checkMode && !stageLocked && !checked && (
-        <div className="flex items-center justify-end gap-3 pt-2">
+        <div className={cn('flex items-center justify-end gap-3 pt-2', printInvisible)}>
           {partialReveal && (
             <span className="text-sm text-red-600 dark:text-red-400">
               {attemptsMax === Infinity
@@ -976,7 +1016,7 @@ function QuestionInner({
         </div>
       )}
       {checkMode && checked && currentCorrect === false && (
-        <div className="flex items-center justify-end pt-2 text-sm text-muted-foreground">
+        <div className={cn('flex items-center justify-end pt-2 text-sm text-muted-foreground', printInvisible)}>
           {attemptsMax === 1 ? 'Checked.' : `Checked after ${attemptsUsed} ${attemptsUsed === 1 ? 'attempt' : 'attempts'}.`}
         </div>
       )}
@@ -986,7 +1026,7 @@ function QuestionInner({
           (read-only), in survey mode (the page-level Send is the submit
           affordance there), and until the first non-empty answer. */}
       {isSubmitted && !checkMode && !reviewMode && !stageLocked && !surveyMode && (
-        <div className="flex items-center justify-end pt-2">
+        <div className={cn('flex items-center justify-end pt-2', printInvisible)}>
           <div className="text-sm text-muted-foreground flex items-center gap-1.5">
             <Check className="w-4 h-4 text-green-500" />
             <span>Saved</span>

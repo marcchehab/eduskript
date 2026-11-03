@@ -37,6 +37,8 @@ import { getSvgPathFromStroke, getStrokeOptions, hasUniformPressure, smoothPoint
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useZoom } from '@/contexts/zoom-context'
 import { isEditableLine, moveEndpoint, moveLine, type EditPoint } from '@/lib/annotations/line-edit'
+import { usePrintLayoutVersion, usePrintMode } from '@/lib/print/print-mode'
+import { collectPrintMarkers, printShiftAt, printShiftsFor, type PrintShift } from '@/lib/print/stroke-shift'
 
 type BadgeColor = 'purple' | 'blue' | 'orange' | 'green'
 
@@ -84,6 +86,8 @@ interface PathDatum {
   d: string
   color: string
   sectionOffsetY: number
+  /** Paper-y of the middle of the stroke's vertical extent (print shifts). */
+  centerY: number
   width: number
   /** Set only for straightened lines (exactly two points) — the handle geometry. */
   line?: [EditPoint, EditPoint]
@@ -106,11 +110,18 @@ function buildPath(stroke: AnimatedStroke): PathDatum {
   const sourcePoints = isUniform ? smoothPoints(stroke.points) : stroke.points
   const inputPoints = sourcePoints.map(p => [p.x, p.y, p.pressure])
   const outline = getStroke(inputPoints, getStrokeOptions(stroke.width, true, isUniform, stroke.points.length === 2))
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const p of stroke.points) {
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+  }
   return {
     id: stroke.id,
     d: getSvgPathFromStroke(outline),
     color: stroke.color,
     sectionOffsetY: stroke.sectionOffsetY,
+    centerY: (minY + maxY) / 2,
     width: stroke.width,
     line: isEditableLine(stroke)
       ? [stroke.points[0] as EditPoint, stroke.points[1] as EditPoint]
@@ -186,10 +197,14 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   //    this per-section, the SVG would be shifted by paperPaddingLeft for any
   //    section that doesn't honour the assumption — strokes drawn over a
   //    fullwidth row would appear ~192 px to the left of where they were drawn.
+  // printShifts: print view only, see src/lib/print/stroke-shift.ts.
   const [sectionGeom, setSectionGeom] = useState<
-    Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number; topFromPaper: number }>
+    Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number; topFromPaper: number; printShifts?: PrintShift[] }>
   >(() => new Map())
   const getZoom = useZoom()
+  // Re-measure after every pagination pass of the print view.
+  const printing = usePrintMode()
+  const printLayoutVersion = usePrintLayoutVersion()
 
   // Bump on viewport resize so the layout effect re-measures geometry against
   // the current --paper-scale. The scale is set imperatively on
@@ -211,7 +226,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   // is still missing → committed stroke flashes invisibly until the next frame.
   useLayoutEffect(() => {
     const next = new Map<string, HTMLElement>()
-    const nextGeom = new Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number; topFromPaper: number }>()
+    const nextGeom = new Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number; topFromPaper: number; printShifts?: PrintShift[] }>()
     // Resolve the paper element once. Sections live inside #paper. The
     // canvas's coord origin (where stored stroke x=0 lives) is the paper's
     // PADDING-edge — that's what the old `-paperPaddingLeft` math implicitly
@@ -265,6 +280,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // common case (no resize) doesn't re-render.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors the same DOM-measurement → state pattern used for targets/sectionGeom below.
     setLiveScale(prev => (prev === paperScale ? prev : paperScale))
+    const printMarkers = printing && paperEl ? collectPrintMarkers(paperEl) : []
     for (const sid of grouped.keys()) {
       const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
       if (el instanceof HTMLElement) {
@@ -287,6 +303,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
           topFromPaper: paperRect
             ? (elRect.top - paperRect.top) / combinedScale - paperBorderTop
             : 0,
+          printShifts: printMarkers.length ? printShiftsFor(el, printMarkers, combinedScale || 1) : undefined,
         })
       }
     }
@@ -304,7 +321,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       if (prev.size !== nextGeom.size) return nextGeom
       for (const [k, v] of nextGeom) {
         const old = prev.get(k)
-        if (!old || old.borderTop !== v.borderTop || old.borderLeft !== v.borderLeft || old.leftFromPaper !== v.leftFromPaper || old.topFromPaper !== v.topFromPaper) {
+        if (!old || old.borderTop !== v.borderTop || old.borderLeft !== v.borderLeft || old.leftFromPaper !== v.leftFromPaper || old.topFromPaper !== v.topFromPaper || JSON.stringify(old.printShifts) !== JSON.stringify(v.printShifts)) {
           return nextGeom
         }
       }
@@ -339,7 +356,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // recomputation, which is the moment when section elements may have been
     // recreated by the spacer-injection effect. resizeTick has the same role
     // for viewport-width changes that update --paper-scale.
-  }, [grouped, strokes, onOrphansChange, headingPositions, resizeTick, getZoom, paperPaddingLeft])
+  }, [grouped, strokes, onOrphansChange, headingPositions, resizeTick, getZoom, paperPaddingLeft, printing, printLayoutVersion])
 
   const zoom = getZoom() || 1
   // Counter-scale the badge against BOTH transforms in its ancestor chain
@@ -362,6 +379,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
               sectionTopFromPaper={geom.topFromPaper}
               sectionBorderTop={geom.borderTop}
               sectionBorderLeft={geom.borderLeft}
+              printShifts={geom.printShifts}
               markedForDeletion={markedForDeletion}
               opacity={opacity}
               zIndex={zIndex}
@@ -629,6 +647,7 @@ function SectionStrokeSvg({
   sectionTopFromPaper,
   sectionBorderTop,
   sectionBorderLeft,
+  printShifts,
   markedForDeletion,
   opacity,
   zIndex,
@@ -644,6 +663,8 @@ function SectionStrokeSvg({
   sectionTopFromPaper: number
   sectionBorderTop: number
   sectionBorderLeft: number
+  /** Print view: moves of content inside the section (src/lib/print/stroke-shift.ts). */
+  printShifts?: PrintShift[]
   markedForDeletion?: Set<string>
   opacity?: number
   zIndex?: number
@@ -705,14 +726,18 @@ function SectionStrokeSvg({
     >
       {Array.from(offsetGroups.entries()).map(([offsetY, ps]) => (
         <g key={offsetY} transform={`translate(0, ${-offsetY})`}>
-          {ps.map(p => (
+          {ps.map(p => {
+            const dy = printShiftAt(printShifts, p.centerY - p.sectionOffsetY)
+            return (
             <path
               key={p.id}
+              transform={dy ? `translate(0 ${dy})` : undefined}
               d={p.d}
               fill={p.color}
               opacity={p.id === hiddenId ? 0 : markedForDeletion?.has(p.id) ? 0.3 : 1}
             />
-          ))}
+            )
+          })}
         </g>
       ))}
     </svg>

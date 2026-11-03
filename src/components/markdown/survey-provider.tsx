@@ -373,7 +373,7 @@ function SurveyFooter({
       }`
 
   return (
-    <div className="my-8 flex flex-col items-start gap-3">
+    <div className="print-invisible my-8 flex flex-col items-start gap-3">
       {submitState === 'submitted' && (
         <div className="text-sm text-green-700 dark:text-green-400 font-medium">
           Thanks — your answers were submitted anonymously.

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { isPrintActive, subscribePrint, urlWantsPrint } from '@/lib/print/print-mode'
 
 /**
  * Reflow ("reading") mode: drop the annotation system + fixed 1280px paper and
@@ -34,6 +35,9 @@ function phoneByDefault(): boolean {
 /** Effective reflow state: explicit stored pref wins, else phone-by-default. */
 export function resolveReflow(): boolean {
   if (typeof window === 'undefined') return false
+  // The print view needs the paper layout; it overrides reading mode while
+  // open without changing the stored choice (src/lib/print/print-mode.ts).
+  if (isPrintActive() || urlWantsPrint()) return false
   try {
     const stored = localStorage.getItem(REFLOW_KEY)
     if (stored === 'on') return true
@@ -68,9 +72,11 @@ export function useReflowMode() {
     window.addEventListener(REFLOW_EVENT, sync)
     // 'storage' fires in *other* tabs — keeps multiple open tabs consistent.
     window.addEventListener('storage', sync)
+    const unsubscribePrint = subscribePrint(sync)
     return () => {
       window.removeEventListener(REFLOW_EVENT, sync)
       window.removeEventListener('storage', sync)
+      unsubscribePrint()
     }
   }, [mounted])
 

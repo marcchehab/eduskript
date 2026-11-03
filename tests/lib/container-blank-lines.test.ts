@@ -116,3 +116,12 @@ describe('markdown inside any raw HTML tag', () => {
     expect(out).toContain('<code>**raw**</code>')
   })
 })
+
+describe('container tags with several paragraphs', () => {
+  it('keep order and close before the following content', async () => {
+    for (const tag of ['solution', 'fullwidth']) {
+      const out = await structure(`A\n\n<${tag}>\nFirst.\n\nSecond.\n</${tag}>\n\n## Next\n\nB\n`)
+      expect(out).toMatch(new RegExp(`<${tag}><p>First.</p><p>Second.</p></${tag}><h2`))
+    }
+  })
+})

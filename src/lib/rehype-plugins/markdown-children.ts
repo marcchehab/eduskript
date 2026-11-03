@@ -27,6 +27,7 @@ import { remarkPlugins } from '../markdown-plugins'
  */
 const MARKDOWN_CHILDREN_ELEMENTS = new Set([
   'stickme',
+  'solution',
   'tab-item',
   'flex-item',
   'fullwidth',
