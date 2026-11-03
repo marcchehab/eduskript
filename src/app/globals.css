@@ -605,6 +605,27 @@ p:has(> .blank-field) {
 .print-layout main {
   transform: none !important;
 }
+/* Print preview on screen: page chrome (sidebar, floating controls) is
+   hidden by .print-hide; the paper sits on grey like in a PDF viewer, so the
+   preview is recognisable as such. Overridden to white in @media print. */
+@media screen {
+  html.print-layout #scroll-container {
+    margin-left: 0 !important;
+  }
+  html.print-layout main,
+  html.print-layout #scroll-container {
+    background: #9ca3af !important;
+  }
+  html.print-layout #paper {
+    box-shadow: 0 4px 24px rgb(0 0 0 / 0.35);
+    border-color: transparent;
+    /* Room for the print bar; at least one A4 sheet (992px = 180mm text
+       width, so 297mm ≈ 1637px), so a short page still looks like paper. */
+    margin-top: 6rem !important;
+    margin-bottom: 3rem !important;
+    min-height: 1637px;
+  }
+}
 /* No transform override: on narrow screens the paper keeps its --paper-scale
    and the paginator divides it out. */
 .print-layout .paper-responsive {

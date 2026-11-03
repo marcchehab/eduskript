@@ -5,7 +5,6 @@ import { ReflowGate } from '@/components/public/reflow-gate'
 import { ReflowWidthHandle } from '@/components/public/reflow-width-handle'
 import { ForkAttribution } from '@/components/public/fork-attribution'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
-import { PrintView } from '@/components/print/print-view'
 import type { StickyNote } from '@/components/annotations/sticky-notes-layer'
 
 interface PublicPageBodyProps {
@@ -89,7 +88,6 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
             />
           </ReflowGate>
         </article>
-        <PrintView pageId={page.id} />
         {(page.forkedFromPageId || page.forkedFromAuthorId) && (
           // Outside the paper's right edge, top-aligned, reading top to bottom
           // (vertical-rl = text turned 90° clockwise). Hidden below md, where the

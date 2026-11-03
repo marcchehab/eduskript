@@ -35,6 +35,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Printer, X } from 'lucide-react'
+import { FontSizeControls } from '@/components/public/font-size-controls'
 import { bumpPrintLayout, initPrintFromUrl, setPrintState, usePrintState, type SolutionMode } from '@/lib/print/print-mode'
 import { solutionLabel, useSolutionEntries } from '@/lib/print/solutions'
 import { useCanEditPage } from '@/lib/print/can-edit'
@@ -281,7 +282,13 @@ function scrollToTop() {
   window.scrollTo(0, 0)
 }
 
-export function PrintView({ pageId }: { pageId: string }) {
+/**
+ * Mounted once in the public layout (layout.tsx), so every page with a
+ * Print button has it — frontpages included (2026-11-03: they had none, the
+ * button switched to print mode with no bar to leave it). The solutions list
+ * is portalled to the end of #paper.
+ */
+export function PrintView({ pageId }: { pageId?: string }) {
   const { active, solutions } = usePrintState()
   const canEdit = useCanEditPage(pageId, active)
   const entries = useSolutionEntries()
@@ -336,13 +343,23 @@ export function PrintView({ pageId }: { pageId: string }) {
     }
   }
 
+  // Esc leaves the print view.
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   if (!active || !mounted) return null
+  const paper = document.getElementById('paper')
   return (
     <>
-      <PrintSolutions />
+      {paper && createPortal(<PrintSolutions />, paper)}
       {createPortal(
         <div className="print-bar fixed left-1/2 top-4 z-[60] flex max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
-          <span className="font-medium">Print view (A4)</span>
+          <span className="font-medium">Print preview (A4)</span>
+          <FontSizeControls />
           {canEdit && (
             <label
               className="flex items-center gap-1.5"
@@ -361,8 +378,8 @@ export function PrintView({ pageId }: { pageId: string }) {
           <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded bg-primary px-2.5 py-1 text-primary-foreground">
             <Printer className="h-4 w-4" /> Print / PDF
           </button>
-          <button type="button" onClick={close} aria-label="Close print view" className="rounded p-1 text-muted-foreground hover:bg-muted">
-            <X className="h-4 w-4" />
+          <button type="button" onClick={close} title="Close print preview (Esc)" className="flex items-center gap-1 rounded border border-border px-2 py-1 text-muted-foreground hover:bg-muted">
+            <X className="h-4 w-4" /> Close
           </button>
         </div>,
         document.body,
