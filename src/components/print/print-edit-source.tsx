@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { registerPrintEditSource, unregisterPrintEditSource } from '@/lib/print/print-edit-state'
 import { hasStages } from '@/lib/markdown-stages'
@@ -16,7 +16,9 @@ import { hasStages } from '@/lib/markdown-stages'
  */
 export function PrintEditSource({ pageId, content }: { pageId: string; content: string }) {
   const router = useRouter()
-  useEffect(() => {
+  // Layout effect: on a refreshed render, the optimistic placeholders go and
+  // the page re-paginates before the first paint (print-edit-state.ts).
+  useLayoutEffect(() => {
     if (hasStages(content)) { unregisterPrintEditSource(pageId); return }
     registerPrintEditSource(pageId, content, () => router.refresh())
   }, [pageId, content, router])

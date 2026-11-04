@@ -11,7 +11,7 @@ import { decodeFileRef, isLocalFileRef } from '@/lib/file-refs'
 import { ResizableWrapper } from './resizable-wrapper'
 import { ImageLightbox } from './image-lightbox'
 import { usePrintMode } from '@/lib/print/print-mode'
-import { applyPrintEdit, usePrintEditing } from '@/lib/print/print-edit-state'
+import { applyPrintEdit, setPrintOverride, usePrintEditing, usePrintOverride } from '@/lib/print/print-edit-state'
 import { normalizePrintWidth, setImagePrintWidth } from '@/lib/print/print-edits'
 
 /**
@@ -74,7 +74,9 @@ interface ContentImageProps {
   printWidth?: string
 }
 
-export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, nozoom = false, files, sourceLineStart, sourceLineEnd, printWidth }: ContentImageProps) {
+export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, nozoom = false, files, sourceLineStart, sourceLineEnd, printWidth: printWidthProp }: ContentImageProps) {
+  // Pending undo shows the previous print width at once (print-edit-state.ts).
+  const printWidth = usePrintOverride(`width:${sourceLineStart}`, printWidthProp)
   const filename = originalSrc || src
   const { resolvedTheme: themeResolved, forcedTheme } = useTheme()
   const resolvedTheme = forcedTheme ?? themeResolved
@@ -157,15 +159,18 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
   }, [onWidthChange, buildImgTag])
 
   // Print view: print-width overrides the online width; editors resize it
-  // with the same handle in "Edit layout" mode (print-edit-state.ts).
+  // with the same handle in the print preview (print-edit-state.ts).
   const printing = usePrintMode()
   const printEditing = usePrintEditing()
   const printLine = Number(sourceLineStart)
   const canPrintEdit = printing && printEditing && Number.isFinite(printLine) && printLine > 0
   const printLineEnd = Number(sourceLineEnd) || printLine
   const setPrintWidth = useCallback((value: string | null) =>
-    applyPrintEdit((c) => setImagePrintWidth(c, { kind: 'image', src: filename, startLine: printLine, endLine: printLineEnd }, value)),
-  [printLine, printLineEnd, filename])
+    applyPrintEdit((c) => setImagePrintWidth(c, { kind: 'image', src: filename, startLine: printLine, endLine: printLineEnd }, value), {
+      preview: () => setPrintOverride(`width:${printLine}`, value),
+      revert: () => setPrintOverride(`width:${printLine}`, printWidth ?? null),
+    }),
+  [printLine, printLineEnd, filename, printWidth])
 
   // Cycle invert mode: off → dark → light → always → off
   const handleInvertCycle = useCallback(() => {

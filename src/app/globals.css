@@ -584,6 +584,10 @@ p:has(> .blank-field) {
 .print-layout .only-print {
   display: block;
 }
+/* A page break being removed, until the saved page renders (print-edit-state.ts). */
+.print-layout .print-pagebreak.print-optimistic-hidden {
+  display: none;
+}
 .print-layout .only-screen,
 .print-layout .print-hide,
 /* No drawing in the print view: strokes would be stored in print coordinates. */

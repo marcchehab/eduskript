@@ -48,18 +48,22 @@ function TabsComponent({ items, children, tabContents: preExtractedContents, cla
     return <>{children}</>
   }
 
-  return (
-    <div className={cn('my-6 border border-border rounded-lg overflow-hidden', className)} data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
+  const box = (index: number, extra?: Record<string, string>) => (
+    <div
+      key={index}
+      className={cn('my-6 border border-border rounded-lg overflow-hidden', className)}
+      {...(extra ?? { 'data-source-line-start': sourceLineStart, 'data-source-line-end': sourceLineEnd })}
+    >
       {/* Tab headers */}
-      <div className="flex flex-wrap gap-0 bg-muted/50 border-b border-border overflow-x-auto">
-        {items.map((item, index) => (
+      <div className="flex flex-wrap gap-0 bg-muted/50 border-b border-border overflow-x-auto overflow-y-hidden">
+        {items.map((item, i) => (
           <button
-            key={index}
-            onClick={() => setActiveTab(index)}
+            key={i}
+            onClick={() => setActiveTab(i)}
             className={cn(
               'px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap',
               'hover:bg-muted focus:outline-hidden focus:ring-2 focus:ring-primary/20',
-              activeTab === index
+              index === i
                 ? 'bg-card text-foreground border-b-2 border-primary -mb-px'
                 : 'text-muted-foreground'
             )}
@@ -71,18 +75,24 @@ function TabsComponent({ items, children, tabContents: preExtractedContents, cla
       {/* Tab content. Drop the first child's top margin (e.g. a leading
           heading) so it doesn't add dead space under the tab strip. */}
       <div className="p-4 bg-card [&>*:first-child]:mt-0!">
-        {tabContents[activeTab]}
-        {/* Print view: the other tabs follow the active one, which stays where
-            it is online. data-print-online-height="0": strokes below move by
-            the added height (section-anchored-strokes.tsx). */}
-        {printing && tabContents.map((content, index) => index === activeTab ? null : (
-          <div key={index} data-print-online-height="0" className="mt-4 border-t border-border pt-2">
-            <p className="m-0 text-sm font-semibold text-muted-foreground">{items[index]}</p>
-            {content}
-          </div>
-        ))}
+        {tabContents[index]}
       </div>
     </div>
+  )
+
+  if (!printing) return box(activeTab)
+
+  // Print view: every other tab follows the active one as its own box with
+  // that tab selected in the strip; the active box stays where it is online.
+  // Sibling boxes (not nested), so the paginator can break between them.
+  // data-print-online-height="0": strokes below move by the added height
+  // (section-anchored-strokes.tsx). data-print-tab-copy: no source lines, so
+  // the page-break overlay offers no "+" before them (print-edit-overlay.tsx).
+  return (
+    <>
+      {box(activeTab)}
+      {tabContents.map((_, index) => index === activeTab ? null : box(index, { 'data-print-online-height': '0', 'data-print-tab-copy': '' }))}
+    </>
   )
 }
 

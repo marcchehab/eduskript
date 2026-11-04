@@ -25,7 +25,7 @@ vi.mock('next/cache', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     page: { findFirst: vi.fn(), update: vi.fn() },
-    pageVersion: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    pageVersion: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
     pageLayoutItem: { findMany: vi.fn() },
     user: { findUnique: vi.fn() },
     site: { findMany: vi.fn(), findFirst: vi.fn() },
@@ -376,5 +376,36 @@ describe('updatePageForUser — stale-content guard (baseVersion)', () => {
     await expect(
       updatePageForUser('user-1', 'page-1', { title: 'Renamed', baseVersion: 0 }),
     ).resolves.toBeDefined()
+  })
+})
+
+describe('updatePageForUser — inline edits share a version', () => {
+  const withLatest = (v: Record<string, unknown>) =>
+    vi.mocked(prisma.page.findFirst).mockResolvedValue({ ...baseExistingPage, versions: [{ ...baseExistingPage.versions[0], ...v }] } as never)
+  const save = () => {
+    vi.mocked(prisma.page.update).mockResolvedValue({ ...baseExistingPage, content: 'new' } as never)
+    return updatePageForUser('user-1', 'page-1', { content: '# Changed content' }, { editSource: 'inline' })
+  }
+
+  it('overwrites a recent inline version by the same author, bumping its number', async () => {
+    withLatest({ editSource: 'inline', authorId: 'user-1', createdAt: new Date(Date.now() - 60_000) })
+    const r = await save()
+    expect(prisma.pageVersion.create).not.toHaveBeenCalled()
+    expect(prisma.pageVersion.update).toHaveBeenCalledWith({ where: { id: 'v-1' }, data: { content: '# Changed content', version: 2 } })
+    expect(r.version).toBe(2)
+  })
+
+  it('creates a new version when the latest is old, by someone else, or not inline', async () => {
+    for (const v of [
+      { editSource: 'inline', authorId: 'user-1', createdAt: new Date(Date.now() - 11 * 60_000) },
+      { editSource: 'inline', authorId: 'user-2', createdAt: new Date() },
+      { editSource: null, authorId: 'user-1', createdAt: new Date() },
+    ]) {
+      vi.mocked(prisma.pageVersion.create).mockClear()
+      withLatest(v)
+      await save()
+      expect(prisma.pageVersion.create).toHaveBeenCalledTimes(1)
+    }
+    expect(prisma.pageVersion.update).not.toHaveBeenCalled()
   })
 })

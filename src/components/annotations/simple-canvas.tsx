@@ -447,6 +447,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
           if (visRight <= visLeft || visBottom <= visTop) {
             viewportRef.current = null
+            // Collapse it: left where it was, a canvas below a paper that
+            // just got shorter (leaving the print view) keeps the scroll
+            // area tall and the view stuck on empty background.
+            canvas.style.top = '0px'
+            canvas.style.height = '0px'
             return
           }
 

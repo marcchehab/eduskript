@@ -7,7 +7,7 @@ import { resolveExcalidraw, resolveFile } from '@/lib/skript-files'
 import { ResizableWrapper } from './resizable-wrapper'
 import { ImageLightbox } from './image-lightbox'
 import { usePrintMode } from '@/lib/print/print-mode'
-import { applyPrintEdit, usePrintEditing } from '@/lib/print/print-edit-state'
+import { applyPrintEdit, setPrintOverride, usePrintEditing, usePrintOverride } from '@/lib/print/print-edit-state'
 import { normalizePrintWidth, setImagePrintWidth } from '@/lib/print/print-edits'
 
 interface ExcalidrawImageProps {
@@ -34,7 +34,9 @@ interface ExcalidrawImageProps {
   printWidth?: string
 }
 
-export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align = 'center', wrap = false, lightonly = false, nozoom = false, files, sourceLineStart, sourceLineEnd, printWidth }: ExcalidrawImageProps) {
+export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align = 'center', wrap = false, lightonly = false, nozoom = false, files, sourceLineStart, sourceLineEnd, printWidth: printWidthProp }: ExcalidrawImageProps) {
+  // Pending undo shows the previous print width at once (print-edit-state.ts).
+  const printWidth = usePrintOverride(`width:${sourceLineStart}`, printWidthProp)
   const filename = src
   const caption = alt || ''
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -109,15 +111,18 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
   }, [onWidthChange, buildExcaliTag])
 
   // Print view: print-width overrides the online width; editors resize it in
-  // "Edit layout" mode (print-edit-state.ts). Same as content-image.tsx.
+  // the print preview (print-edit-state.ts). Same as content-image.tsx.
   const printing = usePrintMode()
   const printEditing = usePrintEditing()
   const printLine = Number(sourceLineStart)
   const canPrintEdit = printing && printEditing && Number.isFinite(printLine) && printLine > 0
   const printLineEnd = Number(sourceLineEnd) || printLine
   const setPrintWidth = useCallback((value: string | null) =>
-    applyPrintEdit((c) => setImagePrintWidth(c, { kind: 'drawing', src: filename, startLine: printLine, endLine: printLineEnd }, value)),
-  [printLine, printLineEnd, filename])
+    applyPrintEdit((c) => setImagePrintWidth(c, { kind: 'drawing', src: filename, startLine: printLine, endLine: printLineEnd }, value), {
+      preview: () => setPrintOverride(`width:${printLine}`, value),
+      revert: () => setPrintOverride(`width:${printLine}`, printWidth ?? null),
+    }),
+  [printLine, printLineEnd, filename, printWidth])
 
   const handleLightOnlyToggle = useCallback(() => {
     const next = !forceLight

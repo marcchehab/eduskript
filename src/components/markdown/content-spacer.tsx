@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { MoveVertical, Printer, Trash2 } from 'lucide-react'
 import { usePrintMode } from '@/lib/print/print-mode'
-import { applyPrintEdit, usePrintEditing } from '@/lib/print/print-edit-state'
+import { applyPrintEdit, setPrintOverride, usePrintEditing, usePrintOverride } from '@/lib/print/print-edit-state'
 import { setSpacerPrintHeight } from '@/lib/print/print-edits'
 import { MAX_SPACER_PRINT_PX, PAPER_PX_PER_MM, formatPrintLengthCm, parsePrintLength } from '@/lib/print/geometry'
 
@@ -19,7 +19,7 @@ import { MAX_SPACER_PRINT_PX, PAPER_PX_PER_MM, formatPrintLengthCm, parsePrintLe
  * a full replacement `<spacer .../>` tag — see stableOnSpacerChange in
  * markdown-renderer.client.tsx.
  *
- * Print preview with "Edit layout" (print-edit-state.ts): a round handle at
+ * Print preview, for editors (print-edit-state.ts): a round handle at
  * the bottom sets `print-height` in the source (setSpacerPrintHeight), in cm.
  */
 
@@ -53,7 +53,9 @@ function buildTag(id: string | undefined, height: number, pattern: SpacerPattern
   return `<spacer${idAttr} pattern="${pattern}" height="${Math.round(height)}"${printAttr} />`
 }
 
-export function ContentSpacer({ id, height, pattern, printHeight, onChange, sourceLineStart, sourceLineEnd }: ContentSpacerProps) {
+export function ContentSpacer({ id, height, pattern, printHeight: printHeightProp, onChange, sourceLineStart, sourceLineEnd }: ContentSpacerProps) {
+  // Pending undo shows the previous print height at once (print-edit-state.ts).
+  const printHeight = usePrintOverride(`height:${sourceLineStart}`, printHeightProp)
   const [currentHeight, setCurrentHeight] = useState(height)
   const printing = usePrintMode()
   const parsedPrintPx = parsePrintLength(printHeight)
@@ -78,7 +80,10 @@ export function ContentSpacer({ id, height, pattern, printHeight, onChange, sour
   const lineEnd = Number(sourceLineEnd) || lineStart
   const canPrintEdit = printing && printEditing && Number.isFinite(lineStart) && lineStart > 0
   const savePrintHeight = useCallback(async (value: string | null) => {
-    const ok = await applyPrintEdit((c) => setSpacerPrintHeight(c, lineStart, lineEnd, value))
+    const ok = await applyPrintEdit((c) => setSpacerPrintHeight(c, lineStart, lineEnd, value), {
+      preview: () => setPrintOverride(`height:${lineStart}`, value),
+      revert: () => setPrintOverride(`height:${lineStart}`, printHeight ?? null),
+    })
     // Failed, or nothing changed (same value after rounding): drop the drag height.
     if (!ok || (value ?? undefined) === printHeight) setPrintDrag(null)
   }, [lineStart, lineEnd, printHeight])
@@ -177,7 +182,7 @@ export function ContentSpacer({ id, height, pattern, printHeight, onChange, sour
       data-print-online-height={printing && (printDrag ?? printPx) ? currentHeight : undefined}
       {...dataAttrs}
     >
-      {/* Print preview "Edit layout": height handle at the bottom. */}
+      {/* Print preview (editors): height handle at the bottom. */}
       {canPrintEdit && (
         <>
           <span className={`print:hidden pointer-events-none absolute left-2 top-2 z-10 rounded bg-background/95 px-1.5 py-0.5 font-sans text-[11px] text-foreground transition-opacity ${

@@ -94,6 +94,9 @@ export interface CreatePageInput {
   content?: string
 }
 
+/** See updatePageForUser: consecutive inline edits share one PageVersion. */
+const INLINE_COALESCE_MS = 10 * 60_000
+
 interface ActorContext {
   isAdmin?: boolean
   /**
@@ -500,16 +503,34 @@ export async function updatePageForUser(
   let version = currentVersion?.version ?? 0
   if (contentChanged) {
     version += 1
-    await prisma.pageVersion.create({
-      data: {
-        pageId,
-        content: content || '',
-        version,
-        authorId: userId,
-        editSource: ctx.editSource ?? null,
-        editClient: ctx.editSource === 'mcp' ? ctx.editClient ?? null : null,
-      },
-    })
+    // Inline edits (print-preview layout clicks, Kara voice lines) come one
+    // per click; by the same author within INLINE_COALESCE_MS of the latest
+    // version's creation they overwrite that version instead of adding one.
+    // The window is fixed from the first edit (createdAt is kept), so a long
+    // session still yields one version per window. The version number still
+    // goes up: an open editor's baseVersion check must see the change.
+    const coalesce =
+      ctx.editSource === 'inline' &&
+      currentVersion?.editSource === 'inline' &&
+      currentVersion.authorId === userId &&
+      Date.now() - currentVersion.createdAt.getTime() < INLINE_COALESCE_MS
+    if (coalesce) {
+      await prisma.pageVersion.update({
+        where: { id: currentVersion.id },
+        data: { content: content || '', version },
+      })
+    } else {
+      await prisma.pageVersion.create({
+        data: {
+          pageId,
+          content: content || '',
+          version,
+          authorId: userId,
+          editSource: ctx.editSource ?? null,
+          editClient: ctx.editSource === 'mcp' ? ctx.editClient ?? null : null,
+        },
+      })
+    }
   }
 
   await invalidatePublicPageCaches(existingPage, updatedPage, userId)

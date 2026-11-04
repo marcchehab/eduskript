@@ -34,9 +34,9 @@
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, PencilRuler, Printer, Undo2, X } from 'lucide-react'
+import { Printer, X } from 'lucide-react'
 import { PrintEditOverlay } from '@/components/print/print-edit-overlay'
-import { setPrintEditing, undoPrintEdit, usePrintEditState } from '@/lib/print/print-edit-state'
+import { setPrintEditing, usePrintEditState, setPrintRepaginate } from '@/lib/print/print-edit-state'
 import { FontSizeControls } from '@/components/public/font-size-controls'
 import { bumpPrintLayout, initPrintFromUrl, setPrintState, usePrintState, type SolutionMode } from '@/lib/print/print-mode'
 import { solutionLabel, useSolutionEntries } from '@/lib/print/solutions'
@@ -489,8 +489,10 @@ export function PrintView({ pageId }: { pageId?: string }) {
     if (content) observer.observe(content)
     const first = setTimeout(run, 300)
     runNow.current = run
+    setPrintRepaginate(run)
     return () => {
       runNow.current = null
+      setPrintRepaginate(null)
       window.removeEventListener('pointerdown', onDown, true)
       window.removeEventListener('pointerup', onUp, true)
       observer.disconnect()
@@ -505,10 +507,38 @@ export function PrintView({ pageId }: { pageId?: string }) {
   }, [edit.revision])
 
   const canEditLayout = canEdit && !!edit.content && edit.pageId === pageId
+  // Layout handles are on whenever an editor has the preview open.
+  useEffect(() => {
+    setPrintEditing(active && canEditLayout)
+  }, [active, canEditLayout])
 
   const close = () => {
-    setPrintEditing(false)
+    // Keep the reading position: the print layout is taller (gaps, tab
+    // copies, fallbacks), so the same scrollTop online lands elsewhere or
+    // below the paper. Re-anchor on the first top-level block in view.
+    const scroller = document.getElementById('scroll-container')
+    const top = scroller?.getBoundingClientRect().top ?? 0
+    const anchor = [...(document.querySelector('#paper .markdown-content')?.children ?? [])]
+      .find((el) => !el.classList.contains('print-gap') && el.getBoundingClientRect().bottom > top)
+    const offset = anchor ? anchor.getBoundingClientRect().top - top : 0
     setPrintState({ active: false, solutions: 'online' })
+    if (anchor && scroller) {
+      // Re-anchor every frame for a moment: the online layout settles over
+      // a few frames (CSS transitions on the scroll container, ~300ms).
+      // Stops early when the reader scrolls.
+      const until = performance.now() + 600
+      let stopped = false
+      const stop = () => { stopped = true }
+      scroller.addEventListener('wheel', stop, { once: true, passive: true })
+      scroller.addEventListener('touchstart', stop, { once: true, passive: true })
+      const step = () => {
+        if (stopped || !anchor.isConnected) return
+        scroller.scrollTop += anchor.getBoundingClientRect().top - top - offset
+        if (performance.now() < until) requestAnimationFrame(step)
+        else { scroller.removeEventListener('wheel', stop); scroller.removeEventListener('touchstart', stop) }
+      }
+      requestAnimationFrame(step)
+    }
     const url = new URL(window.location.href)
     if (url.searchParams.has('print')) {
       url.searchParams.delete('print')
@@ -549,24 +579,8 @@ export function PrintView({ pageId }: { pageId?: string }) {
               </select>
             </label>
           )}
-          {canEditLayout && (
-            <button
-              type="button"
-              onClick={() => setPrintEditing(!edit.editing)}
-              aria-pressed={edit.editing}
-              title="Resize images for print and add or remove page breaks. Changes are saved to the page."
-              className={`flex items-center gap-1.5 rounded border px-2.5 py-1 ${edit.editing ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'}`}
-            >
-              <PencilRuler className="h-4 w-4" /> Edit layout
-            </button>
-          )}
-          {canEditLayout && edit.editing && edit.undo.length > 0 && (
-            <button type="button" onClick={() => void undoPrintEdit()} disabled={edit.saving} title="Undo the last layout change" className="flex items-center gap-1 rounded border border-border px-2 py-1 hover:bg-muted disabled:opacity-50">
-              <Undo2 className="h-4 w-4" /> Undo
-            </button>
-          )}
-          {edit.saving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Saving" />}
-          {edit.error && <span className="max-w-xs text-xs text-destructive">{edit.error}</span>}
+          {/* Below the bar, not in it: no shift either. */}
+          {edit.error && <span className="absolute left-1/2 top-full mt-2 w-max max-w-md -translate-x-1/2 rounded-md border border-destructive/40 bg-card px-3 py-1.5 text-xs text-destructive shadow-md">{edit.error}</span>}
           <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded bg-primary px-2.5 py-1 text-primary-foreground">
             <Printer className="h-4 w-4" /> Print / PDF
           </button>
