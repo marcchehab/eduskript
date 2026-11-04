@@ -25,8 +25,8 @@
  * completed answer is saved; an aborted/failed request keeps the previous one.
  * Index-keyed records drift if the teacher inserts another <ai-feedback> above.
  *
- * Print: nothing; the first printed page carries one QR code for the whole
- * page (print-page-qr.tsx). A link with `?fb=<id or index>` still scrolls to
+ * Print: nothing; every printout carries a QR code to the page on its
+ * first page (print-page-qr.tsx). A link with `?fb=<id or index>` still scrolls to
  * this tag and highlights the "take a picture" button (the camera itself
  * can't open without a tap); no printed code links there any more.
  * Index links drift like index-keyed records (see above).
@@ -503,7 +503,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   // (request routing, storage key, QR link) is the same in both modes.
   return (
     <div ref={containerRef} data-ai-feedback={feedbackId || true}>
-    {/* Prints nothing: one QR code per page (print-page-qr.tsx). */}
+    {/* Prints nothing: the printout's page QR code links here (print-page-qr.tsx). */}
     <PrintFallback label="AI feedback" empty>
     <div className="my-6 not-prose">
       {linked && (

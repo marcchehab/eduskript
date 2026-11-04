@@ -737,9 +737,9 @@ p:has(> .blank-field) {
   html.print-layout #paper {
     overflow: clip !important;
     /* The page QR code sits in the right page margin (.print-page-qr
-       above), about 45px past the paper: clip 56px ≈ 10mm past it, 5mm
-       short of the sheet edge. */
-    overflow-clip-margin: 56px;
+       above), up to ~55px past the paper ("Online ansehen"; the box ends
+       about 5mm short of the sheet edge): clip 64px ≈ 11.7mm past it. */
+    overflow-clip-margin: 64px;
     width: 992px !important;
     padding-left: 48px !important;
     padding-right: 48px !important;
