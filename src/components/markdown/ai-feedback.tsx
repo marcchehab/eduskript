@@ -25,10 +25,10 @@
  * completed answer is saved; an aborted/failed request keeps the previous one.
  * Index-keyed records drift if the teacher inserts another <ai-feedback> above.
  *
- * Print: a QR code linking to `<page>?fb=<id or index>` replaces the
- * buttons (PrintFallback). Opening that link scrolls to this tag and
- * highlights the "take a picture" button; the camera itself can't open
- * without a tap (browsers require a user gesture for file inputs).
+ * Print: nothing; the first printed page carries one QR code for the whole
+ * page (print-page-qr.tsx). A link with `?fb=<id or index>` still scrolls to
+ * this tag and highlights the "take a picture" button (the camera itself
+ * can't open without a tap); no printed code links there any more.
  * Index links drift like index-keyed records (see above).
  *
  * Section scoping duplicates the live-position math of
@@ -499,16 +499,12 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     return () => document.removeEventListener('paste', onPaste, true)
   }, [])
 
-  // Same page URL without ?print etc.; set when printing (client only).
-  const printHref = linkKey !== null && typeof window !== 'undefined'
-    ? `${window.location.origin}${window.location.pathname}?fb=${encodeURIComponent(linkKey)}`
-    : undefined
-
   // The wrapper with data-ai-feedback renders in print too, so the DOM index
   // (request routing, storage key, QR link) is the same in both modes.
   return (
     <div ref={containerRef} data-ai-feedback={feedbackId || true}>
-    <PrintFallback label="AI feedback?" href={printHref} compact>
+    {/* Prints nothing: one QR code per page (print-page-qr.tsx). */}
+    <PrintFallback label="AI feedback" empty>
     <div className="my-6 not-prose">
       {linked && (
         <p className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">

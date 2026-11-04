@@ -599,27 +599,23 @@ p:has(> .blank-field) {
   pointer-events: none !important;
 }
 /*
- * <ai-feedback> directly after a spacer, an image or a drawing
- * (print-fallback.tsx): its block takes no height and the QR box hangs into
- * the bottom-right corner of the block before it, on a white background. A
- * page gap or page break between them breaks the `+` adjacency, so the box
- * stays in the flow there. Limitations: a block shorter than the box (~22mm)
- * is overflowed upwards; on a narrow centered image the box sits at the
- * column's right edge, next to the image.
- * Zero height also means stroke-shift.ts sees the full online height removed.
+ * Page QR code (print-page-qr.tsx): bottom right of the first printed page,
+ * in the right margin next to the text column. Page 1 ends PAGE_HEIGHT_PX
+ * (1454.93px, geometry.ts) below the paper's top padding: 2rem on screen,
+ * 82.66px in print (@media print below, which also widens the paper's clip
+ * so the code isn't cut off at the paper edge). Keep in sync with both.
  */
-.print-layout .markdown-content > :is(:has(> .spacer-element), :has(> span.block img)) + :has(> [data-ai-feedback] .print-qr-box) {
-  position: relative;
-  height: 0;
-}
-.print-layout .markdown-content > :is(:has(> .spacer-element), :has(> span.block img)) + :has(> [data-ai-feedback]) .print-qr-box {
+.print-layout .print-page-qr {
   position: absolute;
-  right: 0.75rem;
-  bottom: calc(1rem + 0.75rem);
-  margin: 0;
-  flex-direction: column;
-  gap: 0.25rem;
-  background: white;
+  top: calc(2rem + 1454.93px);
+  left: calc(100% - 12rem + 0.5rem);
+  transform: translateY(-100%);
+}
+@media print {
+  html.print-layout .print-page-qr {
+    top: calc(82.66px + 1454.93px);
+    left: calc(100% - 48px + 0.5rem);
+  }
 }
 /* Kept in the layout (same height as online), not shown. */
 .print-layout .print-invisible {
@@ -740,6 +736,10 @@ p:has(> .blank-field) {
   }
   html.print-layout #paper {
     overflow: clip !important;
+    /* The page QR code sits in the right page margin (.print-page-qr
+       above), about 45px past the paper: clip 56px ≈ 10mm past it, 5mm
+       short of the sheet edge. */
+    overflow-clip-margin: 56px;
     width: 992px !important;
     padding-left: 48px !important;
     padding-right: 48px !important;

@@ -36,6 +36,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Printer, X } from 'lucide-react'
 import { PrintEditOverlay } from '@/components/print/print-edit-overlay'
+import { PrintPageQr } from '@/components/print/print-page-qr'
 import { setPrintEditing, usePrintEditState, setPrintRepaginate } from '@/lib/print/print-edit-state'
 import { FontSizeControls } from '@/components/public/font-size-controls'
 import { bumpPrintLayout, initPrintFromUrl, setPrintState, usePrintState, type SolutionMode } from '@/lib/print/print-mode'
@@ -559,6 +560,7 @@ export function PrintView({ pageId }: { pageId?: string }) {
   return (
     <>
       {paper && createPortal(<PrintSolutions />, paper)}
+      <PrintPageQr />
       {canEditLayout && edit.editing && <PrintEditOverlay />}
       {createPortal(
         <div className="print-bar fixed left-1/2 top-4 z-[60] flex w-max max-w-[calc(100vw-1rem)] font-sans -translate-x-1/2 flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
