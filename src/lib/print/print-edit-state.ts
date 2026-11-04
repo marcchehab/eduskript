@@ -169,7 +169,13 @@ export function setPrintEditing(editing: boolean) {
   set({ editing, error: null })
 }
 
-async function save(before: string, after: string): Promise<boolean> {
+/**
+ * Saves the line range that differs between `before` and `after`. Resolves
+ * false on failure, 'diverged' when the page had changed elsewhere meanwhile
+ * (the server applied the range to its newer content, so the saved content is
+ * not `after`), else true.
+ */
+async function save(before: string, after: string): Promise<boolean | 'diverged'> {
   const pageId = state.pageId
   if (!pageId) return false
   const edit = lineRangeEdit(before, after)
@@ -187,13 +193,15 @@ async function save(before: string, after: string): Promise<boolean> {
       set({ saving: false, error: data?.error || 'Saving failed.' })
       return false
     }
+    const saved: unknown = (await r.json().catch(() => null))?.content
+    const content = typeof saved === 'string' ? saved : after
     // The first refresh right after the save can still get the old page
     // from the cache (seen in dev: invalidation lands a moment later), so
     // refresh again every REFRESH_RETRY_MS until the saved content arrives.
-    pending = after
+    pending = content
     const startedAt = Date.now()
     const retry = () => {
-      if (pending !== after) return
+      if (pending !== content) return
       if (Date.now() - startedAt > REFRESH_TIMEOUT_MS) {
         clearPending()
         dropOptimistic()
@@ -204,9 +212,9 @@ async function save(before: string, after: string): Promise<boolean> {
       refresh?.()
       pendingTimer = setTimeout(retry, REFRESH_RETRY_MS)
     }
-    set({ content: after })
+    set({ content })
     retry()
-    return true
+    return content === after ? true : 'diverged'
   } catch {
     if (state.pageId === pageId) set({ saving: false, error: 'Saving failed (network).' })
     return false
@@ -233,9 +241,12 @@ export async function applyPrintEdit(
   if (after === before) return true
   if (preview) { preview(); repaginateSoon() }
   const ok = await save(before, after)
-  if (ok) set({ undo: [...state.undo, { content: before, revert }] })
+  // Diverged: `before` lacks the changes made elsewhere, so restoring it
+  // would undo those too; the undo history ends here instead.
+  if (ok === 'diverged') set({ undo: [] })
+  else if (ok) set({ undo: [...state.undo, { content: before, revert }] })
   else if (preview) { dropOptimistic(); repaginateSoon() }
-  return ok
+  return !!ok
 }
 
 /** Undo the newest edit of this preview session. */
@@ -244,6 +255,8 @@ export async function undoPrintEdit(): Promise<void> {
   const current = state.content
   if (target === undefined || current === null || state.saving) return
   if (target.revert) { target.revert(); repaginateSoon() }
-  if (await save(current, target.content)) set({ undo: state.undo.slice(0, -1) })
+  const ok = await save(current, target.content)
+  if (ok === 'diverged') set({ undo: [] })
+  else if (ok) set({ undo: state.undo.slice(0, -1) })
   else if (target.revert) { dropOptimistic(); repaginateSoon() }
 }

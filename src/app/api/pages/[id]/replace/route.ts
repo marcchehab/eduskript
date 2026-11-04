@@ -77,5 +77,8 @@ async function save(userId: string, isAdmin: boolean | undefined, id: string, co
     console.error('[pages/replace]', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-  return NextResponse.json({ ok: true })
+  // The saved content: the print preview (print-edit-state.ts) waits for the
+  // page to render exactly this, which differs from its own result when the
+  // page was changed elsewhere meanwhile.
+  return NextResponse.json({ ok: true, content })
 }

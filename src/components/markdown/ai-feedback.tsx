@@ -508,7 +508,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   // (request routing, storage key, QR link) is the same in both modes.
   return (
     <div ref={containerRef} data-ai-feedback={feedbackId || true}>
-    <PrintFallback label="AI feedback? Scan the QR code, then photograph your solution." href={printHref} compact>
+    <PrintFallback label="AI feedback?" href={printHref} compact>
     <div className="my-6 not-prose">
       {linked && (
         <p className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">

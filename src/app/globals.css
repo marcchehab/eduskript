@@ -598,6 +598,29 @@ p:has(> .blank-field) {
 .print-layout .annotation-canvas {
   pointer-events: none !important;
 }
+/*
+ * <ai-feedback> directly after a spacer, an image or a drawing
+ * (print-fallback.tsx): its block takes no height and the QR box hangs into
+ * the bottom-right corner of the block before it, on a white background. A
+ * page gap or page break between them breaks the `+` adjacency, so the box
+ * stays in the flow there. Limitations: a block shorter than the box (~22mm)
+ * is overflowed upwards; on a narrow centered image the box sits at the
+ * column's right edge, next to the image.
+ * Zero height also means stroke-shift.ts sees the full online height removed.
+ */
+.print-layout .markdown-content > :is(:has(> .spacer-element), :has(> span.block img)) + :has(> [data-ai-feedback] .print-qr-box) {
+  position: relative;
+  height: 0;
+}
+.print-layout .markdown-content > :is(:has(> .spacer-element), :has(> span.block img)) + :has(> [data-ai-feedback]) .print-qr-box {
+  position: absolute;
+  right: 0.75rem;
+  bottom: calc(1rem + 0.75rem);
+  margin: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: white;
+}
 /* Kept in the layout (same height as online), not shown. */
 .print-layout .print-invisible {
   visibility: hidden !important;
