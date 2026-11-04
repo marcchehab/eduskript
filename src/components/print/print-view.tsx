@@ -102,14 +102,21 @@ export function paginate(paper: HTMLElement, pageHeight = PAGE_HEIGHT_PX) {
   clearPagination(paper)
   // Narrow screens scale the paper (--paper-scale); work in paper px.
   const scale = paper.getBoundingClientRect().width / paper.offsetWidth || 1
-  const top = (el: Element) => (el.getBoundingClientRect().top - paper.getBoundingClientRect().top) / scale
+  // Page 1 starts at the paper's content top: print replaces the screen
+  // padding with the page margin, so the padding is not part of page 1.
+  // All y values below are relative to that point.
+  const padTop = parseFloat(getComputedStyle(paper).paddingTop) || 0
+  const top = (el: Element) => (el.getBoundingClientRect().top - paper.getBoundingClientRect().top) / scale - padTop
   const height = (el: Element) => el.getBoundingClientRect().height / scale
   // 1px tolerance: a block placed exactly on an edge measures a hair above it.
   const pageOf = (y: number) => Math.floor((y + 1) / pageHeight)
 
   // Gives `spacer` the height that makes the content after it start at the
   // next page edge, and records how far that content moved.
+  // With min > 0 the spacer gets that height before measuring: empty, the
+  // next block's top margin collapses through it and it measures too high.
   const fillTo = (spacer: HTMLElement, edge: number, min = 0) => {
+    if (min > 0) spacer.style.height = `${min}px`
     const next = following(spacer)
     const before = next ? top(next) : 0
     spacer.style.height = `${Math.max(min, edge - top(spacer))}px`
@@ -127,16 +134,28 @@ export function paginate(paper: HTMLElement, pageHeight = PAGE_HEIGHT_PX) {
   document.head.appendChild(sheet)
   const cuts: CutMarker[] = []
   const addRule = (rule: string) => sheet.sheet?.insertRule(rule, sheet.sheet.cssRules.length)
-  const cutAt = (block: HTMLElement, edgeY: number) => {
+  /**
+   * Cuts `block` at the page edge `edgeY`. 'none': nothing to cut between;
+   * 'move': the cut would fall on the block's first line, so the whole block
+   * should move instead (Chrome won't break inside a first child's top
+   * margin; it would carry the whole margin onto the next page).
+   */
+  const cutAt = (block: HTMLElement, edgeY: number): 'cut' | 'none' | 'move' => {
     let cut: Element | null = null
     for (const c of block.querySelectorAll(CUT_CANDIDATES)) {
       const ct = top(c)
       const ch = height(c)
       // Document order: the last straddling candidate is the innermost. One
-      // taller than a page would only be pushed into the next edge.
-      if (ct < edgeY - 1 && ct + ch > edgeY + 1 && ch < pageHeight * MAX_MOVABLE) cut = c
+      // taller than a page would only be pushed into the next edge. Ending
+      // within SAFETY_PX above the edge counts as straddling: print runs
+      // about 0.5px longer per table row, so such a row would not fit there.
+      // Among siblings the FIRST one reaching into that band wins (a later
+      // one would leave it alone on a page); a candidate inside it replaces
+      // it (innermost).
+      if (ct < edgeY - 1 && ct + ch > edgeY - SAFETY_PX && ch < pageHeight * MAX_MOVABLE && (!cut || cut.contains(c))) cut = c
     }
-    if (!cut || cuts.some((c) => c.el.contains(cut)) || getComputedStyle(cut).display.startsWith('inline')) return
+    if (!cut || cuts.some((c) => c.el.contains(cut)) || getComputedStyle(cut).display.startsWith('inline')) return 'none'
+    if (cut === block.querySelector(CUT_CANDIDATES) || (cut.classList.contains('cm-line') && !cut.previousElementSibling)) return 'move'
     const path = cssPath(cut)
     const probe = following(cut) ?? cut
     const before = top(probe)
@@ -146,6 +165,7 @@ export function paginate(paper: HTMLElement, pageHeight = PAGE_HEIGHT_PX) {
       addRule(`${path} > * { padding-top: ${pad + edgeY - top(cut)}px !important; }`)
       addRule(`@media print { ${path} { break-before: page; } ${path} > * { padding-top: ${pad}px !important; } }`)
     } else {
+      const cutTop = top(cut)
       const mt = parseFloat(getComputedStyle(cut).marginTop) || 0
       // Target: the element's top at edge + its own margin, where the forced
       // break puts it in print. Margins may collapse with the previous
@@ -160,11 +180,95 @@ export function paginate(paper: HTMLElement, pageHeight = PAGE_HEIGHT_PX) {
         lastErr = err
         value += err
       }
-      addRule(`@media print { ${path} { margin-top: ${mt}px !important; break-before: page; } }`)
+      if (cut.classList.contains('cm-line')) {
+        // Code lines keep the screen margin in print (no forced break): the
+        // code block's height then includes the space at the page edge, so
+        // its last lines aren't pushed out of the frame. Chrome breaks
+        // inside that margin and drops the rest of it.
+        // The line numbers are a separate column: the number at the same
+        // height gets the same shift, or every number below is off by one.
+        const delta = top(cut) - cutTop
+        const editor = cut.closest('.cm-editor')
+        for (const g of editor?.querySelectorAll('.cm-gutterElement') ?? []) {
+          if (Math.abs(top(g) - cutTop) > 2) continue
+          const gm = parseFloat(getComputedStyle(g).marginTop) || 0
+          addRule(`${cssPath(g)} { margin-top: ${gm + delta}px !important; }`)
+        }
+      } else {
+        addRule(`@media print { ${path} { margin-top: ${mt}px !important; break-before: page; } }`)
+      }
     }
     const moved = top(probe) - before
     // A row's top stays, its content moves; other elements move themselves.
     cuts.push({ el: cut as HTMLElement, shift: moved, atOffset: cut.tagName === 'TR' ? 0 : -moved })
+    return 'cut'
+  }
+
+  /**
+   * A block whose top margin straddles a page edge with nothing forcing the
+   * break: Chrome truncates the margin at the break, so the block starts at
+   * the page top in print. Shrink the margin (screen and print alike) so the
+   * preview shows it there too. The margin may sit on a first child (heading
+   * in a section wrapper); corrected by measurement, up to 3 passes.
+   */
+  const pullToEdge = (el: HTMLElement, edgeY: number) => {
+    const mtOf = (n: Element) => parseFloat(getComputedStyle(n).marginTop) || 0
+    const before = top(el)
+    // The gap is the collapsed max(previous bottom margin, own top margin):
+    // drop the previous block's bottom margin (and its last children's) first.
+    let prev = el.previousElementSibling
+    while (prev && height(prev) === 0) prev = prev.previousElementSibling
+    // Stops at a box with bottom padding/border: margins inside it don't
+    // collapse outward (a callout's last paragraph).
+    for (let n: Element | null = prev, d = 0; n && d < 3; d++) {
+      const cs = getComputedStyle(n)
+      if ((parseFloat(cs.marginBottom) || 0) > 0) addRule(`${cssPath(n)} { margin-bottom: 0px !important; }`)
+      if ((parseFloat(cs.paddingBottom) || 0) > 0 || (parseFloat(cs.borderBottomWidth) || 0) > 0) break
+      n = n.lastElementChild
+    }
+    const chain: Element[] = [el]
+    while (chain.length < 3 && chain[chain.length - 1].firstElementChild) chain.push(chain[chain.length - 1].firstElementChild!)
+    const target = chain.reduce((a, b) => (mtOf(b) > mtOf(a) ? b : a))
+    let value = mtOf(target) - (top(el) - edgeY)
+    const path = cssPath(target)
+    for (let pass = 0; pass < 3; pass++) {
+      if (pass > 0) sheet.sheet?.deleteRule(sheet.sheet.cssRules.length - 1)
+      addRule(`${path} { margin-top: ${Math.max(0, value)}px !important; }`)
+      const err = top(el) - edgeY
+      if (Math.abs(err) < 0.5 || value <= 0) break
+      value -= err
+    }
+    const moved = top(el) - before
+    // Stroke markers only: kept out of `cuts`, whose entries block cuts inside them.
+    if (Math.abs(moved) >= 0.5) pulls.push({ el, shift: moved, atOffset: -moved })
+  }
+  const pulls: CutMarker[] = []
+  /**
+   * Whether a forced break (gap or page break) precedes `el`, ignoring empty
+   * blocks in between; from the start of the Solutions list it continues at
+   * the end of the page content.
+   */
+  const forcedBefore = (el: Element) => {
+    const scan = (from: Element | null) => {
+      for (let prev = from; prev; prev = prev.previousElementSibling) {
+        if (prev.classList.contains('print-gap') || prev.matches('.print-pagebreak:not(.print-noop)') || prev.querySelector('.print-pagebreak:not(.print-noop)')) return true
+        if (height(prev) > 0) return false
+      }
+      return null
+    }
+    const r = scan(el.previousElementSibling)
+    if (r !== null) return r
+    return el.parentElement === roots[1] && !!roots[0] && !!scan(roots[0].lastElementChild)
+  }
+
+  const roots = [paper.querySelector('.markdown-content'), paper.querySelector('.print-solutions')]
+  /** Whether any content with height follows `el` (O(following siblings)). */
+  const contentAfter = (el: Element): boolean => {
+    for (let n: Element | null = el; n && !roots.includes(n); n = n.parentElement) {
+      for (let sib = n.nextElementSibling; sib; sib = sib.nextElementSibling) if (height(sib) > 0) return true
+    }
+    const solutions = roots[1]
+    return !!solutions && !solutions.contains(el) && height(solutions) > 0
   }
 
   let lastContentBottom = -1
@@ -176,17 +280,23 @@ export function paginate(paper: HTMLElement, pageHeight = PAGE_HEIGHT_PX) {
     const breaks = el.classList.contains('print-pagebreak') ? [el] : [...el.querySelectorAll<HTMLElement>('.print-pagebreak')]
     if (breaks.length) {
       for (const pb of breaks) {
+        // A break with nothing after it would only print an empty last page.
+        const last = !contentAfter(pb)
         const t = top(pb)
         const pageTop = pageOf(t) * pageHeight
-        if (lastBreakEnd > lastContentBottom && Math.abs(t - lastBreakEnd) < 2) {
+        // min 1px: an empty break lets the next block's top margin collapse
+        // through it, so it would measure (and fill) too short.
+        if (last) {
+          pb.classList.add('print-noop')
+        } else if (lastBreakEnd > lastContentBottom && Math.abs(t - lastBreakEnd) < 2) {
           // Second break in a row: a blank page.
           pb.classList.add('print-blank')
-          fillTo(pb, pageTop + pageHeight)
+          fillTo(pb, pageTop + pageHeight, 1)
         } else if (lastContentBottom <= pageTop + 1) {
           // Nothing on this page yet: no break (Chrome would not break either).
           pb.classList.add('print-noop')
         } else {
-          fillTo(pb, pageTop + pageHeight)
+          fillTo(pb, pageTop + pageHeight, 1)
         }
         lastBreakEnd = top(pb) + height(pb)
       }
@@ -194,24 +304,42 @@ export function paginate(paper: HTMLElement, pageHeight = PAGE_HEIGHT_PX) {
       continue
     }
 
-    const t = top(el)
+    let t = top(el)
     const h = height(el)
     if (h === 0) continue
     const page = pageOf(t)
+    if (page > 0 && t - page * pageHeight > 0.5 && lastContentBottom >= 0 && lastContentBottom < page * pageHeight - 0.5 && !forcedBefore(el)) {
+      pullToEdge(el, page * pageHeight)
+      t = top(el)
+    }
     const edge = (page + 1) * pageHeight - SAFETY_PX
     // Tall blocks are cut, unless they hold a tall image or embed, which Chrome
     // cannot cut and would move to the next page anyway.
     const tall = h > pageHeight * MAX_MOVABLE
     const tallMedia = tall && [...el.querySelectorAll('img, svg, video, canvas, iframe')].some((m) => height(m) > pageHeight / 2)
     const tooTall = tall && !tallMedia
-    if (t + h <= edge || t - page * pageHeight < 2) {
+    // At the page top already: fine, unless too tall (then cut below).
+    if (t + h <= edge || (t - page * pageHeight < 2 && !tooTall)) {
       lastContentBottom = t + h
       continue
     }
     if (tooTall) {
-      for (let k = page + 1; k * pageHeight < top(el) + height(el); k++) cutAt(el, k * pageHeight)
-      lastContentBottom = top(el) + height(el)
-      continue
+      let cutAny = false
+      let moveWhole = false
+      for (let k = page + 1; k * pageHeight < top(el) + height(el); k++) {
+        const r = cutAt(el, k * pageHeight)
+        if (r === 'move') { moveWhole = true; break }
+        cutAny = cutAny || r === 'cut'
+      }
+      // A tall KaTeX block (nothing inside to cut between, not split by
+      // Chrome) moves to the next page whole, so move it here too; so does a
+      // block whose first line would be cut. Other blocks without candidates
+      // (long paragraphs) Chrome splits between lines; left as they are, the
+      // preview can be off by up to one line.
+      if (!moveWhole && (cutAny || !el.querySelector('.katex-display'))) {
+        lastContentBottom = top(el) + height(el)
+        continue
+      }
     }
 
     let target = i
@@ -225,6 +353,15 @@ export function paginate(paper: HTMLElement, pageHeight = PAGE_HEIGHT_PX) {
         if (isSectionStart(blocks[j])) { target = j; break }
       }
     }
+    // Nothing before it on this page: moving would only leave the page empty
+    // (Chrome ignores a forced break there and splits the block instead).
+    const before = blocks.slice(0, target).filter((b) => height(b) > 0).pop()
+    // Cut it at the edge instead where it has rows/lines to cut between.
+    if (!before || top(before) + height(before) <= page * pageHeight + 1) {
+      cutAt(el, (page + 1) * pageHeight)
+      lastContentBottom = top(el) + height(el)
+      continue
+    }
     // Already moved to this page start: it does not fit on any page.
     if (blocks[target].previousElementSibling?.classList.contains('print-gap')) {
       lastContentBottom = t + h
@@ -237,16 +374,19 @@ export function paginate(paper: HTMLElement, pageHeight = PAGE_HEIGHT_PX) {
     // At least 1px: an empty 0px div lets the margins above and below collapse.
     fillTo(gap, (page + 1) * pageHeight, 1)
     blocks = blocksOf(paper)
-    i = target
+    // Process the moved block again (now at the page start), so
+    // lastContentBottom knows the new page has content.
+    i = target - 1
   }
-  setCutMarkers(cuts)
+  setCutMarkers([...cuts, ...pulls])
 
-  // Page edges on screen only (print:hidden via .print-page-edge).
-  const total = paper.offsetHeight
-  for (let k = 1; k * pageHeight < total; k++) {
+  // Page edges on screen only (print:hidden via .print-page-edge), up to the
+  // last content: the paper's bottom padding and min-height don't print.
+  const total = Math.max(0, ...blocksOf(paper).filter((b) => height(b) > 0).map((b) => top(b) + height(b)))
+  for (let k = 1; k * pageHeight < total - 1; k++) {
     const edge = document.createElement('div')
     edge.className = 'print-page-edge'
-    edge.style.top = `${k * pageHeight}px`
+    edge.style.top = `${padTop + k * pageHeight}px`
     edge.dataset.page = String(k + 1)
     paper.appendChild(edge)
   }

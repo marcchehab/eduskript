@@ -628,8 +628,21 @@ p:has(> .blank-field) {
 }
 /* No transform override: on narrow screens the paper keeps its --paper-scale
    and the paginator divides it out. */
+/* Same glyph metrics as print (@media print below): without it text wraps
+   differently on screen and the paginator's pages drift from the PDF. */
+.print-layout #paper {
+  text-rendering: geometricPrecision;
+}
+/* Editor Run/Check/copy buttons float over the last code lines. */
+.print-layout .editor-floating-controls {
+  display: none !important;
+}
 .print-layout .paper-responsive {
   width: 1280px !important;
+  /* No side borders: with them the column is 894px, print's is 896px, and
+     lines that barely fit wrap differently. */
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
   max-width: none !important;
   padding-left: 12rem !important;
   padding-right: 12rem !important;
@@ -740,6 +753,14 @@ p:has(> .blank-field) {
   html.print-layout #paper .overflow-auto,
   html.print-layout #paper .overflow-x-auto {
     overflow: clip !important;
+  }
+  /* Code blocks cut by the paginator: the space left at the forced break is
+     not added to the block's height in print, so its last lines would be
+     clipped. Vertically visible, horizontally still clipped. */
+  html.print-layout #paper .code-block,
+  html.print-layout #paper .code-block .cm-scroller {
+    overflow-x: clip !important;
+    overflow-y: visible !important;
   }
   /* Chrome repeats a table header on every page; the screen layout has it once. */
   html.print-layout #paper thead {

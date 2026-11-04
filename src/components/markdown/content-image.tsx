@@ -288,7 +288,9 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
             title={title}
             className="w-full h-auto rounded-md"
             style={invertFilter ? { filter: invertFilter } : undefined}
-            loading="lazy"
+            // Print view: all at once, so pagination measures real sizes
+            // (printing loads every lazy image, at its real size).
+            loading={printing ? 'eager' : 'lazy'}
           />
         ) : (
           <Image
@@ -300,6 +302,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
             className="w-full h-auto rounded-md"
             style={invertFilter ? { filter: invertFilter } : undefined}
             unoptimized={!optimizeImages}
+            loading={printing ? 'eager' : undefined}
           />
         )}
       </span>

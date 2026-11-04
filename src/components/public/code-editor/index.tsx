@@ -1,5 +1,6 @@
 "use client"
 
+import { usePrintMode } from '@/lib/print/print-mode'
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo, useMemo, useSyncExternalStore } from 'react'
 import { nanoid } from 'nanoid'
 import { createPortal } from 'react-dom'
@@ -1138,7 +1139,18 @@ export const CodeEditor = memo(function CodeEditor({
   // User-adjusted editor height (set when dragging horizontal splitter, keeps total constant)
   const [userEditorHeight, setUserEditorHeight] = useState<number | null>(null)
   // Resolution order: manual splitter drag > explicit markdown `height="..."` > auto from line count.
-  const editorHeight = userEditorHeight ?? explicitHeight ?? calculatedEditorHeight
+  // Print view: every line, no scroll cap (print clips .cm-scroller, so
+  // capped lines would be missing on paper). Counts source lines; wrapped
+  // long lines can still be cut off.
+  const printing = usePrintMode()
+  // CodeMirror's content height (incl. wrapped lines), read when the print
+  // view opens (effect below editorViewRef); 0 until then.
+  const [printContentHeight, setPrintContentHeight] = useState(0)
+  const editorHeight = printing
+    // + 80: room for the space a paginator cut leaves at a page edge (up to
+    // ~70px, print-view.tsx cutAt), which the fixed height doesn't grow by.
+    ? Math.max(MIN_EDITOR_HEIGHT, Math.max(lineCount * LINE_HEIGHT, printContentHeight) + fileTabsHeight + 60 + 80)
+    : userEditorHeight ?? explicitHeight ?? calculatedEditorHeight
   // Output panel adds to total height when visible
   const totalHeight = editorHeight + (panelVisible ? outputPanelHeight + SPLITTER_HEIGHT : 0)
 
@@ -1279,6 +1291,19 @@ export const CodeEditor = memo(function CodeEditor({
   // Refs
   const editorRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+  // Print view: size the editor to its full content (see editorHeight).
+  // contentHeight estimates lines CodeMirror hasn't rendered (wrapped ones
+  // too short); re-read whenever its content element resizes, i.e. after it
+  // grew and rendered/measured more lines. Waits for the view (editorReady).
+  useEffect(() => {
+    const view = editorViewRef.current
+    if (!printing || !editorReady || !view || typeof ResizeObserver === 'undefined') return
+    const read = () => setPrintContentHeight(Math.ceil(view.contentHeight))
+    read()
+    const ro = new ResizeObserver(read)
+    ro.observe(view.contentDOM)
+    return () => ro.disconnect()
+  }, [printing, editorReady])
   // Latest runCode / runState for the Mod-Enter keybinding (see keymap).
   const runCodeRef = useRef<() => void>(() => {})
   const runStateRef = useRef<RunState>(RunState.STOPPED)
@@ -5213,7 +5238,7 @@ export const CodeEditor = memo(function CodeEditor({
                   mode too (teacher can Run the student's code to test); all
                   persistence is gated, so a scratch run saves nothing. */}
               {(
-              <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
+              <div className="editor-floating-controls absolute bottom-2 left-2 flex items-center gap-1 z-10">
                 {canvasVisible && showGraphics && (
                   <Button
                     onClick={() => setCollapsed('editor')}
@@ -5289,7 +5314,7 @@ export const CodeEditor = memo(function CodeEditor({
               )}
               {/* Floating Control Buttons - Bottom Right */}
               {pageId && !isViewingSnapshot && (
-                <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10">
+                <div className="editor-floating-controls absolute bottom-2 right-2 flex items-center gap-1 z-10">
                   <button
                     onClick={() => { navigator.clipboard.writeText(componentId) }}
                     className="h-7 w-7 flex items-center justify-center text-[10px] font-mono opacity-15 hover:opacity-60 active:opacity-100 transition-opacity cursor-pointer"
