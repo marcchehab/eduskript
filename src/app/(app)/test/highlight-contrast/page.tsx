@@ -26,12 +26,7 @@ export default function Page() {
       </button>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-bold">mark.text-highlight-*</h2>
-        {COLORS.map(c => (
-          <p key={c} className="text-lg">
-            You can <mark className={`text-highlight text-highlight-${c}`}>highlight {c}</mark>, sure…
-          </p>
-        ))}
+        <h2 className="text-lg font-bold">mark</h2>
         <p className="text-lg">Bare <mark>mark element</mark> default.</p>
       </section>
 

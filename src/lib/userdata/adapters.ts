@@ -7,7 +7,6 @@
 
 import type { AnnotationData, CodeEditorData } from './types'
 import type { Spacer } from '@/types/spacer'
-import type { TextHighlightsData } from '@/lib/text-highlights/types'
 import type { StickyNotesData } from '@/components/annotations/sticky-notes-layer'
 
 /**
@@ -177,7 +176,7 @@ export const codeAdapter: DataAdapter<CodeEditorData> = {
 
 /**
  * Annotations data adapter
- * Handles canvas drawings and text highlights
+ * Handles canvas drawings (pen and highlighter strokes)
  */
 export const annotationsAdapter: DataAdapter<AnnotationData> = {
   key: 'annotations',
@@ -323,27 +322,6 @@ export const spacersAdapter: DataAdapter<SpacersData> = {
 }
 
 /**
- * Text highlights data adapter
- * Handles text passage highlights for study purposes
- */
-export const textHighlightsAdapter: DataAdapter<TextHighlightsData & DeletionTracked> = {
-  key: 'text-highlights',
-  collectionKey: 'highlights',
-
-  serialize: (data) => JSON.stringify(data),
-
-  deserialize: (raw) => JSON.parse(raw) as TextHighlightsData & DeletionTracked,
-
-  // Merge by combining highlights from both, deduping by id, minus deletions
-  merge: (local, remote) => {
-    const { items, deletedIds } = mergeCollection(local.highlights, remote.highlights, local.deletedIds, remote.deletedIds)
-    return { highlights: items, deletedIds }
-  },
-
-  validate: (data) => Array.isArray(data.highlights),
-}
-
-/**
  * Sticky notes data adapter
  * Merges by note ID, keeping the version with the newer updatedAt timestamp.
  * Notes that exist on only one side are preserved (additive) unless deleted.
@@ -410,7 +388,6 @@ export const adapterRegistry: Record<string, DataAdapter<unknown>> = {
   preferences: preferencesAdapter as DataAdapter<unknown>,
   snaps: snapsAdapter as DataAdapter<unknown>,
   spacers: spacersAdapter as DataAdapter<unknown>,
-  'text-highlights': textHighlightsAdapter as DataAdapter<unknown>,
   'sticky-notes': stickyNotesAdapter as DataAdapter<unknown>,
   plugin: pluginAdapter as DataAdapter<unknown>,
 }

@@ -38,18 +38,7 @@ import { cn } from '@/lib/utils'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useSession } from 'next-auth/react'
-import type { CodeEditorData, CodeHighlight, SqlVerificationData, GlobalImportsData, PythonCheckData, BinaryFile, BinaryFileData } from '@/lib/userdata/types'
-import {
-  codeHighlighting,
-  addHighlight,
-  removeHighlight,
-  setHighlights as setHighlightsEffect,
-  extractHighlights,
-  highlightField,
-} from './highlight-extension'
-import { useHighlightPen } from '@/components/text-highlights/highlight-pen-context'
-import { highlighterCursor } from '@/lib/text-highlights/cursor'
-import { HIGHLIGHT_ERASE_EVENT, HIGHLIGHT_ERASE_END_EVENT, pointHitsRect, type HighlightEraseDetail } from '@/lib/text-highlights/erase-events'
+import type { CodeEditorData, SqlVerificationData, GlobalImportsData, PythonCheckData, BinaryFile, BinaryFileData } from '@/lib/userdata/types'
 import {
   RunState,
   OutputLevel,
@@ -418,7 +407,6 @@ export const CodeEditor = memo(function CodeEditor({
 
   // User data persistence - only if pageId is provided
   const componentId = `code-editor-${id}`
-  const highlightsComponentId = `code-highlights-${id}` // Separate (server-synced) personal highlights record
   const verificationComponentId = `sql-verification-${id}`
 
   // Teacher's "view this student's submission" mode. When a snapshot exists
@@ -512,17 +500,6 @@ export const CodeEditor = memo(function CodeEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStage, pythonCheckComponentId, coupledVideo?.markPassed])
-
-  // Code-editor highlights are PERSONAL but server-synced (like other
-  // annotations), kept in their own record so the local-only code/settings
-  // store is untouched. Never broadcast: teacher and student have different
-  // code, so char-offset highlights would mismap. Created by the site toolbar
-  // highlighter pen (useHighlightPen), not an in-editor tool.
-  const { data: highlightsData, updateData: saveHighlights, isLoading: highlightsLoading } = useSyncedUserData<{ highlights: CodeHighlight[] }>(
-    pageId || '',
-    highlightsComponentId,
-    { highlights: [] },
-  )
 
   // Version history hooks
   const createVersion = useCreateVersion<CodeEditorData>(pageId || 'no-page', componentId)
@@ -1049,19 +1026,6 @@ export const CodeEditor = memo(function CodeEditor({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [tabContextMenu, importContextMenu])
 
-  // Highlighting is driven by the site toolbar highlighter pen: when a
-  // highlighter is active, useHighlightPen() returns its CSS colour (else null).
-  const activeHighlightColor = useHighlightPen()
-  const activeHighlightColorRef = useRef(activeHighlightColor)
-  useEffect(() => { activeHighlightColorRef.current = activeHighlightColor }, [activeHighlightColor])
-
-  // Personal highlights for this editor (server-synced via highlightsData).
-  const [highlights, setHighlights] = useState<CodeHighlight[]>([])
-  const displayHighlights = highlights
-
-  const [hoveredHighlightId, setHoveredHighlightId] = useState<string | null>(null)
-  const [deleteButtonPosition, setDeleteButtonPosition] = useState<{ x: number; y: number } | null>(null)
-
   // Calculate visibility based on width and detect graphics modules (turtle or matplotlib) or SQL schema
   const currentCode = activeTab.type === 'local'
     ? (files[activeFileIndex]?.content || initialCode)
@@ -1087,7 +1051,7 @@ export const CodeEditor = memo(function CodeEditor({
   const showGraphics = collapsed === 'graphics' ? false : collapsed === 'editor' ? true : widthShowGraphics
   const [canvasVisible, setCanvasVisible] = useState(false) // Start hidden, show only when graphics detected
 
-  // The floating toolbar (highlighter / zoom / kernel indicator) is absolutely
+  // The floating toolbar (zoom / kernel indicator) is absolutely
   // positioned over the editor's top-right corner — in multi-file mode it sits
   // over the file-tabs row. Reserve its measured width as padding-right on that
   // row so the tab scrollbar stops before it. Width is dynamic (kernel label
@@ -1268,23 +1232,6 @@ export const CodeEditor = memo(function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: this is a one-shot restore gated by hasLoadedData.current. Re-running on language/defaultData.files changes (e.g. markdown edits) would no-op anyway, and dragging them in widens the dep surface for no behaviour change.
   }, [isLoading, savedData, debugTag, isViewingSnapshot])
 
-  // Load highlights from the synced store once it's ready. One-time legacy
-  // seed: if the synced store is empty but the old local CodeEditorData had
-  // highlights, migrate them across so existing highlights aren't lost.
-  const highlightsLoadedRef = useRef(false)
-  useEffect(() => {
-    if (highlightsLoadedRef.current || highlightsLoading) return
-    highlightsLoadedRef.current = true
-    const synced = highlightsData?.highlights ?? []
-    const legacy = savedData?.highlights ?? []
-    if (synced.length === 0 && legacy.length > 0) {
-      setHighlights(legacy)
-      saveHighlights({ highlights: legacy }, { immediate: true })
-    } else {
-      setHighlights(synced)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightsLoading, highlightsData])
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef({ x: 0, y: 0 })
 
@@ -1481,7 +1428,6 @@ export const CodeEditor = memo(function CodeEditor({
       lineWrapping,
       editorWidth,
       canvasTransform,
-      highlights,
     }
     // Mirror the metadata-effect guard: never let a starter state overwrite a
     // restored real answer (both the local record and the exam server stream).
@@ -1508,13 +1454,12 @@ export const CodeEditor = memo(function CodeEditor({
           .catch((e) => console.error('[code-editor] exam autosave stream failed:', e))
       }
     }
-  }, [activeFileIndex, pageId, componentId, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, skriptId, editorInstanceId, isViewingSnapshot, exam])
+  }, [activeFileIndex, pageId, componentId, fontSize, lineWrapping, editorWidth, canvasTransform, skriptId, editorInstanceId, isViewingSnapshot, exam])
 
   // Ref to avoid debouncedSaveContent as a dependency in the editor effect
   const debouncedSaveContentRef = useRef(debouncedSaveContent)
 
-  // Save code/settings (local) when anything changes. Highlights are saved
-  // separately to their server-synced record (see the highlights effect below).
+  // Save code/settings (local) when anything changes.
   useEffect(() => {
     if (!pageId) return
     if (isLoading) return
@@ -1545,17 +1490,6 @@ export const CodeEditor = memo(function CodeEditor({
     savePersistentData(dataToSave, { immediate: true })
   }, [activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, pageId, savePersistentData, files, componentId, isLoading, isViewingSnapshot])
 
-  // Persist highlights to their server-synced record whenever they change.
-  const lastSyncedHighlightsRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!pageId || highlightsLoading || isViewingSnapshot) return
-    if (!highlightsLoadedRef.current) return // don't write before the initial load/seed
-    const serialized = JSON.stringify(highlights)
-    if (serialized === lastSyncedHighlightsRef.current) return
-    lastSyncedHighlightsRef.current = serialized
-    saveHighlights({ highlights }, { immediate: true })
-  }, [highlights, pageId, highlightsLoading, isViewingSnapshot, saveHighlights])
-
   // Helper function to create a version snapshot
   const createVersionSnapshot = useCallback(async (isManualSave = false) => {
     if (!pageId) return
@@ -1577,7 +1511,6 @@ export const CodeEditor = memo(function CodeEditor({
       lineWrapping,
       editorWidth,
       canvasTransform,
-      highlights,
     }
 
     // Don't create version if content matches initial/default code
@@ -1625,7 +1558,7 @@ export const CodeEditor = memo(function CodeEditor({
         }
       })()
     }
-  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions, initialCode])
+  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, createVersion, refreshVersions, initialCode])
 
   // Create a "check" version row alongside the server checkpoint POST.
   // Local row gives the student a history entry like `check1`, `check2`, …;
@@ -1647,7 +1580,6 @@ export const CodeEditor = memo(function CodeEditor({
       lineWrapping,
       editorWidth,
       canvasTransform,
-      highlights,
     }
     try {
       const version = await createVersion(payload, { kind: 'check', label })
@@ -1665,7 +1597,7 @@ export const CodeEditor = memo(function CodeEditor({
     } catch (e) {
       console.error('createCheckVersion failed:', e)
     }
-  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions, isViewingSnapshot])
+  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, createVersion, refreshVersions, isViewingSnapshot])
 
   // Create a "run" version row alongside the server checkpoint POST when
   // the student presses Run. Identical consecutive runs (no edits between
@@ -1689,7 +1621,6 @@ export const CodeEditor = memo(function CodeEditor({
       lineWrapping,
       editorWidth,
       canvasTransform,
-      highlights,
     }
     try {
       const version = await createVersion(payload, { kind: 'run' })
@@ -1710,7 +1641,7 @@ export const CodeEditor = memo(function CodeEditor({
     } catch (e) {
       console.error('createRunVersion failed:', e)
     }
-  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions, isViewingSnapshot])
+  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, createVersion, refreshVersions, isViewingSnapshot])
 
   // Promote a local autosave to a synced manual save. The original payload
   // is read from the version's blob, the row's `kind` flips to 'manual', and
@@ -1756,179 +1687,6 @@ export const CodeEditor = memo(function CodeEditor({
   useEffect(() => {
     debouncedSaveContentRef.current = debouncedSaveContent
   }, [debouncedSaveContent])
-
-  // Ref so editor extensions read current highlights without re-binding.
-  const displayHighlightsRef = useRef(displayHighlights)
-  useLayoutEffect(() => {
-    displayHighlightsRef.current = displayHighlights
-  }, [displayHighlights])
-
-  // Auto-highlight on mouseup when a toolbar highlighter pen is active.
-  // Highlights the current CodeMirror selection in the pen's colour — no
-  // in-editor highlight tool, no popup. Inert when no highlighter is active.
-  useEffect(() => {
-    const editor = editorRef.current
-    if (!editor) return
-
-    const handleMouseUp = () => {
-      const color = activeHighlightColorRef.current
-      if (!color) return
-      const view = editorViewRef.current
-      if (!view) return
-      const { from, to } = view.state.selection.main
-      if (from === to) return // no selection
-
-      const id = nanoid()
-      view.dispatch({
-        effects: addHighlight.of({ from, to, color, id }),
-        selection: { anchor: to }
-      })
-      setHighlights(prev => [...prev, { id, fileIndex: activeFileIndex, from, to, color, createdAt: Date.now() }])
-    }
-
-    editor.addEventListener('mouseup', handleMouseUp)
-    return () => editor.removeEventListener('mouseup', handleMouseUp)
-  }, [activeFileIndex])
-
-  // Remove a highlight (personal-only — every highlight is yours).
-  const handleDeleteHighlight = useCallback((highlightId: string) => {
-    const view = editorViewRef.current
-    if (!view) return
-    view.dispatch({ effects: removeHighlight.of(highlightId) })
-    setHighlights(prev => prev.filter(h => h.id !== highlightId))
-    setHoveredHighlightId(null)
-    setDeleteButtonPosition(null)
-  }, [])
-
-  // Eraser support: the annotation eraser broadcasts each sample point along
-  // its path, then an end event on lift. Like the stroke eraser, we dim hit
-  // highlights during the swipe and commit the deletion on lift. Highlights can
-  // fragment into multiple decoration spans sharing one id. (Direct opacity is
-  // safe — CodeMirror doesn't re-render the decorations mid-gesture.)
-  const erasingHighlightsRef = useRef<Set<string>>(new Set())
-  useEffect(() => {
-    const onErasePoint = (e: Event) => {
-      const editor = editorRef.current
-      if (!editor) return
-      const { x, y, radius } = (e as CustomEvent<HighlightEraseDetail>).detail
-      const spans = editor.querySelectorAll<HTMLElement>('[data-highlight-id]')
-      // Note every newly-hit id (one highlight can fragment into many spans)...
-      spans.forEach((s) => {
-        if (!pointHitsRect(x, y, s.getBoundingClientRect(), radius)) return
-        const id = s.getAttribute('data-highlight-id')
-        if (id) erasingHighlightsRef.current.add(id)
-      })
-      // ...then dim ALL spans of every marked id so the preview matches the commit.
-      spans.forEach((s) => {
-        const id = s.getAttribute('data-highlight-id')
-        if (id && erasingHighlightsRef.current.has(id)) s.style.opacity = '0.3'
-      })
-    }
-    const onEraseEnd = () => {
-      const ids = erasingHighlightsRef.current
-      if (ids.size === 0) return
-      ids.forEach((id) => handleDeleteHighlight(id))
-      erasingHighlightsRef.current = new Set()
-    }
-    window.addEventListener(HIGHLIGHT_ERASE_EVENT, onErasePoint)
-    window.addEventListener(HIGHLIGHT_ERASE_END_EVENT, onEraseEnd)
-    return () => {
-      window.removeEventListener(HIGHLIGHT_ERASE_EVENT, onErasePoint)
-      window.removeEventListener(HIGHLIGHT_ERASE_END_EVENT, onEraseEnd)
-    }
-  }, [handleDeleteHighlight])
-
-  // Track hover over highlight spans for delete button
-  useEffect(() => {
-    const editor = editorRef.current
-    if (!editor) return
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-
-      // Check if we're over a highlight span
-      const highlightSpan = target.closest('[data-highlight-id]') as HTMLElement | null
-
-      if (highlightSpan) {
-        const highlightId = highlightSpan.getAttribute('data-highlight-id')
-        if (highlightId && highlightId !== hoveredHighlightId) {
-          setHoveredHighlightId(highlightId)
-
-          // Find all spans with the same highlight ID
-          // Note: CodeMirror can fragment spans when other decorations (like bracket matching) are applied
-          const allSpans = editor.querySelectorAll(`[data-highlight-id="${highlightId}"]`)
-          if (allSpans.length > 0) {
-            // Get bounding rects of all spans
-            const rects = Array.from(allSpans).map(span => span.getBoundingClientRect())
-
-            // Find the minimum top (first line)
-            const minTop = Math.min(...rects.map(r => r.top))
-
-            // Find spans on the first line (within 5px tolerance for line height variations)
-            const firstLineRects = rects.filter(r => Math.abs(r.top - minTop) < 5)
-
-            // Get the rightmost point on the first line
-            const maxRight = Math.max(...firstLineRects.map(r => r.right))
-
-            // Position the delete button at top-right corner of the first line
-            setDeleteButtonPosition({
-              x: maxRight - 8, // Offset to center on corner
-              y: minTop - 8
-            })
-          }
-        }
-      } else if (hoveredHighlightId) {
-        // Check if we're over the delete button (don't hide it if hovering the button)
-        const deleteBtn = (e.target as HTMLElement).closest('.highlight-actions')
-        if (!deleteBtn) {
-          setHoveredHighlightId(null)
-          setDeleteButtonPosition(null)
-        }
-      }
-    }
-
-    const handleMouseLeave = () => {
-      // Small delay to allow moving to delete button
-      setTimeout(() => {
-        const deleteBtn = document.querySelector('.highlight-actions:hover')
-        if (!deleteBtn) {
-          setHoveredHighlightId(null)
-          setDeleteButtonPosition(null)
-        }
-      }, 50)
-    }
-
-    editor.addEventListener('mousemove', handleMouseMove)
-    editor.addEventListener('mouseleave', handleMouseLeave)
-
-    return () => {
-      editor.removeEventListener('mousemove', handleMouseMove)
-      editor.removeEventListener('mouseleave', handleMouseLeave)
-    }
-  }, [hoveredHighlightId])
-
-  // Sync highlights to CodeMirror on initial load or file switch.
-  // Track what we've synced to avoid redundant dispatches when positions update.
-  const highlightsSyncedRef = useRef<string>('')
-  useEffect(() => {
-    const view = editorViewRef.current
-    if (!view) return
-
-    const docLength = view.state.doc.length
-    const fileHighlights = highlights
-      .filter(h => h.fileIndex === activeFileIndex)
-      .filter(h => h.from >= 0 && h.to >= 0 && h.from < docLength && h.to <= docLength && h.to > h.from)
-      .map(h => ({ from: h.from, to: h.to, color: h.color, id: h.id }))
-
-    // Only sync if IDs changed (not just positions) - positions are handled by CodeMirror
-    const syncKey = `${activeFileIndex}:${fileHighlights.map(h => h.id).sort().join(',')}`
-    if (highlightsSyncedRef.current === syncKey) return
-    highlightsSyncedRef.current = syncKey
-
-    view.dispatch({
-      effects: setHighlightsEffect.of(fileHighlights)
-    })
-  }, [activeFileIndex, highlights])
 
   // Handle splitter dragging (vertical splitter between editor and graphics)
   const handleSplitterMouseDown = (e: React.MouseEvent) => {
@@ -2617,8 +2375,6 @@ export const CodeEditor = memo(function CodeEditor({
       )
     }
 
-    // Add code highlighting extension
-    extensions.push(...codeHighlighting())
     extensions.push(...karaLineHighlighting())
     // Kara: track the rendered content height (karaContentHeight). Skips
     // transactions that change the doc, so typing never sets React state here
@@ -2630,33 +2386,6 @@ export const CodeEditor = memo(function CodeEditor({
         setKaraContentHeight(prev => (Math.abs(prev - h) > 4 ? h : prev))
       }))
     }
-
-    // Sync highlight positions back to React state when the document changes.
-    extensions.push(
-      EditorView.updateListener.of((update) => {
-        if (update.docChanged && update.state.field(highlightField).size > 0) {
-          // Extract current positions from CodeMirror decorations
-          const extracted = extractHighlights(update.view, activeFileIndexRef.current)
-          setHighlights(prev => {
-            const extractedMap = new Map(extracted.map(h => [h.id, h]))
-            // Update positions for existing highlights; drop any removed in CodeMirror.
-            const updated = prev.map(h => {
-              const ex = extractedMap.get(h.id)
-              if (ex) {
-                return { ...h, from: ex.from, to: ex.to }
-              }
-              return h
-            }).filter(h => extractedMap.has(h.id))
-
-            // Check if anything actually changed to avoid unnecessary re-renders
-            const hasChanges = updated.length !== prev.length || updated.some((h, i) => {
-              return prev[i]?.from !== h.from || prev[i]?.to !== h.to
-            })
-            return hasChanges ? updated : prev
-          })
-        }
-      })
-    )
 
     // Add update listener for auto-save
     extensions.push(
@@ -2738,29 +2467,6 @@ export const CodeEditor = memo(function CodeEditor({
     editorViewRef.current = view
     setEditorReady(true)
     console.debug(debugTag, 'CodeMirror created')
-
-    // Re-apply highlights after editor creation
-    const currentHighlights = displayHighlightsRef.current
-    if (currentHighlights.length > 0) {
-      const docLength = view.state.doc.length
-
-      // Filter highlights for current file and validate bounds
-      const fileHighlights = currentHighlights
-        .filter(h => h.fileIndex === activeFileIndex)
-        .filter(h => h.from >= 0 && h.to >= 0 && h.from < docLength && h.to <= docLength && h.to > h.from)
-        .map(h => ({ from: h.from, to: h.to, color: h.color, id: h.id }))
-
-      if (fileHighlights.length > 0) {
-        // Defer dispatch to ensure view is fully initialized
-        requestAnimationFrame(() => {
-          if (editorViewRef.current === view) {
-            view.dispatch({
-              effects: setHighlightsEffect.of(fileHighlights)
-            })
-          }
-        })
-      }
-    }
 
     return () => {
       setEditorReady(false)
@@ -4133,7 +3839,7 @@ export const CodeEditor = memo(function CodeEditor({
     setShowKernelMenu(false)
   }
 
-  // Reset code to original markdown content and clear personal highlights
+  // Reset code to original markdown content
   const resetCode = () => {
     // Reset to the original markdown files
     const originalFiles = originalInitialFiles.current
@@ -4155,17 +3861,6 @@ export const CodeEditor = memo(function CodeEditor({
           to: editorViewRef.current.state.doc.length,
           insert: originalContent,
         },
-      })
-    }
-
-    // Clear personal highlights
-    setHighlights([])
-    highlightsSyncedRef.current = '' // Reset sync tracker
-
-    // Clear all highlights from CodeMirror
-    if (editorViewRef.current) {
-      editorViewRef.current.dispatch({
-        effects: setHighlightsEffect.of([])
       })
     }
 
@@ -4472,8 +4167,7 @@ export const CodeEditor = memo(function CodeEditor({
               display: showEditor ? 'flex' : 'none'
             }}
           >
-            {/* Floating Toolbar - Top Right (zoom controls + kernel indicator).
-                Highlighting is driven by the site-wide toolbar highlighter pen. */}
+            {/* Floating Toolbar - Top Right (zoom controls + kernel indicator). */}
             <div ref={kernelMenuRef} className={narrowCode
               ? 'relative z-30 flex flex-wrap items-center justify-end gap-0.5 border-b bg-muted/30 px-1 py-0.5'
               : 'absolute top-1 right-1 z-30 flex items-center gap-0.5 bg-background/80 backdrop-blur-xs rounded px-1'}>
@@ -5224,7 +4918,7 @@ export const CodeEditor = memo(function CodeEditor({
             )}
 
             {/* CodeMirror Editor */}
-            <div ref={editorRef} className="flex-1 overflow-auto w-full h-full relative" style={{ cursor: activeHighlightColor ? highlighterCursor(activeHighlightColor) : undefined }}>
+            <div ref={editorRef} className="flex-1 overflow-auto w-full h-full relative">
               {/* Loading skeleton while editor initializes */}
               {!editorReady && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-[#1e1e1e] z-1">
@@ -6003,37 +5697,6 @@ export const CodeEditor = memo(function CodeEditor({
         </div>
       )}
 
-      {/* Hover-bin removal - Portal. Highlights are personal-only, so every one
-          is removable (no ownership gate). Bin = remove (our convention). */}
-      {hoveredHighlightId && deleteButtonPosition && typeof document !== 'undefined' && createPortal(
-        <div
-          className="highlight-actions fixed flex items-center gap-1 z-9999"
-          style={{
-            left: `${deleteButtonPosition.x}px`,
-            top: `${deleteButtonPosition.y}px`,
-          }}
-          onMouseLeave={() => {
-            // Check if we're back over a highlight, otherwise hide
-            setTimeout(() => {
-              const highlightEl = document.querySelector('[data-highlight-id]:hover')
-              const actionsEl = document.querySelector('.highlight-actions:hover')
-              if (!highlightEl && !actionsEl) {
-                setHoveredHighlightId(null)
-                setDeleteButtonPosition(null)
-              }
-            }, 50)
-          }}
-        >
-          <button
-            className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-popover text-muted-foreground shadow-md transition-colors hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-950/40 cursor-pointer"
-            onClick={() => handleDeleteHighlight(hoveredHighlightId)}
-            title="Remove highlight"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>,
-        document.body
-      )}
     </div>
 
     {/* Python check test results. Students see this in non-exam practice. In the

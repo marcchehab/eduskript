@@ -25,19 +25,15 @@
  * @see src/components/markdown/ai-feedback.tsx - consumer
  */
 
-import {
-  getStroke,
-  getStrokeOptions,
-  getSvgPathFromStroke,
-  hasUniformPressure,
-  smoothPoints,
-} from './svg-path'
+import { getSvgPathFromStroke, HIGHLIGHTER_OPACITY_LIGHT, isHighlighterStroke, strokeOutline } from './svg-path'
 
 export interface RenderableStroke {
   points: Array<{ x: number; y: number; pressure: number }>
   mode: 'draw' | 'erase'
   color: string
   width: number
+  /** 'highlighter' → translucent, multiplied, under the pen strokes. */
+  tool?: 'highlighter'
   /** Live section top (paper coords) minus stored sectionOffsetY. */
   yShift: number
 }
@@ -109,16 +105,19 @@ export function renderStrokesToPng(
     ctx.drawImage(img.source, img.x, img.y, img.w, img.h)
   }
 
-  for (const s of drawable) {
-    const uniform = hasUniformPressure(s.points)
-    const source = uniform ? smoothPoints(s.points) : s.points
-    const input = source.map((p) => [p.x, p.y + s.yShift, p.pressure])
-    const outline = getStroke(input, getStrokeOptions(s.width, true, uniform, s.points.length === 2))
-    const d = getSvgPathFromStroke(outline)
+  // Highlighters first (multiplied on the white page, like on screen), pens on top.
+  const ordered = [...drawable.filter(isHighlighterStroke), ...drawable.filter((s) => !isHighlighterStroke(s))]
+  for (const s of ordered) {
+    const d = getSvgPathFromStroke(strokeOutline(s.points, s.width, s.tool, true, 0, s.yShift))
     if (!d) continue
+    const highlighter = isHighlighterStroke(s)
+    ctx.globalAlpha = highlighter ? HIGHLIGHTER_OPACITY_LIGHT : 1
+    ctx.globalCompositeOperation = highlighter ? 'multiply' : 'source-over'
     ctx.fillStyle = s.color
     ctx.fill(new Path2D(d))
   }
+  ctx.globalAlpha = 1
+  ctx.globalCompositeOperation = 'source-over'
 
   // Composited photos can blow up PNG size; the route caps the data URL length.
   let dataUrl = canvas.toDataURL('image/png')

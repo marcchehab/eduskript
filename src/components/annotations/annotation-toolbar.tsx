@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon, Plus } from 'lucide-react'
-import { type PenConfig, type PenType, hueToColor, colorToHue, TRACK_MIN, MIN_PENS, MAX_PENS } from '@/lib/annotations/pens'
+import { type PenConfig, type PenType, hueToColor, colorToHue, TRACK_MIN, MIN_PENS, MAX_PENS, penSizeRange } from '@/lib/annotations/pens'
 import type { SpacerPattern } from '@/types/spacer'
 import { cn } from '@/lib/utils'
 import { useLayout } from '@/contexts/layout-context'
@@ -110,7 +110,7 @@ function ToolbarDivider() {
   return <div className="w-px h-6 bg-border mx-1" />
 }
 
-export type AnnotationMode = 'view' | 'draw' | 'erase' | 'spacer' | 'highlight'
+export type AnnotationMode = 'view' | 'draw' | 'erase' | 'spacer'
 
 export interface AnnotationLayer {
   id: string
@@ -135,8 +135,6 @@ interface AnnotationToolbarProps {
   onPenAdd: (type: PenType) => void
   onPenRemove: (id: string) => void
   onPensReorder: (orderedIds: string[]) => void
-  /** When broadcasting, highlighter pens are greyed out (highlights are personal). */
-  isBroadcasting?: boolean
   onResetZoom: () => void
   // Layers (for students - broadcasted teacher annotations)
   layers?: AnnotationLayer[]
@@ -202,7 +200,6 @@ export function AnnotationToolbar({
   onPenAdd,
   onPenRemove,
   onPensReorder,
-  isBroadcasting = false,
   onResetZoom,
   layers = [],
   onLayerToggle,
@@ -284,15 +281,10 @@ export function AnnotationToolbar({
     }
   }
 
-  // A pen's active mode: highlighters use 'highlight', everything else 'draw'.
-  const penMode = (id: string): AnnotationMode =>
-    pens.find((p) => p.id === id)?.type === 'highlight' ? 'highlight' : 'draw'
-
   const handleColorChange = (id: string, color: string) => {
     onPenColorChange(id, color)
     onPenSelect(id)
-    const m = penMode(id)
-    if (mode !== m) onModeChange(m)
+    if (mode !== 'draw') onModeChange('draw')
   }
 
   const handleSizeChange = (id: string, size: number) => {
@@ -420,17 +412,13 @@ export function AnnotationToolbar({
     }
     setShowPenControls(null)
 
-    // Highlights are personal — highlighter pens are inert while broadcasting.
-    if (isBroadcasting && pens.find((p) => p.id === id)?.type === 'highlight') return
-
-    // Clicking the active pen (draw or highlight) deactivates it.
-    const isActive = (mode === 'draw' || mode === 'highlight') && activePenId === id
+    // Clicking the active pen deactivates it.
+    const isActive = mode === 'draw' && activePenId === id
     if (isActive) {
       onModeChange('view')
     } else {
-      // Switch to this pen and enter its mode (highlighters → 'highlight').
       onPenSelect(id)
-      onModeChange(penMode(id))
+      onModeChange('draw')
     }
   }
 
@@ -447,8 +435,7 @@ export function AnnotationToolbar({
       setShowPenControls(id)
       // Also select this pen when opening its config
       onPenSelect(id)
-      const m = penMode(id)
-      if (mode !== m) onModeChange(m)
+      if (mode !== 'draw') onModeChange('draw')
       longPressTimerRef.current = null
     }, 500)
   }
@@ -792,15 +779,11 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                 onPointerCancel={handlePenPointerUp}
                 className={cn(
                   'p-2 rounded-md transition-colors relative',
-                  (mode === 'draw' || mode === 'highlight') && activePenId === pen.id
+                  mode === 'draw' && activePenId === pen.id
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent',
-                  // Highlights are personal — greyed out while broadcasting.
-                  isBroadcasting && pen.type === 'highlight' && 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground'
                 )}
-                title={pen.type === 'highlight'
-                  ? (isBroadcasting ? "Highlights are always personal — can't be broadcast" : `Highlighter ${penIndex + 1}`)
-                  : `Pen ${penIndex + 1}`}
+                title={pen.type === 'highlight' ? `Highlighter ${penIndex + 1}` : `Pen ${penIndex + 1}`}
                 aria-label={pen.type === 'highlight' ? `Select highlighter ${penIndex + 1}` : `Select pen ${penIndex + 1}`}
               >
                 {pen.type === 'highlight' ? <Highlighter className="w-4 h-4" /> : <Pen className="w-4 h-4" />}
@@ -813,8 +796,8 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                 />
               </button>
 
-              {/* Pen controls popover. Pens: size + hue sliders. Highlighters:
-                  hue slider only. Both: a remove bin. */}
+              {/* Pen controls popover: size + hue sliders and a remove bin.
+                  Highlighters get a wider size range (penSizeRange). */}
               {showPenControls === pen.id && (
                 <div
                   ref={penPopoverRef}
@@ -830,22 +813,20 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                   }}
                   onMouseLeave={() => setShowPenControls(null)}
                 >
-                  {/* Size slider — pens only */}
-                  {pen.type !== 'highlight' && (
-                    <div className="bg-background border border-border rounded-lg shadow-lg p-3 flex flex-col items-center gap-3 min-h-[200px]">
-                      <BrushThickIcon className="w-6 h-6 shrink-0 opacity-60" />
-                      <input
-                        type="range"
-                        min="0.1"
-                        max="5"
-                        step="0.1"
-                        value={pen.size}
-                        onChange={(e) => handleSizeChange(pen.id, parseFloat(e.target.value))}
-                        className="grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
-                      />
-                      <BrushThinIcon className="w-6 h-6 shrink-0 opacity-60" />
-                    </div>
-                  )}
+                  {/* Size slider */}
+                  <div className="bg-background border border-border rounded-lg shadow-lg p-3 flex flex-col items-center gap-3 min-h-[200px]">
+                    <BrushThickIcon className="w-6 h-6 shrink-0 opacity-60" />
+                    <input
+                      type="range"
+                      min={penSizeRange(pen.type).min}
+                      max={penSizeRange(pen.type).max}
+                      step={penSizeRange(pen.type).step}
+                      value={pen.size}
+                      onChange={(e) => handleSizeChange(pen.id, parseFloat(e.target.value))}
+                      className="grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
+                    />
+                    <BrushThinIcon className="w-6 h-6 shrink-0 opacity-60" />
+                  </div>
 
                   {/* Hue slider (rainbow) + remove */}
                   <div className="bg-background border border-border rounded-lg shadow-lg p-3 flex flex-col items-center gap-3 min-h-[200px]">
@@ -969,7 +950,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
             </button>
           </div>
 
-          {/* More tools - popover with snap and highlight explanations */}
+          {/* More tools - popover with the snap explanation */}
           <div className="relative" ref={moreToolsRef}>
             <button
               className={cn(
@@ -999,16 +980,6 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                           <span className="text-muted-foreground mx-0.5">+</span>
                           <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono border border-border shadow-xs">V</kbd>
                         </span>
-                      </p>
-                    </div>
-                  </div>
-                  {/* Highlight explanation */}
-                  <div className="flex items-start gap-2.5 px-1 py-1">
-                    <Highlighter className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
-                    <div>
-                      <span className="text-foreground font-medium">Highlight</span>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                        Select text to highlight
                       </p>
                     </div>
                   </div>

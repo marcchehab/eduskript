@@ -62,6 +62,7 @@ export interface StrokeData {
   sectionOffsetY: number   // Y-offset of section when drawn
   avgX?: number            // Average X position of all points (for grouping and quick lookups)
   avgY?: number            // Average Y position of all points (for section detection)
+  tool?: 'highlighter'     // Highlighter stroke (own layer below pens); absent = pen
 }
 
 // Heading position tracking

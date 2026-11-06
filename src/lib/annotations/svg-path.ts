@@ -76,6 +76,62 @@ export function getStrokeOptions(width: number, last = false, simulate = false, 
 }
 
 /**
+ * Stroke tool flag stored on a stroke (`StrokeData.tool`). Absent = pen ink.
+ * `'highlighter'`: wide, constant-width, translucent stroke rendered on its own
+ * layer below the pen strokes and blended with the page (CSS class
+ * `.annotation-highlighter` in globals.css: multiply in light mode, screen in
+ * dark mode; opacity from `--highlighter-opacity`).
+ */
+export type StrokeTool = 'highlighter'
+
+/** Highlighter fill opacity on a light page. On screen the value comes from
+ *  the CSS var `--highlighter-opacity` (globals.css, also set for .dark);
+ *  this constant is the light-mode value, used where no CSS applies
+ *  (AI-feedback PNG) and as the canvas fallback. Keep in sync. */
+export const HIGHLIGHTER_OPACITY_LIGHT = 0.4
+
+export function isHighlighterStroke(stroke: { tool?: string }): boolean {
+  return stroke.tool === 'highlighter'
+}
+
+/** Highlighter outline: constant width (no thinning, no taper, pressure
+ *  ignored) — a marker, not a pen. */
+function getHighlighterOptions(width: number, last: boolean): StrokeOptions {
+  return {
+    size: width * 2,
+    thinning: 0,
+    smoothing: 0.5,
+    streamline: 0.5,
+    simulatePressure: false,
+    last,
+  }
+}
+
+/**
+ * The outline polygon of a stroke — one recipe for every renderer (section
+ * SVGs, orphan SVG, live canvas, AI-feedback PNG). Uniform-pressure (mouse)
+ * input is smoothed and gets simulated pressure; two-point strokes are
+ * straightened lines; highlighters are constant width. `dx`/`dy` translate
+ * the input points (canvas-local / live-shifted coords).
+ */
+export function strokeOutline(
+  points: Array<{ x: number; y: number; pressure: number }>,
+  width: number,
+  tool?: string,
+  last = true,
+  dx = 0,
+  dy = 0,
+): number[][] {
+  const uniform = hasUniformPressure(points)
+  const source = uniform ? smoothPoints(points) : points
+  const input = source.map((p) => [p.x + dx, p.y + dy, p.pressure])
+  const options = tool === 'highlighter'
+    ? getHighlighterOptions(width, last)
+    : getStrokeOptions(width, last, uniform, points.length === 2)
+  return getStroke(input, options)
+}
+
+/**
  * True when every point's pressure matches the first point's. Mouse events
  * always produce the same default pressure (0.5) for every sample, so this
  * reliably distinguishes mouse-drawn strokes from pen-drawn ones without

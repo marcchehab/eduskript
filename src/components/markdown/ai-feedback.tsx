@@ -361,6 +361,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
             // ink is black there, also when the student sees it white.
             color: stroke.color === 'currentColor' ? '#000000' : stroke.color,
             width: stroke.width,
+            tool: stroke.tool,
             yShift,
           })
         }

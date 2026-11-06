@@ -4,7 +4,7 @@
  * LayerVisibilityContext
  *
  * Exposes the annotation layer's visibility state to child components
- * (sticky notes, text highlights, etc.) so all content types can respond
+ * (sticky notes, etc.) so all content types can respond
  * to layer show/hide toggles in the toolbar.
  *
  * Provided by AnnotationLayer, which owns the visibility state.

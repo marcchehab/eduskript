@@ -14,6 +14,8 @@ export interface AnimatedStroke {
   width: number
   sectionId: string
   sectionOffsetY: number
+  /** 'highlighter' for highlighter strokes; absent = pen. See svg-path.ts. */
+  tool?: 'highlighter'
 }
 
 /**

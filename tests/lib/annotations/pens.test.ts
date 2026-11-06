@@ -14,6 +14,7 @@ import {
   hueToColor,
   colorToHue,
   PEN_PALETTE,
+  penSizeRange,
 } from '@/lib/annotations/pens'
 
 describe('pens — pure transforms', () => {
@@ -119,10 +120,10 @@ describe('pens — legacy migration', () => {
     expect(pensFromLegacy(null, null)).toBeNull()
   })
 
-  it('DEFAULT_PENS are two pens + two highlighters in cyan and orange at size 2', () => {
+  it('DEFAULT_PENS are two pens (size 2) + two wide highlighters in cyan and orange', () => {
     expect(DEFAULT_PENS.map((p) => p.color)).toEqual(['#2BB7EE', '#EE892B', '#2BB7EE', '#EE892B'])
     expect(DEFAULT_PENS.map((p) => p.type)).toEqual(['pen', 'pen', 'highlight', 'highlight'])
-    expect(DEFAULT_PENS.every((p) => p.size === 2)).toBe(true)
+    expect(DEFAULT_PENS.map((p) => p.size)).toEqual([2, 2, 10, 10])
   })
 })
 
@@ -131,6 +132,21 @@ describe('pens — highlighter type', () => {
     expect(addPen([])[0].type).toBe('pen')
     const hl = addPen([], 'highlight')
     expect(hl[0].type).toBe('highlight')
+    expect(hl[0].size).toBe(10)
+  })
+
+  it('sanitizePens lifts thin legacy highlighters (old text highlighter, size 2) to the default width', () => {
+    const out = sanitizePens([
+      { id: 'a', color: '#ff0', size: 2, type: 'highlight' },
+      { id: 'b', color: '#ff0', size: 14, type: 'highlight' },
+      { id: 'c', color: '#000', size: 2, type: 'pen' },
+    ])
+    expect(out.map((p) => p.size)).toEqual([10, 14, 2])
+  })
+
+  it('penSizeRange gives highlighters a wider slider than pens', () => {
+    expect(penSizeRange('pen')).toEqual({ min: 0.1, max: 5, step: 0.1 })
+    expect(penSizeRange('highlight')).toEqual({ min: 4, max: 20, step: 1 })
   })
 
   it('sanitizePens preserves a stored highlighter type', () => {

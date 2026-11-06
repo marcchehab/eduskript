@@ -62,10 +62,8 @@
 'use client'
 
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useState } from 'react'
-import { getStroke } from 'perfect-freehand'
-import type { StrokeOptions } from 'perfect-freehand'
 import { determineSectionFromY, liveSectionYShift, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
-import { smoothPoints } from '@/lib/annotations/svg-path'
+import { HIGHLIGHTER_OPACITY_LIGHT, strokeOutline } from '@/lib/annotations/svg-path'
 import { safeRandomUUID } from '@/lib/uuid'
 import {
   HOLD_SNAP_MS,
@@ -74,7 +72,6 @@ import {
   straightenPath,
 } from '@/lib/annotations/shape-snap'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
-import { emitHighlightErase, emitHighlightEraseEnd } from '@/lib/text-highlights/erase-events'
 
 export type DrawMode = 'draw' | 'erase'
 
@@ -99,47 +96,6 @@ function getPathFromStroke(outlinePoints: number[][]): Path2D {
   return path
 }
 
-// Map our stroke params to perfect-freehand options.
-// Our width is radius-like; perfect-freehand size is diameter, hence * 2.
-// `last` must be true for finalized strokes — without it the terminus is
-// rendered as a wide round cap (visible blob). Pass false for in-progress
-// pointermove rendering. `end.taper` cancels the velocity-driven width
-// spike when the pen decelerates before lift-off (otherwise leaves a
-// clubbed terminus even with last:true). `simulate` enables velocity-based
-// pressure simulation for mouse-drawn strokes (constant 0.5 pressure at
-// ~60 Hz sample rate renders as visibly polygonal outlines otherwise).
-// Keep in sync with the SVG layer's copy: src/lib/annotations/svg-path.ts.
-function getStrokeOptions(width: number, last = false, simulate = false, straight = false): StrokeOptions {
-    // Straightened lines (exactly two points) are drawn with a constant width:
-    // no thinning, no taper. `taper: true` spans the WHOLE stroke length, which
-    // on a two-point line means the wedge covers the entire line — visibly a
-    // width gradient from one end to the other, not the intended tip taper.
-    if (straight) {
-      return {
-        size: width * 2,
-        thinning: 0,
-        smoothing: 0.5,
-        streamline: 0,
-        simulatePressure: false,
-        last,
-      }
-    }
-
-  return {
-    size: width * 2,
-    // See svg-path.ts copy for rationale — velocity-derived pressure with
-    // thinning 0.6 produces visible width wobble on mouse strokes.
-    thinning: simulate ? 0.25 : 0.6,
-    smoothing: 0.5,
-    streamline: simulate ? 0.5 : 0.3,
-    simulatePressure: simulate,
-    last,
-    // See svg-path.ts copy for rationale. t^(1/8) keeps width near
-    // full for most of the taper region and drops sharply at the tip.
-    end: { taper: true, easing: (t) => Math.pow(t, 1 / 8) },
-  }
-}
-
 // Canvas 2D has no inherited `color`, so the CSS `currentColor` keyword paints
 // as opaque black. Strokes stored as `currentColor` are "theme ink" (see
 // FOREGROUND_COLOR in lib/annotations/pens): resolve them to the page
@@ -151,16 +107,11 @@ function resolveCanvasColor(color: string, el: HTMLElement): string {
   return fg ? `hsl(${fg})` : '#000'
 }
 
-// Constant pressure across all samples is a reliable mouse/touch marker:
-// pen digitizers always produce varying pressure between samples, while
-// mouse/touch PointerEvents fill pressure with the default 0.5 each time.
-function hasUniformPressure(points: Array<{ pressure: number }>): boolean {
-  if (points.length < 2) return false
-  const first = points[0].pressure
-  for (let i = 1; i < points.length; i++) {
-    if (points[i].pressure !== first) return false
-  }
-  return true
+// Highlighter fill opacity for the active theme (`--highlighter-opacity`,
+// globals.css), so the live stroke matches the committed SVG.
+function highlighterAlpha(el: HTMLElement): number {
+  const v = parseFloat(getComputedStyle(el).getPropertyValue('--highlighter-opacity'))
+  return Number.isFinite(v) ? v : HIGHLIGHTER_OPACITY_LIGHT
 }
 
 // Generate stable content-based ID for strokes without IDs (backward compat)
@@ -206,7 +157,7 @@ interface SimpleCanvasProps {
   readOnly?: boolean  // When true, disables all interaction
   svgHandlesDisplay?: boolean  // When true, skip rendering committed strokes (SVG layer shows them)
   scrollContainer?: HTMLElement | null  // For viewport-sized canvas (svgHandlesDisplay mode)
-  textSelectionMode?: boolean  // Highlight mode: keep canvas inert (even for stylus) so text selection reaches the prose
+  highlighter?: boolean  // Active pen is a highlighter: strokes are stored with tool 'highlighter'
 }
 
 export interface SimpleCanvasHandle {
@@ -215,7 +166,7 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onEraserMarksChange, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null, textSelectionMode = false }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onEraserMarksChange, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null, highlighter = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
     const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
@@ -229,6 +180,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       sectionOffsetY: number
       avgX?: number  // Average X position of all points (for grouping)
       avgY?: number  // Average Y position of all points (for section detection)
+      tool?: 'highlighter'
     }>>([])
     const currentPathRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
     // Straightening. `currentPathRef` always holds the raw hand path; when a
@@ -363,29 +315,27 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // Canvas still tracks pathsRef for eraser collision and data export.
       if (svgHandlesDisplay) return
 
-      // Redraw all paths using perfect-freehand outline fill
-      pathsRef.current.forEach((path, index) => {
-        if (path.points.length < 2) return
+      // Redraw all paths using perfect-freehand outline fill: highlighters
+      // first, pens on top (same order as the SVG layers). No page blend here —
+      // this legacy full-page raster path is unused while svgHandlesDisplay.
+      const hlAlpha = highlighterAlpha(ctx.canvas)
+      for (const highlighterPass of [true, false]) {
+        pathsRef.current.forEach((path, index) => {
+          if (path.points.length < 2) return
+          if ((path.tool === 'highlighter') !== highlighterPass) return
 
-        // Skip erase-mode strokes (they're historical markers, not visible)
-        if (path.mode === 'erase') return
+          // Skip erase-mode strokes (they're historical markers, not visible)
+          if (path.mode === 'erase') return
 
-        // Check if this stroke is marked for deletion
-        const isMarkedForDeletion = strokesMarkedForDeletionRef.current.has(index)
+          // Reduced opacity if marked for deletion
+          const base = highlighterPass ? hlAlpha : 1
+          ctx.globalAlpha = strokesMarkedForDeletionRef.current.has(index) ? base * 0.3 : base
 
-        // Set opacity (reduced if marked for deletion)
-        ctx.globalAlpha = isMarkedForDeletion ? 0.3 : 1
-
-        // Convert {x,y,pressure} objects to [x,y,pressure] arrays for perfect-freehand
-        const isUniform = hasUniformPressure(path.points)
-        const sourcePoints = isUniform ? smoothPoints(path.points) : path.points
-        const inputPoints = sourcePoints.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(path.width, true, isUniform, path.points.length === 2))
-        const pathObj = getPathFromStroke(outline)
-
-        ctx.fillStyle = resolveCanvasColor(path.color, ctx.canvas)
-        ctx.fill(pathObj)
-      })
+          const pathObj = getPathFromStroke(strokeOutline(path.points, path.width, path.tool))
+          ctx.fillStyle = resolveCanvasColor(path.color, ctx.canvas)
+          ctx.fill(pathObj)
+        })
+      }
 
       // Reset globalAlpha
       ctx.globalAlpha = 1.0
@@ -731,11 +681,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const vp = viewportRef.current
       const livePoints = snappedPathRef.current ?? currentPathRef.current
       if (livePoints.length === 0) return
-      const isUniform = hasUniformPressure(livePoints)
-      const sourcePoints = isUniform ? smoothPoints(livePoints) : livePoints
-      const inputPoints = vp
-        ? sourcePoints.map(p => [p.x - vp.x, p.y - vp.y, p.pressure])
-        : sourcePoints.map(p => [p.x, p.y, p.pressure])
       // last: true matches the committed-stroke render in section-anchored-strokes.
       // Without this, the canvas paints with a full-width round end while the SVG
       // paints with the end taper enabled — the user sees the stroke "shrink"
@@ -743,11 +688,19 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // when the stroke ends going downward). Coordinate-wise the canvas and SVG
       // already agree to subpixel precision; this just makes the visual handoff
       // seamless.
-      const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, true, isUniform, livePoints.length === 2))
+      //
+      // A highlighter is filled as ONE path at reduced alpha, so the stroke
+      // never darkens where it crosses itself. The page blend (multiply/screen)
+      // comes from the .annotation-highlighter class AnnotationLayer puts on
+      // the canvas wrapper while a highlighter is active.
+      const tool = highlighter ? 'highlighter' : undefined
+      const outline = strokeOutline(livePoints, strokeWidth, tool, true, vp ? -vp.x : 0, vp ? -vp.y : 0)
       const pathObj = getPathFromStroke(outline)
+      ctx.globalAlpha = highlighter ? highlighterAlpha(ctx.canvas) : 1
       ctx.fillStyle = resolveCanvasColor(strokeColor, ctx.canvas)
       ctx.fill(pathObj)
-    }, [strokeColor, strokeWidth])
+      ctx.globalAlpha = 1
+    }, [strokeColor, strokeWidth, highlighter])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Don't draw if multiple touch/mouse pointers are active (pinch gesture)
@@ -835,13 +788,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           // Update eraser cursor position (direct DOM manipulation, no re-render)
           updateEraserCursorPosition(x, y)
 
-          // Also erase highlights the eraser touches. The eraser doesn't own the
-          // highlight layers (prose <mark>s, code-editor decorations live in
-          // sibling components), so we broadcast the client point and let them
-          // hit-test + remove. Sent in viewport coords (event.clientX/Y), not
-          // paper coords, since listeners hit-test against getBoundingClientRect.
-          emitHighlightErase(event.clientX, event.clientY)
-
           // Check for stroke collisions and only redraw when marking NEW strokes.
           // pathsRef holds stored paper coords; the SVG layer may have carried the
           // committed stroke to a new y after content reflow. Shift the eraser's
@@ -851,7 +797,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           let markedNewStroke = false
           pathsRef.current.forEach((stroke, strokeIndex) => {
             const shift = liveSectionYShift(stroke.sectionId, stroke.sectionOffsetY, hp)
-            if (stroke.mode !== 'erase' && isPointNearStroke(x, y - shift, stroke)) {
+            // Wide strokes (highlighters) are hit anywhere on their body.
+            if (stroke.mode !== 'erase' && isPointNearStroke(x, y - shift, stroke, Math.max(11, stroke.width))) {
               // Only mark as new if it wasn't already marked
               if (!strokesMarkedForDeletionRef.current.has(strokeIndex)) {
                 strokesMarkedForDeletionRef.current.add(strokeIndex)
@@ -1019,9 +966,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       // If we just finished an eraser stroke, delete all marked strokes
       if (currentModeRef.current === 'erase') {
-        // Commit any highlights the swipe dimmed (their layers track the marks).
-        emitHighlightEraseEnd()
-
         if (strokesMarkedForDeletionRef.current.size > 0) {
           // Filter out strokes that were marked for deletion
           const indicesToDelete = new Set(strokesMarkedForDeletionRef.current)
@@ -1141,7 +1085,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           sectionId,
           sectionOffsetY,
           avgX,
-          avgY
+          avgY,
+          ...(highlighter ? { tool: 'highlighter' as const } : {}),
         })
 
         currentPathRef.current = []
@@ -1154,7 +1099,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const data = JSON.stringify(pathsRef.current)
         onUpdate?.(data)
       }
-    }, [mode, strokeColor, strokeWidth, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange, clearHoldTimer])
+    }, [mode, strokeColor, strokeWidth, highlighter, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange, clearHoldTimer])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Clean up when pointer is cancelled
@@ -1241,8 +1186,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
             touchAction: isPenDrawing ? 'none' : 'auto',
             cursor: mode === 'erase' ? 'none' : (mode === 'draw' ? 'crosshair' : 'default'),
             // Capture events in draw/erase mode OR stylus mode (to prevent selection).
-            // Exception: highlight mode (textSelectionMode) must stay inert so the selection reaches the prose.
-            pointerEvents: textSelectionMode ? 'none' : ((mode !== 'view' || stylusModeActive) ? 'auto' : 'none')
+            pointerEvents: (mode !== 'view' || stylusModeActive) ? 'auto' : 'none'
           }}
         />
         {/* Eraser cursor element - positioned via direct DOM manipulation */}

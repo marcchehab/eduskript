@@ -8,8 +8,9 @@
  * pen *config* is purely a toolbar concern and never affects stored
  * annotations.
  *
- * `type` is 'pen' (freehand draw) or 'highlight' (text highlighter — selecting
- * text marks it in the pen's colour, never broadcast, always personal).
+ * `type` is 'pen' or 'highlight'. Both draw freehand strokes; a highlighter's
+ * strokes are stored with `tool: 'highlighter'` (wide, translucent, rendered
+ * on their own layer below the pen ink — see src/lib/annotations/svg-path.ts).
  */
 
 import { safeRandomUUID } from '@/lib/uuid'
@@ -77,6 +78,17 @@ export function colorToHue(color: string): number {
 export const MIN_PENS = 1
 export const MAX_PENS = 8
 const DEFAULT_SIZE = 2
+/** Highlighter stroke radius (px, like `size` for pens): ~one text line tall. */
+const DEFAULT_HIGHLIGHT_SIZE = 10
+const HIGHLIGHT_SIZE_MIN = 4
+const HIGHLIGHT_SIZE_MAX = 20
+
+/** Size slider range per pen type (pen widths are far thinner). */
+export function penSizeRange(type: PenType): { min: number; max: number; step: number } {
+  return type === 'highlight'
+    ? { min: HIGHLIGHT_SIZE_MIN, max: HIGHLIGHT_SIZE_MAX, step: 1 }
+    : { min: 0.1, max: 5, step: 0.1 }
+}
 
 const STORAGE_KEY = 'annotation-pens'
 const LEGACY_COLORS_KEY = 'annotation-pen-colors'
@@ -86,13 +98,12 @@ const LEGACY_SIZES_KEY = 'annotation-pen-sizes'
 export const PEN_PALETTE = [FOREGROUND_COLOR, '#808080', '#DD5555', '#EE8844', '#44AA66', '#5577DD', '#9966DD']
 
 /** Today's defaults: two pens + two highlighters, in cyan and orange. Fixed ids
- *  (deterministic across SSR/CSR; ids only need to be unique within the list).
- *  Highlighters render translucent via highlightBackground() (hex → /0.35). */
+ *  (deterministic across SSR/CSR; ids only need to be unique within the list). */
 export const DEFAULT_PENS: PenConfig[] = [
   { id: 'pen-1', color: '#2BB7EE', size: DEFAULT_SIZE, type: 'pen' },
   { id: 'pen-2', color: '#EE892B', size: DEFAULT_SIZE, type: 'pen' },
-  { id: 'highlight-1', color: '#2BB7EE', size: DEFAULT_SIZE, type: 'highlight' },
-  { id: 'highlight-2', color: '#EE892B', size: DEFAULT_SIZE, type: 'highlight' },
+  { id: 'highlight-1', color: '#2BB7EE', size: DEFAULT_HIGHLIGHT_SIZE, type: 'highlight' },
+  { id: 'highlight-2', color: '#EE892B', size: DEFAULT_HIGHLIGHT_SIZE, type: 'highlight' },
 ]
 
 const genId = safeRandomUUID
@@ -110,8 +121,10 @@ export const DEFAULT_HIGHLIGHT_COLOR = hueToColor(50)
 
 export function addPen(pens: PenConfig[], type: PenType = 'pen'): PenConfig[] {
   if (pens.length >= MAX_PENS) return pens
-  const color = type === 'highlight' ? DEFAULT_HIGHLIGHT_COLOR : nextPenColor(pens.map((p) => p.color))
-  return [...pens, { id: genId(), color, size: DEFAULT_SIZE, type }]
+  if (type === 'highlight') {
+    return [...pens, { id: genId(), color: DEFAULT_HIGHLIGHT_COLOR, size: DEFAULT_HIGHLIGHT_SIZE, type }]
+  }
+  return [...pens, { id: genId(), color: nextPenColor(pens.map((p) => p.color)), size: DEFAULT_SIZE, type }]
 }
 
 export function removePen(pens: PenConfig[], id: string): PenConfig[] {
@@ -156,8 +169,11 @@ export function sanitizePens(parsed: unknown): PenConfig[] {
     const rec = item as Record<string, unknown>
     const color = typeof rec.color === 'string' ? rec.color : null
     if (!color) continue
-    const size = typeof rec.size === 'number' && rec.size > 0 ? rec.size : DEFAULT_SIZE
     const type: PenType = rec.type === 'highlight' ? 'highlight' : 'pen'
+    let size = typeof rec.size === 'number' && rec.size > 0 ? rec.size : DEFAULT_SIZE
+    // Highlighters saved by the old text highlighter carry the pen default (2),
+    // which is far too thin for a freehand marker — lift them to the default.
+    if (type === 'highlight' && size < HIGHLIGHT_SIZE_MIN) size = DEFAULT_HIGHLIGHT_SIZE
     let id = typeof rec.id === 'string' && rec.id ? rec.id : genId()
     while (seen.has(id)) id = genId()
     seen.add(id)

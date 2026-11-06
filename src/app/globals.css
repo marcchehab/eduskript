@@ -1531,12 +1531,43 @@ article.prose-theme > div > :first-child {
  * .markdown-content (callouts, h1, code-editors). Without this, an SVG
  * portaled into section A paints in tree order — earlier than a later sibling
  * callout B at z-index:auto — so any stroke whose visual extent overlaps B
- * disappears under B when committed. z-index:1 puts the SVG in painting
+ * disappears under B when committed. A positive z-index (2 for pen SVGs, 1
+ * for highlighter SVGs, below) puts the SVG in painting
  * level 7 of the markdown stacking context, above all auto-z siblings. Stays
  * well below .annotation-content-wrapper (z-index 36/40), so sticky notes,
  * the live drawing canvas, and toolbars still float above committed strokes. */
 .annotation-section-svg {
+  z-index: 2;
+}
+
+/* Highlighter strokes (tool: 'highlighter', see src/lib/annotations/svg-path.ts).
+ * Each section gets a separate highlighter SVG one z-level below the pen SVGs
+ * (above), so pen ink always paints over highlights — across sections too.
+ * (Reference layers set an inline z-index on both SVGs; there the order holds
+ * only within a section, by DOM order.)
+ * The layer blends with the page: multiply in light mode keeps black text black
+ * and tints only the white paper; on a dark page multiply would barely show,
+ * so dark mode uses screen (tints the dark paper, white text stays white).
+ * Each stroke is one filled path at --highlighter-opacity, so a stroke never
+ * darkens where it crosses itself. The class also goes on the live-canvas
+ * wrapper while a highlighter is active (annotation-layer.tsx). */
+:root {
+  --highlighter-opacity: 0.4;
+}
+.dark {
+  --highlighter-opacity: 0.5;
+}
+.annotation-section-svg.annotation-highlighter {
   z-index: 1;
+}
+.annotation-highlighter {
+  mix-blend-mode: multiply;
+}
+.dark .annotation-highlighter {
+  mix-blend-mode: screen;
+}
+.annotation-highlighter path {
+  fill-opacity: var(--highlighter-opacity);
 }
 
 /* Floating top-right page controls (font size / theme / login). While a
@@ -2943,12 +2974,6 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --text-highlight-purple: rgba(168, 85, 247, 0.28);
   --text-highlight-pink: rgba(236, 72, 153, 0.28);
   --text-highlight-orange: rgba(251, 146, 60, 0.32);
-  /* Toolbar swatch dots (opaque, need to read as solid color) */
-  --text-highlight-swatch-yellow: rgb(250, 204, 21);
-  --text-highlight-swatch-red: rgb(239, 68, 68);
-  --text-highlight-swatch-green: rgb(74, 222, 128);
-  --text-highlight-swatch-blue: rgb(96, 165, 250);
-  --text-highlight-swatch-purple: rgb(168, 85, 247);
 }
 
 mark {
@@ -2960,41 +2985,6 @@ mark {
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
-}
-
-mark.text-highlight {
-  cursor: pointer;
-  /* No horizontal padding so wrapping text in a highlight doesn't widen the
-     inline box and shift following text — pixel-perfect overlay. */
-  padding: 0;
-}
-
-mark.text-highlight-yellow {
-  background-color: var(--text-highlight-yellow);
-}
-
-mark.text-highlight-red {
-  background-color: var(--text-highlight-red);
-}
-
-mark.text-highlight-green {
-  background-color: var(--text-highlight-green);
-}
-
-mark.text-highlight-blue {
-  background-color: var(--text-highlight-blue);
-}
-
-mark.text-highlight-purple {
-  background-color: var(--text-highlight-purple);
-}
-
-mark.text-highlight-pink {
-  background-color: var(--text-highlight-pink);
-}
-
-mark.text-highlight-orange {
-  background-color: var(--text-highlight-orange);
 }
 
 /* ===== Theme-aware named color palette =====
@@ -3025,7 +3015,7 @@ mark.text-highlight-orange {
   --es-color-lightblue: #0369a1;  /* sky-700 */
 
   /* Background highlight colors — share the user-highlight palette so
-   * <span class="es-bg-NAME"> renders identically to mark.text-highlight-NAME. */
+   * <span class="es-bg-NAME"> uses the same translucent colours as <mark>. */
   --es-bg-paper:  hsl(var(--card));  /* the paper (page) background; flips in .dark via --card */
   --es-bg-muted:  hsl(var(--muted)); /* the UI's muted surface */
   --es-bg-yellow: var(--text-highlight-yellow);

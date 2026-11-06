@@ -29,8 +29,7 @@ export function HeadingPositionsProvider({
   // Memoized so the context value ref only changes when `positions` actually
   // changes — not on every render of the parent (AnnotationLayer re-renders on
   // every pointermove while drawing). Without this, the sole consumer
-  // (sticky-notes-layer) re-rendered on every pointer move. Same bug class as
-  // the HighlightPenContext fix in annotation-layer.tsx.
+  // (sticky-notes-layer) re-rendered on every pointer move.
   const value = useMemo(() => ({ positions }), [positions])
   return (
     <HeadingPositionsContext.Provider value={value}>

@@ -32,8 +32,7 @@
 
 import { memo, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { getStroke } from 'perfect-freehand'
-import { getSvgPathFromStroke, getStrokeOptions, hasUniformPressure, smoothPoints } from '@/lib/annotations/svg-path'
+import { getSvgPathFromStroke, isHighlighterStroke, strokeOutline } from '@/lib/annotations/svg-path'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useZoom } from '@/contexts/zoom-context'
 import { isEditableLine, moveEndpoint, moveLine, type EditPoint } from '@/lib/annotations/line-edit'
@@ -89,6 +88,8 @@ interface PathDatum {
   /** Paper-y of the middle of the stroke's vertical extent (print shifts). */
   centerY: number
   width: number
+  /** Highlighter stroke — drawn in the section's highlighter SVG, below pens. */
+  highlighter: boolean
   /** Set only for straightened lines (exactly two points) — the handle geometry. */
   line?: [EditPoint, EditPoint]
 }
@@ -106,10 +107,7 @@ interface SectionBounds {
 const isRenderable = (s: AnimatedStroke) => s.mode !== 'erase' && s.points.length >= 2
 
 function buildPath(stroke: AnimatedStroke): PathDatum {
-  const isUniform = hasUniformPressure(stroke.points)
-  const sourcePoints = isUniform ? smoothPoints(stroke.points) : stroke.points
-  const inputPoints = sourcePoints.map(p => [p.x, p.y, p.pressure])
-  const outline = getStroke(inputPoints, getStrokeOptions(stroke.width, true, isUniform, stroke.points.length === 2))
+  const outline = strokeOutline(stroke.points, stroke.width, stroke.tool)
   let minY = Infinity
   let maxY = -Infinity
   for (const p of stroke.points) {
@@ -123,6 +121,7 @@ function buildPath(stroke: AnimatedStroke): PathDatum {
     sectionOffsetY: stroke.sectionOffsetY,
     centerY: (minY + maxY) / 2,
     width: stroke.width,
+    highlighter: isHighlighterStroke(stroke),
     line: isEditableLine(stroke)
       ? [stroke.points[0] as EditPoint, stroke.points[1] as EditPoint]
       : undefined,
@@ -371,6 +370,24 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
         const geom = sectionGeom.get(sid) ?? { borderTop: 0, borderLeft: 0, leftFromPaper: paperPaddingLeft, topFromPaper: 0 }
         return createPortal(
           <>
+            {/* Highlighter strokes first, in their own SVG (lower z-index, page
+                blend — see .annotation-highlighter), so pen ink always sits on
+                top regardless of drawing order. */}
+            <SectionStrokeSvg
+              highlighter
+              paths={paths}
+              paperWidth={paperWidth}
+              paperHeight={paperHeight}
+              sectionLeftFromPaper={geom.leftFromPaper}
+              sectionTopFromPaper={geom.topFromPaper}
+              sectionBorderTop={geom.borderTop}
+              sectionBorderLeft={geom.borderLeft}
+              printShifts={geom.printShifts}
+              markedForDeletion={markedForDeletion}
+              opacity={opacity}
+              zIndex={zIndex}
+              hiddenId={preview?.id}
+            />
             <SectionStrokeSvg
               paths={paths}
               paperWidth={paperWidth}
@@ -640,6 +657,7 @@ function SectionLineHandles({
 }
 
 function SectionStrokeSvg({
+  highlighter = false,
   paths,
   paperWidth,
   paperHeight,
@@ -653,6 +671,8 @@ function SectionStrokeSvg({
   zIndex,
   hiddenId,
 }: {
+  /** Render only the highlighter strokes (else only the pen strokes). */
+  highlighter?: boolean
   paths: PathDatum[]
   paperWidth: number
   paperHeight: number
@@ -677,12 +697,13 @@ function SectionStrokeSvg({
   const offsetGroups = useMemo(() => {
     const map = new Map<number, PathDatum[]>()
     for (const p of paths) {
+      if (p.highlighter !== highlighter) continue
       const arr = map.get(p.sectionOffsetY)
       if (arr) arr.push(p)
       else map.set(p.sectionOffsetY, [p])
     }
     return map
-  }, [paths])
+  }, [paths, highlighter])
 
   // Clip the box (and viewBox, to keep the 1:1 identity scale under
   // preserveAspectRatio="none") so the SVG bottom lands at the paper bottom
@@ -693,9 +714,11 @@ function SectionStrokeSvg({
   // stay tall enough to cover a foldable callout it may be portaled into.
   const clippedHeight = Math.max(200, paperHeight - sectionTopFromPaper)
 
+  if (offsetGroups.size === 0) return null
+
   return (
     <svg
-      className="annotation-section-svg"
+      className={highlighter ? 'annotation-section-svg annotation-highlighter' : 'annotation-section-svg'}
       viewBox={`0 0 ${paperWidth} ${clippedHeight}`}
       preserveAspectRatio="none"
       style={{

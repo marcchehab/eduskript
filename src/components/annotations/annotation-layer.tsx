@@ -121,7 +121,6 @@ import { SpacersDisplay } from './spacers-display'
 import { createLogger } from '@/lib/logger'
 import { safeRandomUUID } from '@/lib/uuid'
 import { DEFAULT_PENS, loadPens, savePens, addPen, removePen, reorderPens, setPenColor, setPenSize, type PenConfig, type PenType } from '@/lib/annotations/pens'
-import { HighlightPenContext } from '@/components/text-highlights/highlight-pen-context'
 
 const log = createLogger('annotations:layer')
 
@@ -328,10 +327,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
   // Create a stable key for targeting to detect changes
   const targetingKey = `${syncOptions.targetType ?? ''}-${syncOptions.targetId ?? ''}`
-
-  // Broadcasting (any non-personal target) — highlights are always personal,
-  // so the toolbar greys the highlighter and we force it off if it's active.
-  const isBroadcasting = Boolean(syncOptions.targetType)
 
   // Use synced user data service for annotations (with targeting for teachers)
   const { data: annotationData, updateData: updateAnnotationData, isLoading: annotationLoading } = useSyncedUserData<AnnotationData>(
@@ -1206,16 +1201,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const [activePenId, setActivePenId] = useState<string>(DEFAULT_PENS[0].id)
   const activePen = pens.find((p) => p.id === activePenId) ?? pens[0] ?? DEFAULT_PENS[0]
 
-  // Memoized so HighlightPenContext's value only changes when the active
-  // highlighter colour actually changes — NOT on every AnnotationLayer render.
-  // AnnotationLayer re-renders on every pointermove while drawing; an inline
-  // object literal at the Provider made every consumer (every CodeEditor + the
-  // HighlightLayer) re-render on each pointer move even when the colour was
-  // unchanged. Keyed on the two primitives that determine the value.
-  const highlightPenValue = useMemo(
-    () => ({ activeHighlightColor: mode === 'highlight' ? activePen.color : null }),
-    [mode, activePen.color],
-  )
+  // Highlighter pens draw ordinary strokes flagged tool:'highlighter' (own
+  // layer below the pens, page-blended — see svg-path.ts / globals.css).
+  const highlighterActive = mode === 'draw' && activePen.type === 'highlight'
 
   // Load saved pens after mount to avoid hydration mismatch.
   useEffect(() => {
@@ -1475,27 +1463,18 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   // Track annotating state in ref for event handlers (avoids stale closure issues)
   const isAnnotatingRef = useRef(false)
   useEffect(() => {
-    // Highlight mode must allow text selection, so it does NOT count as annotating.
-    isAnnotatingRef.current = mode === 'highlight' ? false : (mode !== 'view' || stylusModeActive)
+    isAnnotatingRef.current = mode !== 'view' || stylusModeActive
     // Finger draw mode: user explicitly activated draw/erase without a stylus
     // In this mode, ALL touch input should draw, not scroll
     fingerDrawModeRef.current = mode !== 'view' && !stylusModeActive
   }, [mode, stylusModeActive])
-
-  // Highlights never broadcast — if a highlighter is active and the teacher
-  // switches to a broadcast audience, drop back to view.
-  useEffect(() => {
-    if (isBroadcasting && mode === 'highlight') setMode('view')
-  }, [isBroadcasting, mode])
 
   // Add annotation-active class to paper when in draw/erase mode (prevents text selection on iOS Safari)
   useEffect(() => {
     const paper = document.getElementById('paper')
     if (!paper) return
 
-    // Highlight mode keeps text selectable (you select to highlight), so it is
-    // not "annotating" for the no-select class.
-    const isAnnotating = mode === 'highlight' ? false : (mode !== 'view' || stylusModeActive)
+    const isAnnotating = mode !== 'view' || stylusModeActive
 
     if (isAnnotating) {
       paper.classList.add('annotation-active')
@@ -3384,11 +3363,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       <div ref={contentRef} style={{ position: 'relative' }}>
         <LayerVisibilityProvider value={layerVisibilityContextValue}>
           <HeadingPositionsProvider positions={headingPositions}>
-            {/* Broadcast the active highlighter colour to the HighlightLayer
-                (in children) so selecting text auto-highlights in that colour. */}
-            <HighlightPenContext.Provider value={highlightPenValue}>
-              {children}
-            </HighlightPenContext.Provider>
+            {children}
           </HeadingPositionsProvider>
         </LayerVisibilityProvider>
       </div>
@@ -3396,13 +3371,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       {/* Canvas portaled directly into #paper - always matches paper bounds */}
       {paperElement && pageHeight > 0 && initialLoadComplete && createPortal(
         <div
-          className={`annotation-content-wrapper ${!activeLayerVisible ? 'annotation-layer-hidden' : ''}`}
+          // While a highlighter is active the wrapper (a z-index stacking
+          // context holding the live canvas) blends with the page like the
+          // committed highlighter SVGs, so the in-progress stroke looks the same.
+          className={`annotation-content-wrapper ${!activeLayerVisible ? 'annotation-layer-hidden' : ''} ${highlighterActive ? 'annotation-highlighter' : ''}`}
           style={{
             height: pageHeight,
             // Always capture events when in draw/erase mode or stylus mode (spacer mode bypasses canvas).
-            // Exception: highlight mode must stay inert so text selection reaches the prose — even for
-            // a stylus (stylusModeActive is true whenever a pen is in use), matching mouse behavior.
-            pointerEvents: mode === 'highlight' ? 'none' : (((mode === 'draw' || mode === 'erase') || stylusModeActive) ? 'auto' : 'none'),
+            pointerEvents: ((mode === 'draw' || mode === 'erase') || stylusModeActive) ? 'auto' : 'none',
             // CRITICAL: When pen is actively drawing, disable touch actions to prevent scroll
             // When pen is not drawing, allow touch scrolling
             touchAction: penActive ? 'none' : 'auto',
@@ -3427,8 +3403,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
             ref={canvasRef}
             width={paperWidth}
             height={pageHeight}
-            mode={(mode === 'view' || mode === 'spacer' || mode === 'highlight') ? 'view' : (mode as DrawMode)}
-            textSelectionMode={mode === 'highlight'}
+            mode={(mode === 'view' || mode === 'spacer') ? 'view' : (mode as DrawMode)}
+            highlighter={activePen.type === 'highlight'}
             onUpdate={handleCanvasUpdate}
             onTelemetry={handleTelemetry}
             onDrawStart={ensureActiveLayerVisible}
@@ -3714,7 +3690,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         onPenAdd={handlePenAdd}
         onPenRemove={handlePenRemove}
         onPensReorder={handlePensReorder}
-        isBroadcasting={isBroadcasting}
         onResetZoom={handleResetZoom}
         // Layer controls for students (broadcasted teacher annotations)
         layers={toolbarLayers}

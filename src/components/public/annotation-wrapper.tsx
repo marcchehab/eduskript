@@ -2,7 +2,6 @@
 
 import { ReactNode } from 'react'
 import { AnnotationLayer } from '@/components/annotations/annotation-layer'
-import { HighlightLayer } from '@/components/text-highlights/highlight-layer'
 import { StickyNotesLayer, type StickyNote } from '@/components/annotations/sticky-notes-layer'
 import { TeacherBroadcastProvider } from '@/contexts/teacher-broadcast-context'
 import { StickyNotesProvider } from '@/contexts/sticky-notes-context'
@@ -56,9 +55,7 @@ export function AnnotationWrapper({ pageId, content, children, publicAnnotations
       <TeacherBroadcastProvider pageId={pageId}>
         <AnnotationLayer pageId={pageId} content={content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor} isExamStudent={isExamStudent}>
           <StickyNotesLayer pageId={pageId} isExamStudent={isExamStudent} publicStickyNotes={publicStickyNotes}>
-            <HighlightLayer pageId={pageId}>
-              {children}
-            </HighlightLayer>
+            {children}
           </StickyNotesLayer>
         </AnnotationLayer>
       </TeacherBroadcastProvider>

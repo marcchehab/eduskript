@@ -16,8 +16,7 @@
 'use client'
 
 import { memo, useMemo } from 'react'
-import { getStroke } from 'perfect-freehand'
-import { getSvgPathFromStroke, getStrokeOptions, hasUniformPressure, smoothPoints } from '@/lib/annotations/svg-path'
+import { getSvgPathFromStroke, isHighlighterStroke, strokeOutline } from '@/lib/annotations/svg-path'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
 
 interface AnnotationSvgLayerProps {
@@ -32,6 +31,7 @@ interface PathDatum {
   id: string
   d: string
   color: string
+  highlighter: boolean
 }
 
 export const AnnotationSvgLayer = memo(function AnnotationSvgLayer({
@@ -44,46 +44,53 @@ export const AnnotationSvgLayer = memo(function AnnotationSvgLayer({
   const pathData = useMemo(() => {
     return strokes
       .filter(s => s.mode !== 'erase' && s.points.length >= 2)
-      .map((stroke): PathDatum => {
-        const isUniform = hasUniformPressure(stroke.points)
-        const sourcePoints = isUniform ? smoothPoints(stroke.points) : stroke.points
-        const inputPoints = sourcePoints.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(stroke.width, true, isUniform, stroke.points.length === 2))
-        const d = getSvgPathFromStroke(outline)
-        return {
-          id: stroke.id,
-          d,
-          color: stroke.color,
-        }
-      })
+      .map((stroke): PathDatum => ({
+        id: stroke.id,
+        d: getSvgPathFromStroke(strokeOutline(stroke.points, stroke.width, stroke.tool)),
+        color: stroke.color,
+        highlighter: isHighlighterStroke(stroke),
+      }))
   }, [strokes])
 
   if (pathData.length === 0) return null
 
+  // Two SVGs: highlighter strokes first (page-blended, see
+  // .annotation-highlighter), pen strokes on top.
+  const renderSvg = (highlighter: boolean) => {
+    const paths = pathData.filter(p => p.highlighter === highlighter)
+    if (paths.length === 0) return null
+    return (
+      <svg
+        className={`annotation-svg ${highlighter ? 'annotation-highlighter' : ''} ${className}`}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: `${height}px`,
+          pointerEvents: 'none',
+          // `currentColor` strokes (theme ink) resolve to this and flip with the theme.
+          color: 'hsl(var(--foreground))',
+        }}
+      >
+        {paths.map(p => (
+          <path
+            key={p.id}
+            d={p.d}
+            fill={p.color}
+            opacity={markedForDeletion?.has(p.id) ? 0.3 : 1}
+          />
+        ))}
+      </svg>
+    )
+  }
+
   return (
-    <svg
-      className={`annotation-svg ${className}`}
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: `${height}px`,
-        pointerEvents: 'none',
-        // `currentColor` strokes (theme ink) resolve to this and flip with the theme.
-        color: 'hsl(var(--foreground))',
-      }}
-    >
-      {pathData.map(p => (
-        <path
-          key={p.id}
-          d={p.d}
-          fill={p.color}
-          opacity={markedForDeletion?.has(p.id) ? 0.3 : 1}
-        />
-      ))}
-    </svg>
+    <>
+      {renderSvg(true)}
+      {renderSvg(false)}
+    </>
   )
 })

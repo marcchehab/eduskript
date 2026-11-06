@@ -63,7 +63,6 @@ export interface CodeEditorData {
     y: number
     scale: number
   }
-  highlights?: CodeHighlight[]  // Code highlights (per-file)
 }
 
 /**
@@ -151,7 +150,7 @@ export interface StrokeTelemetry {
   lengthPerPoint: number    // Average distance between points (px)
   durationPerPoint: number  // Time between points (ms) = ~sampling interval
   sectionId: string         // Which heading section the stroke belongs to
-  mode: 'draw' | 'highlight' | 'erase'
+  mode: 'draw' | 'erase'
 }
 
 /**
@@ -199,29 +198,6 @@ export interface BinaryFileData {
   files: BinaryFile[]
 }
 
-/**
- * Code highlight colour — an arbitrary CSS colour string (from the toolbar
- * highlighter pen, e.g. `hsl(50 85% 55%)`). Legacy values are the old fixed
- * names (red/yellow/green/blue) and still render via highlightBackground().
- */
-export type HighlightColor = string
-
-/**
- * Individual code highlight (personal-only).
- *
- * POSITION TRACKING:
- * `from`/`to` are character offsets in the file content, updated automatically
- * by CodeMirror when the document is edited (see highlight-extension.ts).
- * Persisted (server-synced) per page+editor; see code-editor/index.tsx.
- */
-export interface CodeHighlight {
-  id: string                // Unique identifier (nanoid)
-  fileIndex: number         // Which file in multi-file editor
-  from: number              // Start character offset
-  to: number                // End character offset
-  color: HighlightColor     // CSS colour string
-  createdAt: number         // Timestamp for ordering
-}
 
 /**
  * Options for saving user data

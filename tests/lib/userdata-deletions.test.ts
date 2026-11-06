@@ -3,7 +3,6 @@ import {
   snapsAdapter,
   spacersAdapter,
   stickyNotesAdapter,
-  textHighlightsAdapter,
   recordDeletions,
   removedCollectionIds,
   MAX_DELETED_IDS,
@@ -36,11 +35,9 @@ describe('collection merge with deletions', () => {
     expect(merged.snaps.map(s => s.id)).toEqual(['a', 'b'])
   })
 
-  it('applies to spacers, highlights and sticky notes too', () => {
+  it('applies to spacers and sticky notes too', () => {
     const spacer = { id: 'x' } as never
     expect(spacersAdapter.merge!({ spacers: [], deletedIds: ['x'] }, { spacers: [spacer] }).spacers).toEqual([])
-    const hl = { id: 'x' } as never
-    expect(textHighlightsAdapter.merge!({ highlights: [], deletedIds: ['x'] }, { highlights: [hl] }).highlights).toEqual([])
     const note = { id: 'x', updatedAt: 1 } as never
     expect(stickyNotesAdapter.merge!({ notes: [], deletedIds: ['x'] }, { notes: [note] }).notes).toEqual([])
   })
