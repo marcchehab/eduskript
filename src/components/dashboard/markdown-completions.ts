@@ -222,10 +222,12 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   'blank': [
     { label: 'width', info: 'Line length: "6cm", "40mm" (default 4cm)' },
     { label: 'label', info: 'Form field, e.g. label="Name:" — fields in one paragraph stay on one row, lines shrink to fit' },
+    { label: 'answer', info: 'Answer (markdown/math), shown to authors and in the teacher copy only; students see an empty line' },
   ],
   'solution': [
     { label: 'title', info: 'Shown in the heading and in the printed solutions list' },
     { label: 'hidden', info: 'Only for the neighbouring <ai-feedback>: never shown to students, the AI will not reveal it' },
+    { label: 'teacher', info: 'Only the page\'s authors see it (never sent to students); printed in the teacher copy' },
   ],
   'cta': [
     { label: 'href', info: 'Link target' },

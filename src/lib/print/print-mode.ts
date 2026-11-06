@@ -28,11 +28,18 @@ export type SolutionMode = 'online' | 'all' | 'none'
 interface PrintState {
   active: boolean
   solutions: SolutionMode
+  /**
+   * Teacher copy (authors only, toggled in the print bar): every solution,
+   * teacher-only ones included, prints in place below its task instead of at
+   * the end, and <blank answer> lines are filled in. Overrides `solutions`.
+   * Quiz answer keys still go to the end.
+   */
+  teacher: boolean
 }
 
-let state: PrintState = { active: false, solutions: 'online' }
+let state: PrintState = { active: false, solutions: 'online', teacher: false }
 const listeners = new Set<() => void>()
-const SERVER: PrintState = { active: false, solutions: 'online' }
+const SERVER: PrintState = { active: false, solutions: 'online', teacher: false }
 
 function emit() {
   for (const l of listeners) l()

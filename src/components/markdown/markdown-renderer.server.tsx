@@ -1,3 +1,4 @@
+import { publicContent } from '@/lib/teacher-content'
 import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
 import { pageKaraClues } from '@/lib/kara/world'
 import { createMarkdownComponents } from '@/lib/markdown-components'
@@ -41,7 +42,10 @@ interface ServerMarkdownRendererProps {
  * 2. Compile markdown with remark/rehype plugins
  * 3. Create components with files prop bound
  */
-export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerPageSlug, organizationSlug, isExam, presentationPublic, pageLanguage }: ServerMarkdownRendererProps) {
+export async function ServerMarkdownRenderer({ content: rawContent, skriptId, pageId, ownerPageSlug, organizationSlug, isExam, presentationPublic, pageLanguage }: ServerMarkdownRendererProps) {
+  // Shared (ISR) render for every viewer: teacher solutions and blank answers
+  // never go in. Authors get them via TeacherSolutionSlot / BlankAnswer.
+  const content = publicContent(rawContent)
   const footnoteLabel = footnoteLabelForLang(pageLanguage)
   // 1. Get all files for this skript upfront
   const files = skriptId ? await getSkriptFiles(skriptId) : createEmptySkriptFiles()

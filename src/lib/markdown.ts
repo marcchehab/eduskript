@@ -25,6 +25,8 @@
  * @see src/components/markdown/markdown-renderer.client.tsx for client rendering
  */
 
+import { publicContent } from '@/lib/teacher-content'
+
 /**
  * Generate an excerpt from markdown content for use as og:description.
  *
@@ -39,7 +41,7 @@
 export function generateExcerpt(content: string, maxLength: number = 160): string {
   // Block-level constructs that span multiple lines need to go first so the
   // line filter below sees a clean stream.
-  const cleaned = content
+  const cleaned = publicContent(content)
     .replace(/```[\s\S]*?```/g, '')        // fenced code blocks (incl. `python editor`)
     .replace(/^---\n[\s\S]*?\n---\n?/m, '') // YAML frontmatter
     .replace(/<[^>]+>/g, '')                // raw HTML + custom components

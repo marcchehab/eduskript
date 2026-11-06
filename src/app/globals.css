@@ -443,6 +443,19 @@ p:has(> .blank-field) {
   align-items: baseline;
   column-gap: 1.25rem;
 }
+/* <blank answer> filled in for authors and the teacher copy (teacher-content.tsx):
+   pen colour, centred on the line. */
+.blank-answer {
+  color: #c62828;
+  padding-inline: 0.25em;
+}
+.dark .blank-answer {
+  color: #f87171;
+}
+.blank-line:has(> .blank-answer) {
+  text-align: center;
+  line-height: inherit;
+}
 
 @media print {
   .es-banner {
@@ -615,6 +628,19 @@ p:has(> .blank-field) {
   html.print-layout .print-page-qr {
     top: calc(82.66px + 1454.93px);
     left: calc(100% - 48px + 0.5rem);
+  }
+}
+/* "Teacher copy" mark (print-view.tsx): top right of the first printed page,
+   in the paper's top padding (2rem on screen, 82.66px in print). */
+.print-layout .print-teacher-mark {
+  position: absolute;
+  top: 0.5rem;
+  right: 12rem;
+}
+@media print {
+  html.print-layout .print-teacher-mark {
+    top: 40px;
+    right: 48px;
   }
 }
 /* Kept in the layout (same height as online), not shown. */

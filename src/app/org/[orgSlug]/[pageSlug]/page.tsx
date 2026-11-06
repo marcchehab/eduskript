@@ -1,3 +1,4 @@
+import { publicContent } from '@/lib/teacher-content'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { currentSlugForAlias } from '@/lib/site-slugs'
 import type { Metadata } from 'next'
@@ -352,12 +353,12 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         {/* Frontpage content or empty state for owners */}
         {frontPage?.content ? (
           <article className="prose-theme">
-            <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+            <ReflowGate pageId={frontPage.id} content={publicContent(frontPage.content)} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
               {/* Same props as the custom-domain route ([domain]/(site)/page.tsx):
                   without skriptId the frontpage's uploaded images resolve to
                   "Missing: <file>" on eduskript.org/<slug>. */}
               <ServerMarkdownRenderer
-                content={frontPage.content}
+                content={publicContent(frontPage.content)}
                 pageId={frontPage.id}
                 skriptId={frontPage.fileSkriptId || undefined}
                 ownerPageSlug={pageSlug}

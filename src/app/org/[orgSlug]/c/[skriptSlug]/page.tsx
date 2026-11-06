@@ -1,3 +1,4 @@
+import { publicContent } from '@/lib/teacher-content'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
@@ -245,9 +246,9 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
           {frontPage?.content ? (
             <article className="prose-theme">
-              <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+              <ReflowGate pageId={frontPage.id} content={publicContent(frontPage.content)} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
                 <ServerMarkdownRenderer
-                  content={frontPage.content}
+                  content={publicContent(frontPage.content)}
                   skriptId={skript.id}
                   pageId={frontPage.id}
                   organizationSlug={orgSlug}

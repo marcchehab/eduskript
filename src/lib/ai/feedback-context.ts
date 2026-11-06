@@ -33,6 +33,8 @@
  * @see src/app/api/ai/feedback/route.ts - consumer
  */
 
+import { isTeacherSolutionAttrs, stripTeacherContent } from '@/lib/teacher-content'
+
 export interface FeedbackContext {
   /** Teacher prompt from the tag's prompt="..." attribute, if any. */
   prompt: string | null
@@ -149,7 +151,8 @@ function findSolutions(lines: string[], inFence: boolean[]): LinkedSolution[] {
     out.push({
       markdown: parts.join('\n').trim(),
       title: attrs.match(/\btitle\s*=\s*"([^"]*)"/i)?.[1] ?? null,
-      hidden: /(^|\s)hidden(\s|=|\/|$)/i.test(attrs),
+      // <solution teacher> is authors-only, so it is a hidden reference too.
+      hidden: /(^|\s)hidden(\s|=|\/|$)/i.test(attrs) || isTeacherSolutionAttrs(attrs),
       line: i,
     })
     i = j
@@ -237,7 +240,7 @@ export function extractFeedbackContext(
     }
   }
 
-  const sectionMarkdown = [...lines.slice(start, tag.line), lines[tag.line].slice(0, tag.col)]
+  const sectionText = [...lines.slice(start, tag.line), lines[tag.line].slice(0, tag.col)]
     .join('\n')
     // Drop earlier ai-feedback blocks: paired ones with their inner content,
     // then self-closing/unclosed opening tags (their prompts would otherwise
@@ -247,7 +250,8 @@ export function extractFeedbackContext(
     .replace(/<\/ai-feedback>/gi, '')
     // Solutions go to the model separately (`solutions`), marked as such.
     .replace(/<solution\b[^>]*>[\s\S]*?(<\/solution>|$)/gi, '')
-    .trim()
+  // <blank answer="…"> values are authors-only (lib/teacher-content.ts).
+  const sectionMarkdown = stripTeacherContent(sectionText, { slots: false }).content.trim()
 
   const pointsMatch = tag.tagText.match(/\bpoints\s*=\s*"(\d+(?:\.\d+)?)"/i)
   const points = pointsMatch ? Number(pointsMatch[1]) : null

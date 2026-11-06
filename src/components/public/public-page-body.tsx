@@ -1,3 +1,4 @@
+import { publicContent } from '@/lib/teacher-content'
 import { Suspense } from 'react'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { type PublicAnnotation, type PublicSnap } from '@/components/public/annotation-wrapper'
@@ -69,18 +70,18 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
         <ReflowWidthHandle />
-        <PrintEditSource pageId={page.id} content={page.content} />
+        <PrintEditSource pageId={page.id} content={publicContent(page.content)} />
         <article className="prose-theme">
           <ReflowGate
             pageId={page.id}
-            content={page.content}
+            content={publicContent(page.content)}
             publicAnnotations={publicAnnotations}
             publicSnaps={publicSnaps}
             publicStickyNotes={publicStickyNotes}
             isExamStudent={isExamStudent}
           >
             <ServerMarkdownRenderer
-              content={page.content}
+              content={publicContent(page.content)}
               skriptId={skriptId}
               pageId={page.id}
               ownerPageSlug={teacherPageSlug}

@@ -41,6 +41,8 @@ import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Leaderboard } from '@/components/markdown/leaderboard'
 import { ShareListOptions } from '@/components/markdown/share-list-options'
 import { HiddenSolutionMarker, Solution } from '@/components/markdown/solution'
+import { BlankLine, TeacherSolutionSlot } from '@/components/markdown/teacher-content'
+import { TEACHER_SLOT_ATTR } from '@/lib/teacher-content'
 import { PageBreak } from '@/components/print/page-break'
 import { PrintFallback } from '@/components/print/print-fallback'
 import { parsePrintLength } from '@/lib/print/geometry'
@@ -297,6 +299,13 @@ interface CreateMarkdownComponentsOptions {
  * @param files - The SkriptFilesData object (serializable) for resolving file URLs
  * @param options - Optional settings like pageId for interactive components
  */
+/** Slot number of a stripped teacher placeholder (lib/teacher-content.ts), else null. */
+function teacherSlot(props: Record<string, unknown>): number | null {
+  const v = props[TEACHER_SLOT_ATTR] ?? props.dataTeacherSlot
+  const n = typeof v === 'string' || typeof v === 'number' ? Number(v) : NaN
+  return Number.isInteger(n) && n >= 0 ? n : null
+}
+
 export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
@@ -1378,13 +1387,20 @@ export function createMarkdownComponents(
     // children are dropped HERE, on the server, so they are not in the HTML or
     // the RSC payload. Not a secret though: the raw page markdown also reaches
     // the client (AnnotationWrapper's `content` prop). Editors see a marker.
+    //
+    // <solution teacher>: authors only. Public renders get it stripped
+    // (lib/teacher-content.ts) down to a data-teacher-slot placeholder that
+    // TeacherSolutionSlot fills for authors; the editor preview has the body.
     'solution': (props: Record<string, unknown>) => {
       const title = typeof props.title === 'string' ? props.title : undefined
       if (props.hidden != null && props.hidden !== false) {
         return onTagAttributeChange ? <HiddenSolutionMarker title={title} /> : null
       }
+      const slot = teacherSlot(props)
+      if (slot != null) return <TeacherSolutionSlot slot={slot} pageId={pageId} />
+      const teacher = props.teacher != null && props.teacher !== false && props.teacher !== 'false'
       return (
-        <Solution title={title} pageId={pageId}>
+        <Solution title={title} pageId={pageId} teacher={teacher}>
           {props.children as React.ReactNode}
         </Solution>
       )
@@ -1403,10 +1419,18 @@ export function createMarkdownComponents(
     // (globals.css .blank-field), where the lines shrink proportionally
     // instead of wrapping when the row is wider than the column (larger
     // font, narrower screen). Fields never wrap; the line has a 1.5em minimum.
+    //
+    // answer="…" (authors only, lib/teacher-content.ts): written into the
+    // line in pen colour by BlankLine.
     'blank': (props: Record<string, unknown>) => {
       const px = parsePrintLength(props.width as string | undefined) ?? parsePrintLength('4cm')!
       const label = typeof props.label === 'string' ? props.label : undefined
-      const line = <span aria-hidden="true" className="blank-line" style={{ width: px }}>{'\u00a0'}</span>
+      const slot = teacherSlot(props) ?? undefined
+      // Editor preview: the answer arrives as a <blank-answer> child (rehypeQuizFeedback).
+      const children = Children.toArray(props.children as React.ReactNode)
+      const line = slot != null || children.length > 0
+        ? <BlankLine width={px} slot={slot} pageId={pageId}>{children.length > 0 ? children : undefined}</BlankLine>
+        : <span aria-hidden="true" className="blank-line" style={{ width: px }}>{'\u00a0'}</span>
       if (!label) return line
       return (
         <span className="blank-field">
@@ -1415,6 +1439,9 @@ export function createMarkdownComponents(
         </span>
       )
     },
+
+    // Parsed answer="…" of a <blank> (rehypeQuizFeedback); rendered by the blank above.
+    'blank-answer': ({ children }: { children?: React.ReactNode }) => <>{children}</>,
 
     'leaderboard': (props: Record<string, unknown>) => {
       const line = Number(props['data-source-line-start'] ?? props['dataSourceLineStart'])

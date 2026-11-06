@@ -118,6 +118,7 @@ export const sanitizeSchema = {
     'solution', // <solution title> collapsed online, moved to the end in the print view
     'pagebreak', // <pagebreak /> new printed page, invisible online
     'blank', // <blank width="5cm" /> inline fill-in line (worksheets: Name, Datum)
+    'blank-answer', // Parsed answer="…" markdown of a <blank>, inserted by rehypeQuizFeedback (authors only, lib/teacher-content.ts)
     'evidence-board', // <evidence-board> Kara evidence collected in this skript
     'kara-archive', // <kara-archive of="level"> student's archived winning Kara code (kara-archive.tsx)
     'theme-toggle', // <theme-toggle> inline light/dark switch (same button as the page toolbar)
@@ -178,8 +179,9 @@ export const sanitizeSchema = {
     'excali': ['src', 'alt', 'width', 'align', 'wrap', 'lightonly', 'print-width', 'printWidth'],
     // <spacer> writing area. id keys the round-trip find/replace on edit.
     'spacer': ['id', 'height', 'pattern', 'printHeight', 'print-height'],
-    'solution': ['title', 'hidden'],
-    'blank': ['width', 'label'],
+    // teacher: authors only; dataTeacherSlot: placeholder left by stripTeacherContent (lib/teacher-content.ts)
+    'solution': ['title', 'hidden', 'teacher', 'dataTeacherSlot', 'data-teacher-slot'],
+    'blank': ['width', 'label', 'answer', 'dataTeacherSlot', 'data-teacher-slot'],
     'evidence-board': ['title', 'levels'],
     'kara-archive': ['of', 'title', 'fallback'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)

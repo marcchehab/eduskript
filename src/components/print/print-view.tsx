@@ -431,8 +431,25 @@ function scrollToTop() {
  * button switched to print mode with no bar to leave it). The solutions list
  * is portalled to the end of #paper.
  */
+/**
+ * "Teacher copy" mark at the top right of the first page (.print-teacher-mark,
+ * globals.css), in the page's language like PrintPageQr. First page only:
+ * print has no page margin boxes to repeat it in (@page margin 0).
+ */
+function PrintTeacherMark() {
+  const paper = typeof document !== 'undefined' ? document.getElementById('paper') : null
+  if (!paper) return null
+  const label = document.documentElement.lang.startsWith('de') ? 'Lehrpersonen-Exemplar' : 'Teacher copy'
+  return createPortal(
+    <div className="print-teacher-mark rounded border border-[#c62828]/50 px-2 py-0.5 font-sans text-xs font-medium text-[#c62828]" aria-hidden="true">
+      {label}
+    </div>,
+    paper,
+  )
+}
+
 export function PrintView({ pageId }: { pageId?: string }) {
-  const { active, solutions } = usePrintState()
+  const { active, solutions, teacher } = usePrintState()
   const canEdit = useCanEditPage(pageId, active)
   const entries = useSolutionEntries()
   // False during SSR and hydration, true on the client: the bar is a portal into body.
@@ -522,7 +539,7 @@ export function PrintView({ pageId }: { pageId?: string }) {
     const anchor = [...(document.querySelector('#paper .markdown-content')?.children ?? [])]
       .find((el) => !el.classList.contains('print-gap') && el.getBoundingClientRect().bottom > top)
     const offset = anchor ? anchor.getBoundingClientRect().top - top : 0
-    setPrintState({ active: false, solutions: 'online' })
+    setPrintState({ active: false, solutions: 'online', teacher: false })
     if (anchor && scroller) {
       // Re-anchor every frame for a moment: the online layout settles over
       // a few frames (CSS transitions on the scroll container, ~300ms).
@@ -561,6 +578,7 @@ export function PrintView({ pageId }: { pageId?: string }) {
     <>
       {paper && createPortal(<PrintSolutions />, paper)}
       <PrintPageQr />
+      {teacher && canEdit && <PrintTeacherMark />}
       {canEditLayout && edit.editing && <PrintEditOverlay />}
       {createPortal(
         <div className="print-bar fixed left-1/2 top-4 z-[60] flex w-max max-w-[calc(100vw-1rem)] font-sans -translate-x-1/2 flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
@@ -573,12 +591,22 @@ export function PrintView({ pageId }: { pageId?: string }) {
             >
               Solutions
               <select
-                value={solutions}
+                value={teacher ? 'all' : solutions}
+                disabled={teacher}
                 onChange={(e) => setPrintState({ solutions: e.target.value as SolutionMode })}
-                className="rounded border border-border bg-background px-1 py-0.5"
+                className="rounded border border-border bg-background px-1 py-0.5 disabled:opacity-50"
               >
                 {(Object.keys(MODE_LABELS) as SolutionMode[]).map((m) => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
               </select>
+            </label>
+          )}
+          {canEdit && (
+            <label
+              className="flex items-center gap-1.5"
+              title="Teacher copy: all solutions, teacher-only ones included, below their task instead of at the end; fill-in blanks with their answers; marked as teacher copy."
+            >
+              <input type="checkbox" checked={teacher} onChange={(e) => setPrintState({ teacher: e.target.checked })} />
+              Teacher copy
             </label>
           )}
           {/* Below the bar, not in it: no shift either. */}

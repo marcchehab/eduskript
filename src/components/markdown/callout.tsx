@@ -60,8 +60,9 @@ export function Callout({ children, className, type, isFoldable, initiallyFolded
   // stays in place folded, its title pointing to the end; overflow clip cuts
   // strokes drawn on its content online. Callouts are always visible online
   // (also on exam pages), so solution mode 'online' prints them.
-  const { active: printing, solutions } = usePrintState()
-  const isSolution = type === 'solution'
+  // Teacher copy: the solution prints in place, open like any other callout.
+  const { active: printing, solutions, teacher: teacherCopy } = usePrintState()
+  const isSolution = type === 'solution' && !(printing && teacherCopy)
   const solutionInPrint = isSolution && solutions !== 'none'
   const anchor = useRef<HTMLQuoteElement>(null)
   const kids = Children.toArray(children)

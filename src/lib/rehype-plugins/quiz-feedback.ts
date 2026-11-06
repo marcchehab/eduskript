@@ -23,6 +23,9 @@ import { remarkPlugins } from '../markdown-plugins'
  *
  * The plain `feedback` attribute stays in place as a fallback for anything that
  * renders a question outside this pipeline.
+ *
+ * Same treatment for `<blank answer="…">` (fill-in answer, authors only — see
+ * lib/teacher-content.ts): the answer becomes a `<blank-answer>` child.
  */
 export function rehypeQuizFeedback() {
   const processor = unified()
@@ -31,8 +34,8 @@ export function rehypeQuizFeedback() {
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
 
-  async function attach(node: Element): Promise<void> {
-    const feedback = node.properties?.feedback
+  async function attach(node: Element, attr: 'feedback' | 'answer', tagName: string): Promise<void> {
+    const feedback = node.properties?.[attr]
     if (typeof feedback !== 'string' || !feedback.trim()) return
 
     const hast = (await processor.run(processor.parse(feedback.trim()) as MdastRoot)) as Root
@@ -46,7 +49,7 @@ export function rehypeQuizFeedback() {
     stripPositions(children)
 
     node.children = [
-      { type: 'element', tagName: 'answer-feedback', properties: {}, children },
+      { type: 'element', tagName, properties: {}, children },
       ...node.children,
     ]
   }
@@ -68,7 +71,11 @@ export function rehypeQuizFeedback() {
     if (!node || typeof node !== 'object') return
     const element = node as Element
     if (element.type === 'element' && element.tagName === 'answer') {
-      await attach(element)
+      await attach(element, 'feedback', 'answer-feedback')
+      return
+    }
+    if (element.type === 'element' && element.tagName === 'blank') {
+      await attach(element, 'answer', 'blank-answer')
       return
     }
     const children = (node as { children?: unknown[] }).children

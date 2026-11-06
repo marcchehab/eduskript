@@ -36,6 +36,7 @@
 import { useSyncExternalStore } from 'react'
 import { flushSync } from 'react-dom'
 import { lineRangeEdit } from '@/lib/print/print-edits'
+import { publicContent } from '@/lib/teacher-content'
 
 interface UndoEntry { content: string; revert?: () => void }
 
@@ -194,7 +195,9 @@ async function save(before: string, after: string): Promise<boolean | 'diverged'
       return false
     }
     const saved: unknown = (await r.json().catch(() => null))?.content
-    const content = typeof saved === 'string' ? saved : after
+    // The page source here is the public (stripped) markdown, and the refresh
+    // renders that too: strip the full content /replace returns to match.
+    const content = typeof saved === 'string' ? publicContent(saved) : after
     // The first refresh right after the save can still get the old page
     // from the cache (seen in dev: invalidation lands a moment later), so
     // refresh again every REFRESH_RETRY_MS until the saved content arrives.

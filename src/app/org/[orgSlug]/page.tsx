@@ -1,3 +1,4 @@
+import { publicContent } from '@/lib/teacher-content'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { readExtraSettings } from '@/lib/settings'
@@ -219,9 +220,9 @@ export default async function OrgPage({ params }: OrgPageProps) {
         {/* Frontpage content or empty state for admins */}
         {showFrontPage && frontPage.content ? (
           <article className="prose-theme">
-            <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+            <ReflowGate pageId={frontPage.id} content={publicContent(frontPage.content)} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
               <ServerMarkdownRenderer
-                content={frontPage.content}
+                content={publicContent(frontPage.content)}
                 pageId={frontPage.id}
                 skriptId={frontPage.fileSkriptId || undefined}
                 organizationSlug={orgSlug}
