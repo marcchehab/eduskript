@@ -1548,9 +1548,13 @@ article.prose-theme > div > :first-child {
  * The layer blends with the page: multiply in light mode keeps black text black
  * and tints only the white paper; on a dark page multiply would barely show,
  * so dark mode uses screen (tints the dark paper, white text stays white).
- * Each stroke is one filled path at --highlighter-opacity, so a stroke never
- * darkens where it crosses itself. The class also goes on the live-canvas
- * wrapper while a highlighter is active (annotation-layer.tsx). */
+ * Paths are opaque; --highlighter-opacity applies to the whole SVG (group
+ * opacity), so overlapping highlights — the same stroke crossing itself or two
+ * strokes — never darken: coverage is constant, like an iPad highlighter.
+ * Limit: each section has its own SVG, so overlaps across a section boundary
+ * still stack. The class also goes on the live-canvas wrapper while a
+ * highlighter is active (annotation-layer.tsx) — blend only there; the live
+ * stroke sets its own alpha (simple-canvas.tsx). */
 :root {
   --highlighter-opacity: 0.4;
 }
@@ -1566,8 +1570,8 @@ article.prose-theme > div > :first-child {
 .dark .annotation-highlighter {
   mix-blend-mode: screen;
 }
-.annotation-highlighter path {
-  fill-opacity: var(--highlighter-opacity);
+svg.annotation-highlighter {
+  opacity: var(--highlighter-opacity);
 }
 
 /* Floating top-right page controls (font size / theme / login). While a

@@ -105,16 +105,35 @@ export function renderStrokesToPng(
     ctx.drawImage(img.source, img.x, img.y, img.w, img.h)
   }
 
-  // Highlighters first (multiplied on the white page, like on screen), pens on top.
-  const ordered = [...drawable.filter(isHighlighterStroke), ...drawable.filter((s) => !isHighlighterStroke(s))]
-  for (const s of ordered) {
+  // Highlighters first, pens on top. Highlighters are filled opaque on their
+  // own layer, then composited once at HIGHLIGHTER_OPACITY_LIGHT with multiply
+  // (like the group-opacity SVG on screen), so overlaps never darken.
+  const fillStroke = (target: CanvasRenderingContext2D, s: (typeof drawable)[number]) => {
     const d = getSvgPathFromStroke(strokeOutline(s.points, s.width, s.tool, true, 0, s.yShift))
-    if (!d) continue
-    const highlighter = isHighlighterStroke(s)
-    ctx.globalAlpha = highlighter ? HIGHLIGHTER_OPACITY_LIGHT : 1
-    ctx.globalCompositeOperation = highlighter ? 'multiply' : 'source-over'
-    ctx.fillStyle = s.color
-    ctx.fill(new Path2D(d))
+    if (!d) return
+    target.fillStyle = s.color
+    target.fill(new Path2D(d))
+  }
+  const highlighters = drawable.filter(isHighlighterStroke)
+  if (highlighters.length > 0) {
+    const layer = document.createElement('canvas')
+    layer.width = canvas.width
+    layer.height = canvas.height
+    const lctx = layer.getContext('2d')
+    if (lctx) {
+      lctx.scale(scale, scale)
+      lctx.translate(-minX, -minY)
+      for (const s of highlighters) fillStroke(lctx, s)
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.globalAlpha = HIGHLIGHTER_OPACITY_LIGHT
+      ctx.globalCompositeOperation = 'multiply'
+      ctx.drawImage(layer, 0, 0)
+      ctx.restore()
+    }
+  }
+  for (const s of drawable) {
+    if (!isHighlighterStroke(s)) fillStroke(ctx, s)
   }
   ctx.globalAlpha = 1
   ctx.globalCompositeOperation = 'source-over'
