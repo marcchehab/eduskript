@@ -855,6 +855,11 @@ p:has(> .blank-field) {
   /* Long formulas scroll horizontally instead of being clipped. */
   overflow-x: auto;
   overflow-y: hidden;
+  /* overflow-y: hidden clips glyphs that KaTeX draws past its own box
+     (tall fractions, aligned rows). Padding gives them room inside the clip;
+     the margin shrinks by the same amount so spacing stays as before. */
+  padding-block: 0.5em;
+  margin-block: 0.5em;
 }
 
 /* Remove top margin from first content element to align canvas properly */
