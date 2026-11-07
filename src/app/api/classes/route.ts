@@ -37,11 +37,15 @@ export async function GET(request: NextRequest) {
     // Get all classes for this teacher with member counts. Implicit
     // (survey pseudo-) classes are hidden — they belong on a teacher's
     // survey results UI, not in the regular class list.
+    // ?archived=1 lists the archived classes instead (dashboard/classes);
+    // every other caller (class pickers) only sees active ones.
+    const archived = searchParams.get('archived') === '1'
     const classes = await prisma.class.findMany({
       where: {
         teacherId: session.user.id,
         isActive: true,
-        isImplicit: false
+        isImplicit: false,
+        archivedAt: archived ? { not: null } : null,
       },
       include: {
         _count: {
@@ -90,6 +94,7 @@ export async function GET(request: NextRequest) {
         inviteCode: c.inviteCode,
         allowAnonymous: c.allowAnonymous,
         lockdownMode: c.lockdownMode,
+        archivedAt: c.archivedAt,
         memberCount: c._count.memberships,
         preAuthorizedCount: c._count.preAuthorizedStudents,
         createdAt: c.createdAt,

@@ -74,8 +74,15 @@ export async function applyHandinSnapshots(
   if (submission) {
     alreadyExisted = true
   } else {
+    // The page version handed in (src/lib/scoring/exam-version.ts): the
+    // latest version, if it holds the live content.
+    const [page, latest] = await Promise.all([
+      tx.page.findUnique({ where: { id: pageId }, select: { content: true } }),
+      tx.pageVersion.findFirst({ where: { pageId }, orderBy: { version: 'desc' }, select: { version: true, content: true } }),
+    ])
+    const pageVersion = page && latest && latest.content === page.content ? latest.version : null
     submission = await tx.examSubmission.create({
-      data: { pageId, studentId, siteId, source: source ?? 'student' },
+      data: { pageId, studentId, siteId, source: source ?? 'student', pageVersion },
     })
     // Audit log lives inside the same tx so a rolled-back submission
     // doesn't leave a spurious "submitted" event behind.

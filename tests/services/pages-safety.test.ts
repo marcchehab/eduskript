@@ -30,6 +30,7 @@ vi.mock('@/lib/prisma', () => ({
     user: { findUnique: vi.fn() },
     site: { findMany: vi.fn(), findFirst: vi.fn() },
     organizationMember: { findMany: vi.fn() },
+    examSubmission: { findFirst: vi.fn(async () => null) },
   },
 }))
 
@@ -393,6 +394,16 @@ describe('updatePageForUser — inline edits share a version', () => {
     expect(prisma.pageVersion.create).not.toHaveBeenCalled()
     expect(prisma.pageVersion.update).toHaveBeenCalledWith({ where: { id: 'v-1' }, data: { content: '# Changed content', version: 2 } })
     expect(r.version).toBe(2)
+  })
+
+  it('never overwrites a version an exam was handed in with', async () => {
+    withLatest({ editSource: 'inline', authorId: 'user-1', createdAt: new Date(Date.now() - 60_000) })
+    vi.mocked(prisma.pageVersion.create).mockClear()
+    vi.mocked(prisma.pageVersion.update).mockClear()
+    vi.mocked(prisma.examSubmission.findFirst).mockResolvedValueOnce({ id: 'sub-1' } as never)
+    await save()
+    expect(prisma.pageVersion.update).not.toHaveBeenCalled()
+    expect(prisma.pageVersion.create).toHaveBeenCalledTimes(1)
   })
 
   it('creates a new version when the latest is old, by someone else, or not inline', async () => {

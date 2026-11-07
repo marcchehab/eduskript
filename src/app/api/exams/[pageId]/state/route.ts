@@ -152,13 +152,16 @@ export async function POST(
     // Verify user is the teacher of this class.
     const classRecord = await prisma.class.findFirst({
       where: { id: classId, teacherId: session.user.id },
-      select: { id: true },
+      select: { id: true, archivedAt: true },
     })
     if (!classRecord) {
       return NextResponse.json(
         { error: 'Class not found or you are not the teacher' },
         { status: 403 }
       )
+    }
+    if (classRecord.archivedAt) {
+      return NextResponse.json({ error: 'This class is archived' }, { status: 409 })
     }
 
     // A per-student override must target a member of the class.

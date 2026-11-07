@@ -34,6 +34,7 @@ import { getExamScope, resolveStudentSite } from '@/lib/scoring/site-scope'
 import { isStudentReturned, returnedLockResponse } from '@/lib/scoring/return-state'
 import { SCORE_PRIORITY, scoreComponent, isPointsInRange } from '@/lib/scoring/score-component'
 import { parseGradableComponents } from '@/lib/scoring/components'
+import { getSubmittedContents } from '@/lib/scoring/exam-version'
 import { mergedCriterionTotal, type OverrideCriterion, type AiCriterion } from '@/lib/scoring/merge-criteria'
 
 export async function PUT(
@@ -161,7 +162,9 @@ export async function PUT(
         if (!Number.isFinite(n)) {
           return NextResponse.json({ error: 'awardedPoints must be a number or null' }, { status: 400 })
         }
-        const [declared] = parseGradableComponents(page.content ?? '').filter((c) => c.componentId === componentId)
+        // Declared max of the version this student handed in (exam-version.ts).
+        const submitted = (await getSubmittedContents(pageId, new Map([[studentId, siteId]]))).byStudent.get(studentId)
+        const [declared] = parseGradableComponents(submitted?.content ?? page.content ?? '').filter((c) => c.componentId === componentId)
         const others = await prisma.componentScore.findMany({
           where: { pageId, studentId, siteId, componentId, source: { not: 'override' } },
           select: { source: true, priority: true, earned: true, max: true, updatedAt: true },

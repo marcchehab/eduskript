@@ -79,6 +79,9 @@ interface ReviewState {
    *  async /review reload, and acting in that window cross-wires one student's
    *  answers onto another's grade. */
   loadedStudentId: string | null
+  /** PageVersion the loaded student handed in (null = unknown → live page).
+   *  The teacher view re-renders that version (teacher-exam-grading.tsx). */
+  pageVersion: number | null
 }
 
 interface ReviewContextValue extends ReviewState {
@@ -119,7 +122,7 @@ interface ReviewContextValue extends ReviewState {
   refreshGrades: () => void
 }
 
-const empty: ReviewState = { grade: null, totalEarned: null, totalMax: null, returnedToStudent: false, examHasReturned: false, byComponent: {}, loadedStudentId: null }
+const empty: ReviewState = { grade: null, totalEarned: null, totalMax: null, returnedToStudent: false, examHasReturned: false, byComponent: {}, loadedStudentId: null, pageVersion: null }
 
 const ExamReviewContext = createContext<ReviewContextValue>({
   ...empty,
@@ -188,7 +191,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
         if (j.studentId && j.studentId !== sid) return // response for a different student
         const byComponent: Record<string, ComponentReview> = {}
         for (const c of j.components as ComponentReview[]) byComponent[c.componentId] = c
-        setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, returnedToStudent: !!j.returnedToStudent, examHasReturned: !!j.examHasReturned, byComponent, loadedStudentId: sid })
+        setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, returnedToStudent: !!j.returnedToStudent, examHasReturned: !!j.examHasReturned, byComponent, loadedStudentId: sid, pageVersion: typeof j.pageVersion === 'number' ? j.pageVersion : null })
         setLoading(false)
       })
       .catch(() => {

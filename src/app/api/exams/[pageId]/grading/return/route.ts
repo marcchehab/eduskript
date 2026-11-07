@@ -24,6 +24,7 @@ import { eventBus } from '@/lib/events'
 import { Prisma } from '@prisma/client'
 import { buildReviewScores } from '@/lib/scoring/review-payload'
 import { getExamScope, getGradingStudentIds, resolveStudentSite, resolveStudentSites } from '@/lib/scoring/site-scope'
+import { findExamClass, writeExamRecord } from '@/lib/exam-records'
 
 export async function POST(
   request: NextRequest,
@@ -101,6 +102,30 @@ export async function POST(
         })
       }),
     )
+
+    // Exam archive (src/lib/exam-records.ts): a copy of each returned exam,
+    // kept for the retention period. Sequential, after the return is saved;
+    // a failure here is logged and doesn't undo the return (the next return
+    // or archiving the class writes it again).
+    for (const studentId of submittedIds) {
+      try {
+        // body.classId is only checked (teacher owns it) on the `all` path.
+        const classId = body.all === true && typeof body.classId === 'string'
+          ? body.classId
+          : await findExamClass(session.user.id, pageId, studentId)
+        await writeExamRecord({
+          teacherId: session.user.id,
+          pageId,
+          studentId,
+          siteId: studentSites.get(studentId)!,
+          classId,
+          scores: snapshots.get(studentId)!,
+          returnedAt: now,
+        })
+      } catch (err) {
+        console.error('[grading/return] exam record failed:', studentId, err)
+      }
+    }
 
     // Notify each student (fire-and-forget on the user channel).
     await Promise.all(

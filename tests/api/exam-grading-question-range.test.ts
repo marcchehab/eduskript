@@ -26,6 +26,10 @@ vi.mock('@/lib/scoring/site-scope', () => ({
   })),
   resolveStudentSite: vi.fn(async () => 'site-a'),
 }))
+// No handed-in version recorded → the route falls back to the live content.
+vi.mock('@/lib/scoring/exam-version', () => ({
+  getSubmittedContents: vi.fn(async () => ({ live: null, byStudent: new Map() })),
+}))
 vi.mock('@/lib/scoring/return-state', () => ({
   isStudentReturned: vi.fn(async () => false),
   returnedLockResponse: () => new Response('locked', { status: 409 }),

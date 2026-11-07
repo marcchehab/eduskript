@@ -11,6 +11,7 @@
  * - Reset demo user content from demo-content/ files
  * - Prune old metric_points and db_activity_hours rows
  * - Delete unclaimed anonymous skript imports past retention (7 days)
+ * - Delete archived exams (ExamRecord) past their retention (5 years)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,6 +22,7 @@ import { revalidateUserSites } from '@/lib/billing-revalidate'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 import { sendDueTrialEmails } from '@/lib/trial-emails'
 import { deleteExpiredImports } from '@/lib/script-import/service'
+import { purgeExpiredExamRecords } from '@/lib/exam-records'
 
 
 export async function POST(request: NextRequest) {
@@ -195,6 +197,14 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[cron] script-import cleanup error:', error)
     results.deletedScriptImports = 'error'
+  }
+
+  // --- Task 5: Delete archived exams past their retention (src/lib/exam-records.ts) ---
+  try {
+    results.deletedExamRecords = await purgeExpiredExamRecords()
+  } catch (error) {
+    console.error('[cron] exam-record cleanup error:', error)
+    results.deletedExamRecords = 'error'
   }
 
   return NextResponse.json({ success: true, results })

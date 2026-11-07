@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma'
 import type { ExamGradeConfig } from '@prisma/client'
 import { parseGradableComponents, type GradableComponent } from './components'
 import { scoreComponent, type ScoreSource } from './score-component'
+import { getSubmittedContents } from './exam-version'
 import {
   gradeFromPoints,
   DEFAULT_GRADE_CONFIG,
@@ -108,6 +109,9 @@ function round1(n: number): number {
 }
 
 export interface ExamGrading {
+  /** Components of the live page (the grading table's columns). A student who
+   *  handed in an older version is graded on THAT version's components
+   *  (exam-version.ts), so their StudentGrade.components may differ. */
   components: GradableComponent[]
   params: GradeConfigParams
   maxPointsOverride: number | null
@@ -129,19 +133,32 @@ export async function computeExamGrades(
   studentIds: string[],
   studentSites: Map<string, string>,
 ): Promise<ExamGrading> {
-  const [page, configRow] = await Promise.all([
-    prisma.page.findUnique({ where: { id: pageId }, select: { content: true } }),
+  const [{ live, byStudent: contents }, configRow] = await Promise.all([
+    getSubmittedContents(pageId, studentSites),
     prisma.examGradeConfig.findUnique({ where: { pageId } }),
   ])
-  const components = page ? parseGradableComponents(page.content) : []
+  const components = live != null ? parseGradableComponents(live) : []
   const { params, maxPointsOverride } = resolveConfig(configRow)
-  const componentIds = components.map((c) => c.componentId)
   const autoMaxPoints = round1(components.reduce((s, c) => s + (c.maxPoints ?? 1), 0))
+
+  // Per student: the components of the version they handed in. One parse per
+  // distinct version.
+  const parsed = new Map<string, GradableComponent[]>()
+  if (live != null) parsed.set(live, components)
+  const componentsOf = (sid: string): GradableComponent[] => {
+    const content = contents.get(sid)?.content
+    if (content == null) return components
+    let list = parsed.get(content)
+    if (!list) parsed.set(content, (list = parseGradableComponents(content)))
+    return list
+  }
+  const studentComponents = new Map(studentIds.map((sid) => [sid, componentsOf(sid)]))
+  const componentIds = [...new Set([...studentComponents.values()].flat().map((c) => c.componentId))]
 
   const byStudent = new Map<string, StudentGrade>()
   if (studentIds.length === 0 || componentIds.length === 0) {
     for (const sid of studentIds) {
-      byStudent.set(sid, aggregateStudent(components, new Map(), params, maxPointsOverride))
+      byStudent.set(sid, aggregateStudent(studentComponents.get(sid)!, new Map(), params, maxPointsOverride))
     }
     return { components, params, maxPointsOverride, autoMaxPoints, byStudent }
   }
@@ -183,7 +200,7 @@ export async function computeExamGrades(
     byStudent.set(
       sid,
       aggregateStudent(
-        components,
+        studentComponents.get(sid)!,
         byStudentComponent.get(sid) ?? new Map(),
         params,
         maxPointsOverride,

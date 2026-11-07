@@ -509,11 +509,14 @@ export async function updatePageForUser(
     // The window is fixed from the first edit (createdAt is kept), so a long
     // session still yields one version per window. The version number still
     // goes up: an open editor's baseVersion check must see the change.
+    // Never into a version an exam was handed in with: it must keep its
+    // content and number (src/lib/scoring/exam-version.ts).
     const coalesce =
       ctx.editSource === 'inline' &&
       currentVersion?.editSource === 'inline' &&
       currentVersion.authorId === userId &&
-      Date.now() - currentVersion.createdAt.getTime() < INLINE_COALESCE_MS
+      Date.now() - currentVersion.createdAt.getTime() < INLINE_COALESCE_MS &&
+      !(await prisma.examSubmission.findFirst({ where: { pageId, pageVersion: currentVersion.version }, select: { id: true } }))
     if (coalesce) {
       await prisma.pageVersion.update({
         where: { id: currentVersion.id },

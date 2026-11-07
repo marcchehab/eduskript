@@ -79,7 +79,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    if (!classRecord.isActive) {
+    if (!classRecord.isActive || classRecord.archivedAt) {
       return NextResponse.json(
         { error: 'This class is no longer active' },
         { status: 403 }
@@ -247,7 +247,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    if (!classRecord.isActive) {
+    if (!classRecord.isActive || classRecord.archivedAt) {
       return NextResponse.json(
         { error: 'This class is no longer active' },
         { status: 403 }

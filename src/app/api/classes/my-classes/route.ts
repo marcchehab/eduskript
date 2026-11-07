@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       const hasInvitations = await prisma.preAuthorizedStudent.findFirst({
         where: {
           pseudonym: user.studentPseudonym,
-          class: { isActive: true }
+          class: { isActive: true, archivedAt: null }
         },
         select: { id: true }
       })
@@ -51,7 +51,8 @@ export async function GET(request: NextRequest) {
     const memberships = await prisma.classMembership.findMany({
       where: {
         studentId: session.user.id,
-        class: { isImplicit: false }
+        // Archived classes (src/lib/exam-records.ts) are no longer shown to students.
+        class: { isImplicit: false, archivedAt: null }
       },
       include: {
         class: {

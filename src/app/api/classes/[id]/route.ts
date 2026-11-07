@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { eventBus } from '@/lib/events'
+import { archiveClassExams } from '@/lib/exam-records'
 
 // PATCH /api/classes/[id] - Update a class
 export async function PATCH(
@@ -41,7 +42,7 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { name, description, allowAnonymous, lockdownMode } = body
+    const { name, description, allowAnonymous, lockdownMode, archived } = body
 
     // Build update data
     const updateData: {
@@ -49,6 +50,7 @@ export async function PATCH(
       description?: string | null
       allowAnonymous?: boolean
       lockdownMode?: boolean
+      archivedAt?: Date | null
     } = {}
 
     if (name !== undefined) {
@@ -68,6 +70,23 @@ export async function PATCH(
 
     if (lockdownMode !== undefined) {
       updateData.lockdownMode = lockdownMode === true
+    }
+
+    // Archive (src/lib/exam-records.ts): copy the members' exams first, so a
+    // failed copy leaves the class active. Also ends lockdown and closes its
+    // open exams; the exam state route refuses to reopen them while archived.
+    // Open exam tabs learn of the close only on their next state fetch.
+    let archivedExams: number | undefined
+    if (archived === true) {
+      archivedExams = await archiveClassExams(id, session.user.id)
+      updateData.archivedAt = new Date()
+      updateData.lockdownMode = false
+      await prisma.examState.updateMany({
+        where: { classId: id, state: { in: ['open', 'lobby'] } },
+        data: { state: 'closed', closedAt: updateData.archivedAt },
+      })
+    } else if (archived === false) {
+      updateData.archivedAt = null
     }
 
     // Update the class
@@ -104,11 +123,13 @@ export async function PATCH(
         inviteCode: updatedClass.inviteCode,
         allowAnonymous: updatedClass.allowAnonymous,
         lockdownMode: updatedClass.lockdownMode,
+        archivedAt: updatedClass.archivedAt,
         memberCount: updatedClass._count.memberships,
         preAuthorizedCount: updatedClass._count.preAuthorizedStudents,
         createdAt: updatedClass.createdAt,
         updatedAt: updatedClass.updatedAt
-      }
+      },
+      ...(archivedExams !== undefined && { archivedExams }),
     })
   } catch (error) {
     console.error('[API] Error updating class:', error)

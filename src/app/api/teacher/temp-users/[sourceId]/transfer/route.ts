@@ -93,12 +93,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // we transfer answers, not grading. The teacher grades the real student fresh.
         const srcSub = await tx.examSubmission.findUnique({
           where: { pageId_studentId_siteId: { pageId, studentId: sourceId, siteId } },
-          select: { submittedAt: true },
+          select: { submittedAt: true, pageVersion: true },
         })
         if (srcSub) {
           await tx.examSubmission.deleteMany({ where: { pageId, studentId: targetUserId, siteId } })
           await tx.examSubmission.create({
-            data: { pageId, studentId: targetUserId, siteId, submittedAt: srcSub.submittedAt, source: 'transfer' },
+            data: { pageId, studentId: targetUserId, siteId, submittedAt: srcSub.submittedAt, source: 'transfer', pageVersion: srcSub.pageVersion },
           })
           counts.submissions++
         }

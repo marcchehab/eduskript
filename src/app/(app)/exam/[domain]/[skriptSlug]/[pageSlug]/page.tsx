@@ -23,6 +23,7 @@ import { StudentSnapshotProvider } from '@/contexts/student-snapshot-context'
 import { TeacherExamGrading } from '@/components/exam/teacher-exam-grading'
 import { ExamReviewProvider } from '@/contexts/exam-review-context'
 import { ReturnedExamSummary } from '@/components/exam/returned-exam-summary'
+import { getExamVersionContent } from '@/lib/scoring/exam-version'
 import { ExamPageContextProvider } from '@/contexts/exam-page-context'
 import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
 import { getExamClassesForTeacher } from '@/lib/scoring/auth'
@@ -155,12 +156,14 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   // exam shows the "submitted" page regardless of state too.
   let isReturnedReview = false
   let submittedAt: Date | null = null
+  let handedInVersion: number | null = null
   if (!isTeacherAuthor) {
     const existingSubmission = await prisma.examSubmission.findUnique({
       where: { pageId_studentId_siteId: { pageId: page.id, studentId, siteId } },
-      select: { submittedAt: true }
+      select: { submittedAt: true, pageVersion: true }
     })
     if (existingSubmission) {
+      handedInVersion = existingSubmission.pageVersion
       // Returned state is derived from the exam log (single source of truth), so a
       // take-back drops the student back to the "submitted" view automatically.
       if (await isStudentReturned(page.id, studentId, siteId)) isReturnedReview = true
@@ -267,6 +270,21 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     )
   }
 
+  // Version to render (src/lib/scoring/exam-version.ts): a returned review
+  // shows the version the student handed in; the teacher's grading view shows
+  // ?v= (kept equal to the selected student's version by VersionSync,
+  // teacher-exam-grading.tsx). Otherwise, or when the version is missing, the
+  // live page. An older version gets no print-layout editing.
+  const requestedVersion = isReturnedReview
+    ? handedInVersion
+    : isTeacherAuthor && typeof resolvedSearchParams.v === 'string' && /^\d+$/.test(resolvedSearchParams.v)
+      ? Number(resolvedSearchParams.v)
+      : null
+  const rendered = requestedVersion != null ? await getExamVersionContent(page.id, requestedVersion) : null
+  const renderedVersion = rendered?.version ?? null
+  const isOlderVersion = rendered != null && renderedVersion != null && rendered.content !== page.content
+  const bodyPage = isOlderVersion ? { ...page, content: rendered.content } : page
+
   // Fetch public annotations, snaps, and sticky notes (same as non-exam path)
   const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id, siteId)
 
@@ -316,8 +334,16 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
           siteId={siteId}
         />
       )}
+      {renderedVersion != null && (
+        <p className="mb-2 text-center text-xs text-muted-foreground">
+          {isOlderVersion
+            ? `Exam version ${renderedVersion}, as handed in. The page has been edited since.`
+            : `Exam version ${renderedVersion}, as handed in.`}
+        </p>
+      )}
       <PublicPageBody
-        page={page}
+        page={bodyPage}
+        noLayoutEditing={isOlderVersion}
         skriptId={skript.id}
         publicAnnotations={publicAnnotations}
         publicSnaps={publicSnaps}

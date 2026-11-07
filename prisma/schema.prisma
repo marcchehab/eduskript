@@ -80,23 +80,23 @@ model User {
   needsProfileCompletion Boolean @default(false) // True for new OAuth teachers until they complete their profile
 
   // Privacy and account type
-  accountType      String    @default("teacher") // "teacher" or "student"
-  studentPseudonym String?   @unique // For student privacy: hash(oauthProvider:oauthProviderId) for OAuth, hash(email) for legacy
+  accountType             String    @default("teacher") // "teacher" or "student"
+  studentPseudonym        String?   @unique // For student privacy: hash(oauthProvider:oauthProviderId) for OAuth, hash(email) for legacy
   // Throwaway email+password student account a teacher creates for a spare laptop
   // during an exam (device crash). Flagged so the toolbar can offer "Transfer
   // answers" to the student's real account afterwards. See exam-recovery / transfer route.
-  isTemporary      Boolean   @default(false) @map("is_temporary")
-  gdprConsentAt    DateTime? // Timestamp of GDPR consent acceptance
+  isTemporary             Boolean   @default(false) @map("is_temporary")
+  gdprConsentAt           DateTime? // Timestamp of GDPR consent acceptance
   // Product-update mails (src/lib/product-updates/*). Opt-in only: false by
   // default, set at signup (unchecked checkbox), in account settings, or via the
   // signed link in the one-time consent mail. Consent time is kept as proof;
   // cleared again on unsubscribe.
   productUpdates          Boolean   @default(false) @map("product_updates")
   productUpdatesConsentAt DateTime? @map("product_updates_consent_at")
-  lastSeenAt       DateTime? // For inactive account cleanup
+  lastSeenAt              DateTime? // For inactive account cleanup
   // First-touch visit source ({ref?, utm?, referrer?}, see src/lib/visit-source.ts),
   // attached once right after signup. Campaign labels and a domain only.
-  signupSource     Json?     @map("signup_source")
+  signupSource            Json?     @map("signup_source")
 
   // OAuth identification (for students - replaces email storage)
   oauthProvider   String? // "github", "google", "microsoft", "azure-ad"
@@ -655,21 +655,24 @@ model StudentSubmission {
 // a specific page via implicitPageId. Auth for viewing their data routes through
 // PageAuthor inheritance (checkPagePermissions), not class ownership.
 model Class {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   name           String
   description    String?
-  teacherId      String?  @map("teacher_id") // Nullable: implicit survey classes have no owner
-  inviteCode     String   @unique @map("invite_code")
-  isActive       Boolean  @default(true) @map("is_active")
-  allowAnonymous Boolean  @default(false) @map("allow_anonymous")
+  teacherId      String?   @map("teacher_id") // Nullable: implicit survey classes have no owner
+  inviteCode     String    @unique @map("invite_code")
+  isActive       Boolean   @default(true) @map("is_active")
+  allowAnonymous Boolean   @default(false) @map("allow_anonymous")
   // Anti-distraction (NOT security): when true, logged-in members must use Safe
   // Exam Browser to view the teacher's site. Enforced client-side via middleware
   // gate (src/proxy.ts → /api/internal/check-lockdown). Anonymous visitors bypass.
-  lockdownMode   Boolean  @default(false) @map("lockdown_mode")
-  isImplicit     Boolean  @default(false) @map("is_implicit") // True for auto-generated survey/pseudo classes
-  implicitPageId String?  @unique @map("implicit_page_id") // For isImplicit=true: the page this class is bound to
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  lockdownMode   Boolean   @default(false) @map("lockdown_mode")
+  // Archived (src/lib/exam-records.ts): read-only, hidden from class pickers
+  // and students, its exams copied into ExamRecord. null = active.
+  archivedAt     DateTime? @map("archived_at")
+  isImplicit     Boolean   @default(false) @map("is_implicit") // True for auto-generated survey/pseudo classes
+  implicitPageId String?   @unique @map("implicit_page_id") // For isImplicit=true: the page this class is bound to
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // Relations
   teacher               User?                  @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
@@ -1175,6 +1178,11 @@ model ExamSubmission {
   // Site the exam was taken on. Part of the unique key: the same student can
   // hand in the same exam page once per site. '' = legacy/unplaced.
   siteId      String   @default("") @map("site_id")
+  // PageVersion.version the student handed in (src/lib/scoring/exam-version.ts):
+  // grading, the teacher's grading view and the returned review render this
+  // version. null = unknown (older rows, or no version matched the page) →
+  // the live page is used.
+  pageVersion Int?     @map("page_version")
 
   // DEPRECATED / DEAD — superseded by the append-only exam log. Return state +
   // scoring now live in ExamAuditLog ('return' / 'take_back' events, frozen
@@ -1307,6 +1315,43 @@ model ComponentScore {
   @@index([pageId, studentId])
   @@index([pageId, siteId])
   @@map("component_scores")
+}
+
+// Archived copy of one student's exam (src/lib/exam-records.ts), kept for the
+// legal retention period (retainUntil = returnedAt, else archive time, + 5
+// years) and deleted by the daily cron (src/app/api/cron/route.ts). Written
+// on every return and when a class is archived. Self-contained on purpose:
+// all ids are plain strings WITHOUT foreign keys, so deleting the page, the
+// class, the student's or the teacher's account leaves the record intact.
+// `payload`: page title + markdown, scores (ReviewScores), answers (UserData
+// per component), exam log; see ExamRecordPayload.
+model ExamRecord {
+  id               String    @id @default(cuid())
+  teacherId        String    @map("teacher_id") // who archived/returned it; no FK
+  pageId           String    @map("page_id")
+  studentId        String    @map("student_id")
+  siteId           String    @default("") @map("site_id")
+  classId          String?   @map("class_id")
+  className        String?   @map("class_name")
+  pageTitle        String    @map("page_title")
+  studentName      String?   @map("student_name")
+  studentPseudonym String?   @map("student_pseudonym")
+  studentEmail     String?   @map("student_email") // only with identity consent
+  submittedAt      DateTime? @map("submitted_at")
+  returnedAt       DateTime? @map("returned_at")
+  score            Float?
+  maxScore         Float?    @map("max_score")
+  grade            Float?
+  payload          Json
+  retainUntil      DateTime  @map("retain_until")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([pageId, studentId, siteId])
+  @@index([classId])
+  @@index([teacherId])
+  @@index([retainUntil])
+  @@map("exam_records")
 }
 
 // Step-1 artifact of AI scoring: the point allocation for one gradable component.

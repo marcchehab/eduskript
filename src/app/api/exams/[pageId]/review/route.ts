@@ -74,9 +74,16 @@ export async function GET(
       : []
     const payloadByComponent = new Map(rows.map((r) => [r.adapter, r.data]))
 
+    const submission = await prisma.examSubmission.findUnique({
+      where: { pageId_studentId_siteId: { pageId, studentId, siteId } },
+      select: { pageVersion: true },
+    })
+
     return NextResponse.json({
       studentId,
       siteId,
+      // Version handed in (src/lib/scoring/exam-version.ts); null = live page.
+      pageVersion: submission?.pageVersion ?? null,
       grade: scores.grade,
       totalEarned: scores.totalEarned,
       totalMax: scores.totalMax,

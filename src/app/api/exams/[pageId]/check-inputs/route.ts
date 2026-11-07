@@ -14,6 +14,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { parseGradableComponents } from '@/lib/scoring/components'
 import { authorizeStudentSite } from '@/lib/scoring/site-scope'
+import { getSubmittedContents } from '@/lib/scoring/exam-version'
 
 interface CodeFile { name?: string; content?: string }
 interface CodeEditorPayload { files?: CodeFile[]; activeFileIndex?: number }
@@ -38,7 +39,8 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const page = await prisma.page.findUnique({ where: { id: pageId }, select: { content: true } })
+    // The asserts of the version the student handed in (exam-version.ts).
+    const page = (await getSubmittedContents(pageId, new Map([[studentId, siteId]]))).byStudent.get(studentId)
     if (!page) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const pythonComponents = parseGradableComponents(page.content).filter((c) => c.kind === 'python')

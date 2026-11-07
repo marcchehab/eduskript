@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Send, Loader2, Play, Wand2 } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useLayout } from '@/contexts/layout-context'
@@ -59,6 +59,7 @@ export function TeacherExamGrading({
 
   return (
     <ExamReviewProvider pageId={pageId} mode="grade" studentId={studentId}>
+      {enabled && isTeacher && <VersionSync studentId={studentId} />}
       {children}
       {enabled && isTeacher && selectedClass && (
         <GradingBar
@@ -70,6 +71,31 @@ export function TeacherExamGrading({
       )}
     </ExamReviewProvider>
   )
+}
+
+/**
+ * Shows the selected student's handed-in page version (exam-version.ts): the
+ * exam route renders `?v=` for teachers, so this keeps `v` in the URL equal to
+ * the loaded student's version (none = live page). router.replace re-renders
+ * the server tree only; client state (selected student, scores) stays.
+ */
+function VersionSync({ studentId }: { studentId: string | null }) {
+  const { loadedStudentId, pageVersion } = useExamReview()
+  const router = useRouter()
+  const pathname = usePathname()
+  const search = useSearchParams()
+  useEffect(() => {
+    // Wait until the review for the selected student has loaded.
+    if (studentId && loadedStudentId !== studentId) return
+    const want = studentId && pageVersion != null ? String(pageVersion) : null
+    if (search.get('v') === want) return
+    const params = new URLSearchParams(search.toString())
+    if (want === null) params.delete('v')
+    else params.set('v', want)
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }, [studentId, loadedStudentId, pageVersion, search, pathname, router])
+  return null
 }
 
 function GradingBar({

@@ -36,6 +36,10 @@ interface PublicPageBodyProps {
   siteId: string | null
   /** Site language (BCP-47) — localizes the GFM footnotes heading. null → English. */
   pageLanguage?: string | null
+  /** `page.content` is not the live content (an exam's handed-in version,
+   *  src/lib/scoring/exam-version.ts): no print-layout editing, whose line
+   *  edits would target the live page. */
+  noLayoutEditing?: boolean
 }
 
 /**
@@ -50,7 +54,7 @@ interface PublicPageBodyProps {
  * separately above this body with full server-side props (state controls,
  * unlocked classes).
  */
-export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps, publicStickyNotes, isExamStudent, teacherPageSlug, siteId, pageLanguage }: PublicPageBodyProps) {
+export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps, publicStickyNotes, isExamStudent, teacherPageSlug, siteId, pageLanguage, noLayoutEditing }: PublicPageBodyProps) {
   const showToolbar = page.pageType !== 'exam' && !isExamStudent
   return (
     <>
@@ -70,7 +74,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
         <ReflowWidthHandle />
-        <PrintEditSource pageId={page.id} content={publicContent(page.content)} />
+        {!noLayoutEditing && <PrintEditSource pageId={page.id} content={publicContent(page.content)} />}
         <article className="prose-theme">
           <ReflowGate
             pageId={page.id}

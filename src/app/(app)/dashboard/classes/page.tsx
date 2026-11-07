@@ -25,9 +25,12 @@ import {
   ShieldOff,
   ShieldUser,
   Pencil,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react'
 import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 import { ClassExams } from '@/components/dashboard/class-exams'
+import { ClassExamRecords } from '@/components/dashboard/class-exam-records'
 import {
   Dialog,
   DialogContent,
@@ -70,6 +73,7 @@ interface Class {
   allowAnonymous: boolean
   memberCount: number
   preAuthorizedCount: number
+  archivedAt?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -114,6 +118,12 @@ export default function ClassesPage() {
   const [editDescription, setEditDescription] = useState('')
   const [savingClass, setSavingClass] = useState(false)
 
+  // Archived classes (src/lib/exam-records.ts): listed separately, collapsed.
+  const [archivedClasses, setArchivedClasses] = useState<Class[]>([])
+  const [showArchived, setShowArchived] = useState(false)
+  const [expandedArchivedId, setExpandedArchivedId] = useState<string | null>(null)
+  const [archiving, setArchiving] = useState<string | null>(null)
+
 
   // Check if user is a teacher
   useEffect(() => {
@@ -135,7 +145,10 @@ export default function ClassesPage() {
   const loadClasses = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/classes')
+      const [response, archivedResponse] = await Promise.all([
+        fetch('/api/classes'),
+        fetch('/api/classes?archived=1'),
+      ])
 
       if (!response.ok) {
         throw new Error('Failed to load classes')
@@ -143,6 +156,7 @@ export default function ClassesPage() {
 
       const data = await response.json()
       setClasses(data.classes)
+      if (archivedResponse.ok) setArchivedClasses((await archivedResponse.json()).classes)
     } catch (error) {
       console.error('Error loading classes:', error)
     } finally {
@@ -494,6 +508,47 @@ export default function ClassesPage() {
     } finally {
       setUpdatingAnonymous({ ...updatingAnonymous, [classId]: false })
     }
+  }
+
+  /** Archive (true) or restore (false) a class; PATCH /api/classes/[id] { archived }. */
+  const setArchived = async (classItem: Class, archived: boolean) => {
+    try {
+      setArchiving(classItem.id)
+      const response = await fetch(`/api/classes/${classItem.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived }),
+      })
+      if (!response.ok) throw new Error('Failed to update class')
+      const data = await response.json()
+      const updated: Class = { ...classItem, ...data.class }
+      if (archived) {
+        setClasses((prev) => prev.filter((c) => c.id !== classItem.id))
+        setArchivedClasses((prev) => [...prev, updated].sort((a, b) => a.name.localeCompare(b.name)))
+        setExpandedClassId(null)
+        dialog.showSuccess(
+          `${data.archivedExams ?? 0} exam${data.archivedExams === 1 ? '' : 's'} archived. They are kept for 5 years after their return.`,
+          'Class archived',
+        )
+      } else {
+        setArchivedClasses((prev) => prev.filter((c) => c.id !== classItem.id))
+        setClasses((prev) => [...prev, updated].sort((a, b) => a.name.localeCompare(b.name)))
+        setExpandedArchivedId(null)
+      }
+    } catch (error) {
+      console.error('Error archiving class:', error)
+      dialog.showError(archived ? 'Could not archive the class. Please try again.' : 'Could not restore the class. Please try again.')
+    } finally {
+      setArchiving(null)
+    }
+  }
+
+  const confirmArchive = (classItem: Class) => {
+    dialog.showConfirm(
+      `"${classItem.name}" becomes read-only: students can no longer join or see it, open exams are closed and lockdown ends. Its exams are copied to the archive and kept for 5 years. You can still grade and re-return them, and restore the class later.`,
+      () => void setArchived(classItem, true),
+      { title: 'Archive class?', confirmText: 'Archive' },
+    )
   }
 
   const getSortedStudents = (classId: string, students: Student[]) => {
@@ -1025,12 +1080,89 @@ export default function ClassesPage() {
                               disabled={updatingAnonymous[classItem.id]}
                             />
                           </div>
+                          <div className="flex justify-end mt-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              onClick={() => confirmArchive(classItem)}
+                              disabled={archiving === classItem.id}
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                              {archiving === classItem.id ? 'Archiving...' : 'Archive class'}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     )}
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {archivedClasses.length > 0 && (
+            <div className="mt-8">
+              <button
+                onClick={() => setShowArchived(!showArchived)}
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+              >
+                {showArchived ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                <Archive className="w-4 h-4" />
+                Archived classes ({archivedClasses.length})
+              </button>
+              {showArchived && (
+                <div className="space-y-2 mt-3">
+                  {archivedClasses.map((classItem) => {
+                    const isExpanded = expandedArchivedId === classItem.id
+                    return (
+                      <div key={classItem.id} className="border rounded-lg">
+                        <button
+                          onClick={() => setExpandedArchivedId(isExpanded ? null : classItem.id)}
+                          className="w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                          )}
+                          <div className="flex-1 text-left">
+                            <h3 className="font-semibold text-lg text-muted-foreground">{classItem.name}</h3>
+                            {classItem.archivedAt && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Archived {new Date(classItem.archivedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Users className="w-4 h-4" />
+                            <span>{classItem.memberCount}</span>
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t p-4 space-y-6 bg-muted/20">
+                            {/* Live exams: grading and re-returning still work (corrections). */}
+                            <ClassExams classId={classItem.id} />
+                            <ClassExamRecords classId={classItem.id} />
+                            <div className="flex justify-end pt-4 border-t">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => void setArchived(classItem, false)}
+                                disabled={archiving === classItem.id}
+                              >
+                                <ArchiveRestore className="w-3.5 h-3.5" />
+                                {archiving === classItem.id ? 'Restoring...' : 'Restore class'}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
