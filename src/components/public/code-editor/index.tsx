@@ -1,6 +1,7 @@
 "use client"
 
 import { usePrintMode } from '@/lib/print/print-mode'
+import { PrintCode } from './print-code'
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo, useMemo, useSyncExternalStore } from 'react'
 import { nanoid } from 'nanoid'
 import { createPortal } from 'react-dom'
@@ -1110,7 +1111,8 @@ export const CodeEditor = memo(function CodeEditor({
   // CodeMirror's content height (incl. wrapped lines), read when the print
   // view opens (effect below editorViewRef); 0 until then.
   const [printContentHeight, setPrintContentHeight] = useState(0)
-  const editorHeight = printing
+  // Output-only editors print their output panel at its online size.
+  const editorHeight = printing && !outputOnly
     // + 80: room for the space a paginator cut leaves at a page edge (up to
     // ~70px, print-view.tsx cutAt), which the fixed height doesn't grow by.
     ? Math.max(MIN_EDITOR_HEIGHT, Math.max(lineCount * LINE_HEIGHT, printContentHeight) + fileTabsHeight + 60 + 80)
@@ -4106,8 +4108,48 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }
 
+  // Print view: every other editor prints the author's code as static blocks
+  // (EditorPrintFrame in markdown-components.tsx, print-code.tsx). Output-only
+  // editors print their output/plot (controls hidden via print-hide), or the
+  // author's code as a fallback while there is no output. Note the output is
+  // from whatever code ran, i.e. the student's if they edited it.
+  // "Output" = non-error text output or something painted in the graphics
+  // panel (an empty turtle canvas or an error alone print the code instead).
+  // Read from the DOM, so it is an effect, kept current online too so the
+  // print view opens with the right choice. No layout reads: the panel is
+  // display:none while the code prints.
+  const [printHasOutput, setPrintHasOutput] = useState(false)
+  useEffect(() => {
+    if (!outputOnly) return
+    const text = output.some((e) => e.level !== OutputLevel.ERROR && (e.isHtml || e.sqlResults || e.message.trim() !== ''))
+    const el = canvasRef.current
+    const painted = canvasVisible && !!el && [...el.querySelectorAll('canvas, img, svg')].some((c) =>
+      c instanceof HTMLCanvasElement ? getCanvasDrawnBounds(c) != null
+        : c instanceof HTMLImageElement ? c.naturalWidth > 0 || !c.complete
+          : true)
+    setPrintHasOutput(text || painted)
+  }, [printing, outputOnly, output, canvasVisible, runState])
+  const printNoOutput = printing && outputOnly && !printHasOutput
+  // The plot panel is wider on paper (control rail hidden): re-fit the plot
+  // to it when the print view opens and when it closes again.
+  const fitPrintingRef = useRef(printing)
+  useEffect(() => {
+    if (fitPrintingRef.current === printing) return
+    fitPrintingRef.current = printing
+    if (!outputOnly || !canvasVisible) return
+    const raf = requestAnimationFrame(() => fitToView())
+    return () => cancelAnimationFrame(raf)
+  }, [printing, outputOnly, canvasVisible, fitToView])
+
   return (
     <>
+    {printNoOutput && (
+      <PrintCode
+        files={initialFiles && initialFiles.length > 0 ? initialFiles : [{ name: 'main', content: initialCode }]}
+        language={language}
+      />
+    )}
+    <div style={{ display: printNoOutput ? 'none' : 'contents' }}>
     {/* Kara level briefing (`intro:` lines) sits above the editor box, outside
         it, so it never takes height from the side-by-side layout. Not shown in
         fullscreen (the wrapper is the fullscreen element). */}
@@ -5045,7 +5087,7 @@ export const CodeEditor = memo(function CodeEditor({
         {/* Collapsed-editor rail: the only way back once the code panel is
             hidden, and it keeps Run/Stop reachable while collapsed. */}
         {!showEditor && (
-          <div className={cn('flex items-center gap-1 bg-muted/30 px-1 py-2 shrink-0', graphicsStacked ? 'flex-row border-b' : 'flex-col border-r')}>
+          <div className={cn('print-hide flex items-center gap-1 bg-muted/30 px-1 py-2 shrink-0', graphicsStacked ? 'flex-row border-b' : 'flex-col border-r')}>
             <Button
               onClick={expandPanels}
               size="sm"
@@ -5117,7 +5159,7 @@ export const CodeEditor = memo(function CodeEditor({
               onMouseLeave={handleCanvasMouseUp}
             >
               {/* Floating Control Buttons */}
-              <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+              <div className="print-hide absolute top-2 right-2 flex items-center gap-1 z-10">
                 {showEditor && (
                   <Button onClick={() => setCollapsed('graphics')} size="sm" variant="outline" className="h-7 w-7 p-0 shadow-lg" title="Hide plot">
                     <PanelRightClose className="w-3 h-3" />
@@ -5145,7 +5187,7 @@ export const CodeEditor = memo(function CodeEditor({
 
         {/* Collapsed-graphics rail: re-open the plot panel once it's hidden. */}
         {!isKara && canvasVisible && !showGraphics && (
-          <div className={cn('flex items-center gap-1 bg-muted/30 px-1 py-2 shrink-0', graphicsStacked ? 'flex-row border-t' : 'flex-col border-l')}>
+          <div className={cn('print-hide flex items-center gap-1 bg-muted/30 px-1 py-2 shrink-0', graphicsStacked ? 'flex-row border-t' : 'flex-col border-l')}>
             <Button
               onClick={expandPanels}
               size="sm"
@@ -5207,7 +5249,7 @@ export const CodeEditor = memo(function CodeEditor({
         <div
           onMouseDown={handleHorizontalSplitterMouseDown}
           onTouchStart={handleHorizontalSplitterTouchStart}
-          className="h-1 bg-border hover:bg-primary/20 cursor-row-resize shrink-0 transition-colors relative touch-none"
+          className="print-hide h-1 bg-border hover:bg-primary/20 cursor-row-resize shrink-0 transition-colors relative touch-none"
           style={{ minHeight: '8px' }}
         >
           {/* Extended touch target (invisible but increases hit area) */}
@@ -5222,7 +5264,7 @@ export const CodeEditor = memo(function CodeEditor({
           style={{ height: `${outputPanelHeight}px` }}
         >
         {/* Tabs */}
-        <div className="flex items-center gap-1 p-1 border-b bg-muted/30">
+        <div className="print-hide flex items-center gap-1 p-1 border-b bg-muted/30">
           <Button
             onClick={() => setActivePanel('output')}
             size="sm"
@@ -5866,6 +5908,7 @@ export const CodeEditor = memo(function CodeEditor({
       confirmText={dialog.confirmText} cancelText={dialog.cancelText}
       destructive={dialog.destructive}
     />
+    </div>
     </>
   )
 })

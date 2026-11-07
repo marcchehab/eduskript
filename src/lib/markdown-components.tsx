@@ -12,6 +12,7 @@ import { resolveFile, resolveUrl, resolveExcalidraw } from './skript-files'
 import { CodeEditor } from '@/components/public/code-editor'
 import { HtmlPreviewEditor } from '@/components/public/code-editor/html-preview-editor'
 import { DeferredMount } from '@/components/public/code-editor/deferred-mount'
+import { EditorPrintFrame, PrintCode } from '@/components/public/code-editor/print-code'
 import { CodeEditorPlaceholder } from '@/components/public/code-editor/code-editor-placeholder'
 import { parseToolboxName } from '@/components/public/code-editor/file-scopes'
 import { Tabs, TabItem } from '@/components/markdown/tabs'
@@ -546,25 +547,30 @@ export function createMarkdownComponents(
       const height = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined
       return (
         <div {...props}>
-          <DeferredMount
-            pageId={pageId}
-            componentId={`code-editor-${id}`}
-            estimatedHeight={height ?? estimatedHeight}
-            eager={isExam}
-            placeholder={<CodeEditorPlaceholder code={decodedCode} language="html" />}
-          >
-            <HtmlPreviewEditor
-              key={id}
-              id={id}
+          {/* Print: the author's HTML source as a code block (print-code.tsx). */}
+          <EditorPrintFrame staticPrint paper={<PrintCode files={[{ name: 'index.html', content: decodedCode }]} language="html" />}>
+            <DeferredMount
               pageId={pageId}
-              initialCode={decodedCode}
-              height={height}
-            />
-          </DeferredMount>
+              componentId={`code-editor-${id}`}
+              estimatedHeight={height ?? estimatedHeight}
+              eager={isExam}
+              printMount={false}
+              placeholder={<CodeEditorPlaceholder code={decodedCode} language="html" />}
+            >
+              <HtmlPreviewEditor
+                key={id}
+                id={id}
+                pageId={pageId}
+                initialCode={decodedCode}
+                height={height}
+              />
+            </DeferredMount>
+          </EditorPrintFrame>
         </div>
       )
     }
 
+    const isOutputOnly = outputOnly === 'true'
     const parsedHeight = heightAttr ? parseInt(heightAttr, 10) : NaN
     const editorHeight = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined
 
@@ -575,11 +581,27 @@ export function createMarkdownComponents(
       // data-source-line-* spread from {...props} still lets the cursor→preview
       // highlight find this block.
       <div {...props} data-interactive="true">
+        {/* Print: the author's starter files as code blocks (print-code.tsx),
+            SQL with its schema image. Output-only editors print their output
+            instead and handle print themselves (CodeEditor), so they mount. */}
+        <EditorPrintFrame
+          staticPrint={!isOutputOnly}
+          paper={
+            <>
+              <PrintCode files={initialFiles && initialFiles.length > 0 ? initialFiles : [{ name: 'main', content: decodedCode }]} language={language} />
+              {schemaImageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element -- skript file, printed as is
+                <img src={schemaImageUrl} alt="Database schema" className="my-4 max-w-full" />
+              )}
+            </>
+          }
+        >
         <DeferredMount
           pageId={pageId}
           componentId={`code-editor-${id}`}
           estimatedHeight={editorHeight ?? estimatedHeight}
           eager={isExam}
+          printMount={isOutputOnly}
           placeholder={<CodeEditorPlaceholder code={decodedCode} language={language} />}
         >
           <CodeEditor
@@ -605,7 +627,7 @@ export function createMarkdownComponents(
             allowUpload={allowUploadAttr === 'true'}
             acceptUploads={acceptAttr}
             height={editorHeight}
-            outputOnly={outputOnly === 'true'}
+            outputOnly={isOutputOnly}
             karaWorld={karaWorld}
             karaAssets={karaAssets}
             karaCodeWidth={karaCodeWidthAttr ? Math.min(90, Math.max(10, parseInt(karaCodeWidthAttr, 10) || 50)) : undefined}
@@ -613,6 +635,7 @@ export function createMarkdownComponents(
             toolbox={language === 'python' ? parseToolboxName(toolboxAttr) : undefined}
           />
         </DeferredMount>
+        </EditorPrintFrame>
       </div>
     )
   }

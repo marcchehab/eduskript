@@ -39,6 +39,7 @@ export function DeferredMount({
   estimatedHeight,
   placeholder,
   eager = false,
+  printMount = true,
   children,
 }: {
   pageId?: string
@@ -47,6 +48,9 @@ export function DeferredMount({
   placeholder: ReactNode
   // Skip deferral and mount immediately (exam mode, or no IntersectionObserver).
   eager?: boolean
+  // Mount when the print view opens. False when the print view shows a static
+  // stand-in instead (EditorPrintFrame, print-code.tsx).
+  printMount?: boolean
   children: ReactNode
 }) {
   // Eager if explicitly requested (exam-tagged block) OR if an ancestor forces
@@ -61,8 +65,8 @@ export function DeferredMount({
   // estimated height would put every page break after it in the wrong place.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot, mirrors the beforeprint path below
-    if (printing) setMounted(true)
-  }, [printing])
+    if (printing && printMount) setMounted(true)
+  }, [printing, printMount])
 
   // Keep this editor id in the mounted-registry for the whole block lifetime so
   // orphan detection doesn't flag a not-yet-scrolled-to editor as orphaned.
