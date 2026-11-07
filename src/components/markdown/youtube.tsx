@@ -6,6 +6,8 @@ import { usePathname } from 'next/navigation'
 import { useVideoGate, CouplingToggle } from './coupled-video-context'
 import { StickMe } from './stick-me'
 import { YoutubeOptions } from './youtube-options'
+import { ResizableWrapper } from './resizable-wrapper'
+import type { MediaLayout } from '@/lib/media-layout'
 
 interface YoutubeProps {
   id?: string
@@ -20,6 +22,10 @@ interface YoutubeProps {
   pin?: boolean
   /** Editor only: shows the start-time gizmo; null removes the start time. */
   onStartTimeChange?: (startTime: number | null) => void
+  /** Width/align/wrap (resize gizmo, same as images). Defaults: 100%, center, no wrap. */
+  layout?: MediaLayout
+  /** Editor only: shows the resize/align gizmos. */
+  onLayoutChange?: (layout: MediaLayout) => void
 }
 
 /** 1280x720. Missing for some older/low-res uploads — hence the fallback. */
@@ -27,7 +33,7 @@ const maxResThumb = (id: string) => `https://img.youtube.com/vi/${id}/maxresdefa
 /** 480x360. YouTube generates this for every video. */
 const fallbackThumb = (id: string) => `https://img.youtube.com/vi/${id}/hqdefault.jpg`
 
-export function Youtube({ id, playlist, startTime, endTime, caption, thumbnail, pin, onStartTimeChange }: YoutubeProps) {
+export function Youtube({ id, playlist, startTime, endTime, caption, thumbnail, pin, onStartTimeChange, layout, onLayoutChange }: YoutubeProps) {
   const [isOpen, setIsOpen] = useState(false)
   // Last position from the player's infoDelivery events; read by the start-time gizmo.
   const currentTimeRef = useRef<number | null>(null)
@@ -220,19 +226,28 @@ export function Youtube({ id, playlist, startTime, endTime, caption, thumbnail, 
     />
   )
 
+  // Shown inside ResizableWrapper's control group, which only renders with
+  // onLayoutChange — the client renderer passes both callbacks together.
+  const startTimeGizmo = onStartTimeChange ? (
+    <YoutubeOptions
+      startTime={startTime}
+      playerOpen={isOpen}
+      getCurrentTime={getCurrentTime}
+      onChange={onStartTimeChange}
+    />
+  ) : undefined
+
   return (
-    <span className="group relative block my-6">
+    <ResizableWrapper
+      initialWidth={layout?.width ?? 100}
+      align={layout?.align ?? 'center'}
+      wrap={layout?.wrap ?? false}
+      onLayoutChange={onLayoutChange}
+      extraControls={startTimeGizmo}
+    >
       <StickMe enabled={pin} footer={<CouplingToggle />} storageKey={`coupled-video:${id ?? 'yt'}`}>{player}</StickMe>
-      {onStartTimeChange && (
-        <YoutubeOptions
-          startTime={startTime}
-          playerOpen={isOpen}
-          getCurrentTime={getCurrentTime}
-          onChange={onStartTimeChange}
-        />
-      )}
       {captionNode}
-    </span>
+    </ResizableWrapper>
   )
 }
 

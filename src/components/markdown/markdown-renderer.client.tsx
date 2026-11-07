@@ -2,6 +2,7 @@
 
 import { setTagAttribute } from '@/lib/tag-attribute'
 import { fileRefPattern } from '@/lib/file-refs'
+import { setMediaLayoutAttrs, type MediaLayout } from '@/lib/media-layout'
 import React, { useState, useEffect, useLayoutEffect, useRef, useDeferredValue, useCallback, memo, useMemo, type ReactNode } from 'react'
 import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
@@ -182,6 +183,27 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
+  // Stable callback: resize/align gizmo on a YouTube embed. Rewrites only the
+  // width/align/wrap attributes of the first <youtube …id="x"…> tag; for the
+  // image shorthand `![caption](https://youtu.be/x)` the whole shorthand is
+  // replaced by `shorthandTag` (a <youtube> tag built by the component), since
+  // the bracket syntax has no place for layout. Same first-occurrence trade-off
+  // as the start-time gizmo above. The raw <youtube-embed data-id> form is not
+  // matched (the gizmo does nothing there).
+  const stableOnYoutubeLayoutChange = useCallback((id: string, layout: MediaLayout, shorthandTag: string) => {
+    const currentContent = contentRef.current
+    const notify = onContentChangeRef.current
+    if (!notify || !currentContent || !id) return
+
+    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const tagPattern = new RegExp(`<youtube\\s[^>]*\\bid=["']${escapedId}["'][^>]*>`, 'i')
+    const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(\\s*<?https?://[^)\\s]*${escapedId}[^)]*\\)`)
+    const newContent =
+      replaceOutsideFences(currentContent, tagPattern, (tag) => setMediaLayoutAttrs(tag, layout)) ??
+      replaceOutsideFences(currentContent, shorthandPattern, shorthandTag)
+    if (newContent !== null && newContent !== currentContent) notify(newContent)
+  }, [])
+
   // Stable callback: set/remove one attribute of the tag at a source line.
   const stableOnTagAttributeChange = useCallback((tag: string, line: number, attr: string, value: string | null) => {
     const currentContent = contentRef.current
@@ -251,11 +273,12 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       onSpacerChange: stableOnSpacerChange,
       onMuxVideoChange: stableOnMuxVideoChange,
       onYoutubeStartTimeChange: stableOnYoutubeStartTimeChange,
+      onYoutubeLayoutChange: stableOnYoutubeLayoutChange,
       onTagAttributeChange: stableOnTagAttributeChange,
       onMoleculeChange: stableOnMoleculeChange,
       aiFeedbackSolution: isEditable ? aiFeedbackSolution : undefined,
     })
-  }, [files, pageId, skriptId, karaClues, pageLanguage, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnYoutubeStartTimeChange, stableOnTagAttributeChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
+  }, [files, pageId, skriptId, karaClues, pageLanguage, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnYoutubeStartTimeChange, stableOnYoutubeLayoutChange, stableOnTagAttributeChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {

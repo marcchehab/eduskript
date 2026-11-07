@@ -236,7 +236,9 @@ export function ResizableWrapper({
   return (
     <span
       ref={containerRef}
-      className={`block relative my-4 group ${alignmentClasses} ${className}`}
+      // While dragging, iframes (YouTube player) would swallow mousemove/mouseup
+      // once the cursor crosses them and the drag would stick.
+      className={`block relative my-4 group ${alignmentClasses} ${isDragging ? '[&_iframe]:pointer-events-none' : ''} ${className}`}
       style={{
         ...style,
         width: `${currentWidth}%`,
@@ -290,7 +292,7 @@ export function ResizableWrapper({
               overlays (fullscreen) in editor mode and put editor-only toggles
               here via extraControls instead. */}
           {(!widthOnly || extraControls) && (
-          <span className="print:hidden absolute top-2 right-2 bg-background/95 backdrop-blur-sm border border-border/50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-0.5 p-0.5">
+          <span className="print:hidden absolute top-2 right-2 bg-background/95 backdrop-blur-sm border border-border/50 rounded opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-10 flex items-center gap-0.5 p-0.5">
             {!widthOnly && (<>
             <button
               onClick={() => handleAlignChange('left')}

@@ -165,7 +165,7 @@ export const sanitizeSchema = {
     // Custom component attributes (camelCase for HAST, kebab-case for raw HTML)
     'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckStages', 'dataCheckPoints', 'dataMaxChecks', 'dataAssets', 'dataAllowUpload', 'dataAccept', 'dataHeight', 'dataOutputOnly', 'dataKaraWorld', 'dataKaraTile', 'dataKaraCodeWidth', 'dataToolbox', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-stages', 'data-check-points', 'data-max-checks', 'data-assets', 'data-allow-upload', 'data-accept', 'data-height', 'data-output-only', 'data-kara-world', 'data-kara-tile', 'data-kara-code-width', 'data-toolbox'],
     'tabs-container': ['dataItems', 'data-items'],
-    'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataEndTime', 'dataCaption', 'dataThumbnail', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-end-time', 'data-caption', 'data-thumbnail', 'data-pin'],
+    'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataEndTime', 'dataCaption', 'dataThumbnail', 'dataPin', 'dataWidth', 'dataAlign', 'dataWrap', 'data-id', 'data-playlist', 'data-start-time', 'data-end-time', 'data-caption', 'data-thumbnail', 'data-pin', 'data-width', 'data-align', 'data-wrap'],
     'flag-icon': ['dataCode', 'data-code'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'function-plot': ['dataSpec', 'data-spec'],
@@ -173,7 +173,7 @@ export const sanitizeSchema = {
     // autoplay/loop are known HTML media properties, so property-information
     // hands them over camelCased (autoPlay) and as booleans — allow both
     // spellings (cf. the bool() reader in markdown-components.tsx).
-    'muxvideo': ['src', 'alt', 'poster', 'pin', 'gif', 'autoplay', 'autoPlay', 'loop'],
+    'muxvideo': ['src', 'alt', 'poster', 'pin', 'gif', 'autoplay', 'autoPlay', 'loop', 'width', 'align', 'wrap'],
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap', 'print-width', 'printWidth'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
     'excali': ['src', 'alt', 'width', 'align', 'wrap', 'lightonly', 'print-width', 'printWidth'],

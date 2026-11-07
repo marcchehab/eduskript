@@ -69,6 +69,17 @@ Zwei Flags im Alt-Text ändern das Wiedergabeverhalten:
 
 Nützlich für kurze Demo-Loops im Seitenhintergrund, Intro-Animationen oder visuelle Aufhänger am Anfang einer Lektion.
 
+## Grösse und Position
+
+In der Editor-Vorschau ziehst du am rechten Rand eines Videos, um es zu verkleinern, und richtest es mit den Knöpfen oben rechts aus — derselbe Gizmo wie bei Bildern und Zeichnungen. Er schreibt das Layout in den Tag:
+
+```html
+<muxvideo src="lecture.mp4" width="50%" align="left" wrap />
+<youtube id="dQw4w9WgXcQ" width="60%" align="right" />
+```
+
+`width` ist ein Prozentwert der Spaltenbreite, `align` ist `left`/`center`/`right`, `wrap` lässt den Text um das Video fliessen. Eine Kurzform `![](…)` wird beim ersten Verkleinern in die Tag-Form umgeschrieben.
+
 ---
 
 ## Adaptives Streaming, jedes Gerät
@@ -107,3 +118,4 @@ Video-Hosting ist in den bezahlten Plänen enthalten. Ein Video aus einem andere
 | Eigenes Poster von URL | `![](filename.mp4 "https://example.com/thumb.jpg")` |
 | Autoplay + Loop (stummer Hintergrund) | `![autoplay loop](bg.mp4 "preview.jpg")` |
 | Direkte HTML-Form | `<muxvideo src="x.mp4" poster="thumb.jpg" />` |
+| Halbe Breite, links, Text fliesst herum | `<muxvideo src="x.mp4" width="50%" align="left" wrap />` |

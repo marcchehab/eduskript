@@ -19,7 +19,9 @@ import { Youtube } from '@/components/markdown/youtube'
 import { MuxVideo } from '@/components/markdown/mux-video'
 import { ExcalidrawImage } from '@/components/markdown/excalidraw-image'
 import { ContentSpacer, type SpacerPattern } from '@/components/markdown/content-spacer'
-import { MuxVideoOptions } from '@/components/markdown/mux-video-options'
+import { ResizableWrapper } from '@/components/markdown/resizable-wrapper'
+import { MuxVideoOptions, buildMuxVideoTag } from '@/components/markdown/mux-video-options'
+import { parseMediaWidth, parseMediaAlign, parseMediaFlag, buildYoutubeTag, type MediaLayout } from '@/lib/media-layout'
 import { ContentImage } from '@/components/markdown/content-image'
 import { Question, Option, StaticQuestion } from '@/components/markdown/quiz'
 import { Survey } from '@/components/markdown/survey'
@@ -285,6 +287,7 @@ interface CreateMarkdownComponentsOptions {
   onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
   onMuxVideoChange?: (src: string, newMarkdown: string) => void  // Stable callback for the <muxvideo> options toolbar
   onYoutubeStartTimeChange?: (id: string, startTime: number | null) => void  // Stable callback for the <youtube> start-time gizmo
+  onYoutubeLayoutChange?: (id: string, layout: MediaLayout, shorthandTag: string) => void  // Stable callback for the <youtube> resize/align gizmo
   onTagAttributeChange?: (tag: string, line: number, attr: string, value: string | null) => void  // Stable callback for gizmos that set one attribute
   onMoleculeChange?: (smiles: string, newMarkdown: string) => void  // Stable callback for the <molecule> resize/align gizmos
   aiFeedbackSolution?: AiFeedbackSolutionApi  // Editor only: "Provide solution" gizmo on <ai-feedback>
@@ -310,7 +313,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onTagAttributeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues, pageLanguage } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onYoutubeLayoutChange, onTagAttributeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues, pageLanguage } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -625,9 +628,33 @@ export function createMarkdownComponents(
     const gif = bool('gif')
     const autoplay = bool('autoplay', 'autoPlay')
     const loop = bool('loop')
+    // Width/align/wrap, same syntax as <excali> (src/lib/media-layout.ts).
+    const layout: MediaLayout = {
+      width: parseMediaWidth(props['width']) ?? 100,
+      align: parseMediaAlign(props['align']),
+      wrap: parseMediaFlag(props['wrap']),
+    }
+    const editable = Boolean(onMuxVideoChange && src)
+    const flags = { gif, autoplay, loop, pin }
 
     return (
-      <span className="group relative block my-6">
+      <ResizableWrapper
+        initialWidth={layout.width}
+        align={layout.align}
+        wrap={layout.wrap}
+        onLayoutChange={editable ? (next) => onMuxVideoChange!(src, buildMuxVideoTag(src, alt, poster, flags, next)) : undefined}
+        // Editor-only options toolbar (client renderer passes onMuxVideoChange).
+        extraControls={editable ? (
+          <MuxVideoOptions
+            src={src}
+            alt={alt}
+            poster={poster}
+            flags={flags}
+            layout={layout}
+            onChange={onMuxVideoChange!}
+          />
+        ) : undefined}
+      >
         <MuxVideo
           src={src}
           alt={alt}
@@ -639,22 +666,12 @@ export function createMarkdownComponents(
           loop={loop}
           className="w-full rounded-lg overflow-hidden"
         />
-        {/* Editor-only options toolbar (client renderer passes onMuxVideoChange). */}
-        {onMuxVideoChange && src && (
-          <MuxVideoOptions
-            src={src}
-            alt={alt}
-            poster={poster}
-            flags={{ gif, autoplay, loop, pin }}
-            onChange={onMuxVideoChange}
-          />
-        )}
         {alt && !alt.includes('autoplay') && !alt.includes('loop') && !alt.includes('gif') && (
           <span className="block text-center text-sm text-muted-foreground mt-2">
             {alt}
           </span>
         )}
-      </span>
+      </ResizableWrapper>
     )
   }
 
@@ -698,6 +715,11 @@ export function createMarkdownComponents(
     const caption = (props['data-caption'] as string) || (props['dataCaption'] as string) || ''
     const thumbnail = (props['data-thumbnail'] as string) || (props['dataThumbnail'] as string) || ''
     const pin = (props['data-pin'] as string) === 'true' || (props['dataPin'] as string) === 'true'
+    const layout: MediaLayout = {
+      width: parseMediaWidth(props['data-width'] ?? props['dataWidth']) ?? 100,
+      align: parseMediaAlign(props['data-align'] ?? props['dataAlign']),
+      wrap: parseMediaFlag(props['data-wrap'] ?? props['dataWrap']),
+    }
 
     // thumbnail may be a bare filename (resolve via SkriptFiles) or an absolute URL
     const resolvedThumbnail = thumbnail
@@ -714,6 +736,8 @@ export function createMarkdownComponents(
         thumbnail={resolvedThumbnail}
         pin={pin}
         onStartTimeChange={onYoutubeStartTimeChange && id ? (t) => onYoutubeStartTimeChange(id, t) : undefined}
+        layout={layout}
+        onLayoutChange={onYoutubeLayoutChange && id ? (next) => onYoutubeLayoutChange(id, next, buildYoutubeTag({ id, playlist, startTime, endTime, caption, layout: next })) : undefined}
       />
     )
   }

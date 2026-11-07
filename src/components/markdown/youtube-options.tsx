@@ -34,7 +34,8 @@ interface YoutubeOptionsProps {
  * Editor-only start-time gizmo over a YouTube embed. Type m:ss (or seconds) and
  * press Enter / blur, or take the player's current position. Rendered only when
  * the renderer passes onYoutubeChange, i.e. in the dashboard preview — same
- * pattern as MuxVideoOptions.
+ * pattern as MuxVideoOptions: sits in ResizableWrapper's control group
+ * (extraControls).
  */
 export function YoutubeOptions({ startTime, playerOpen, getCurrentTime, onChange }: YoutubeOptionsProps) {
   const shown = startTime ? formatStartTime(startTime) : ''
@@ -65,7 +66,7 @@ export function YoutubeOptions({ startTime, playerOpen, getCurrentTime, onChange
     <span
       // Clicks must not reach the thumbnail underneath (it would start the video).
       onClick={(e) => e.stopPropagation()}
-      className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded border border-border/50 bg-background/95 p-0.5 opacity-60 backdrop-blur-sm transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+      className="flex items-center gap-0.5"
     >
       <Clock className="mx-1 h-3.5 w-3.5 text-muted-foreground" />
       <input

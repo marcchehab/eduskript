@@ -10,6 +10,7 @@ import type { Root, Html, Paragraph, Text } from 'mdast'
  * <Youtube id="dQw4w9WgXcQ" startTime={120} />
  * <youtube playlist="PLxyz..." />
  * <youtube id="dQw4w9WgXcQ" thumbnail="custom-teaser.png" />
+ * <youtube id="dQw4w9WgXcQ" width="50%" align="left" wrap />
  * ```
  *
  * Into <youtube-embed> custom elements rendered by the React Youtube component.
@@ -108,6 +109,15 @@ function parseYoutubeAttrs(attrs: string): string {
   // (useful for the coupled-video format so checks stay reachable below).
   const pin = /\bpin(=["']?true["']?)?(\s|$)/.test(attrs) && !/\bpin=["']?false/.test(attrs)
 
+  // Layout (resize gizmo), same syntax as <excali>: width="50%" align="left" wrap
+  const widthMatch = attrs.match(/\bwidth=["']([^"']*)["']/)
+  const width = widthMatch ? widthMatch[1].replace(/[^\d.]/g, '') : ''
+  const alignMatch = attrs.match(/\balign=["'](left|right|center)["']/)
+  const align = alignMatch && alignMatch[1] !== 'center' ? alignMatch[1] : ''
+  // Tested with quoted values blanked, so caption="wrap up" is not a flag.
+  const unquoted = attrs.replace(/=("[^"]*"|'[^']*')/g, '=""')
+  const wrap = /\bwrap(=["']?true["']?)?(\s|$)/.test(unquoted) && !/\bwrap=["']?false/.test(attrs)
+
   let element = '<youtube-embed'
   if (id) element += ` data-id="${id}"`
   if (playlist) element += ` data-playlist="${playlist}"`
@@ -116,6 +126,9 @@ function parseYoutubeAttrs(attrs: string): string {
   if (caption) element += ` data-caption="${caption}"`
   if (thumbnail) element += ` data-thumbnail="${thumbnail}"`
   if (pin) element += ` data-pin="true"`
+  if (width) element += ` data-width="${width}"`
+  if (align) element += ` data-align="${align}"`
+  if (wrap) element += ` data-wrap="true"`
   element += '></youtube-embed>'
 
   return element

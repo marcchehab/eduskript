@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react'
 import { Film, Play, Repeat, Pin } from 'lucide-react'
+import { mediaLayoutAttrs, type MediaLayout } from '@/lib/media-layout'
 
 export interface MuxVideoFlags {
   gif: boolean
@@ -16,6 +17,8 @@ interface MuxVideoOptionsProps {
   alt?: string
   poster?: string
   flags: MuxVideoFlags
+  /** Current width/align/wrap, kept when a flag toggles. */
+  layout: MediaLayout
   /** Provided by the client (editor) renderer only — public pages get no toolbar. */
   onChange: (src: string, newMarkdown: string) => void
 }
@@ -29,7 +32,8 @@ export function buildMuxVideoTag(
   src: string,
   alt: string | undefined,
   poster: string | undefined,
-  flags: MuxVideoFlags
+  flags: MuxVideoFlags,
+  layout?: MediaLayout
 ): string {
   const attrs = [`src="${src}"`]
   if (alt) attrs.push(`alt="${alt.replace(/"/g, '&quot;')}"`)
@@ -42,6 +46,7 @@ export function buildMuxVideoTag(
     if (flags.loop) attrs.push('loop')
   }
   if (flags.pin) attrs.push('pin')
+  if (layout) attrs.push(...mediaLayoutAttrs(layout))
   return `<muxvideo ${attrs.join(' ')} />`
 }
 
@@ -57,11 +62,12 @@ const OPTIONS: Array<{
 ]
 
 /**
- * Editor-only toolbar over a video: toggles the playback flags by rewriting the
- * source tag. Mirrors the <spacer> gizmos — rendered only when the renderer
- * passes an onChange, i.e. in the dashboard preview.
+ * Editor-only flag buttons for a video: toggle the playback flags by rewriting
+ * the source tag. Rendered only when the renderer passes an onChange, i.e. in
+ * the dashboard preview, inside ResizableWrapper's control group
+ * (extraControls) next to the align/wrap buttons.
  */
-export function MuxVideoOptions({ src, alt, poster, flags, onChange }: MuxVideoOptionsProps) {
+export function MuxVideoOptions({ src, alt, poster, flags, layout, onChange }: MuxVideoOptionsProps) {
   const toggle = useCallback(
     (key: keyof MuxVideoFlags) => {
       const next: MuxVideoFlags = { ...flags, [key]: !flags[key] }
@@ -73,13 +79,13 @@ export function MuxVideoOptions({ src, alt, poster, flags, onChange }: MuxVideoO
       } else if (next.gif && (key === 'autoplay' || key === 'loop')) {
         next.gif = false
       }
-      onChange(src, buildMuxVideoTag(src, alt, poster, next))
+      onChange(src, buildMuxVideoTag(src, alt, poster, next, layout))
     },
-    [flags, onChange, src, alt, poster]
+    [flags, layout, onChange, src, alt, poster]
   )
 
   return (
-    <span className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded border border-border/50 bg-background/95 p-0.5 opacity-60 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+    <span className="flex items-center gap-0.5">
       {OPTIONS.map(({ key, label, icon: Icon }) => {
         const active = flags[key] || (flags.gif && (key === 'autoplay' || key === 'loop'))
         return (

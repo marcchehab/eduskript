@@ -463,9 +463,10 @@ The alt text is the caption. Playback options are attributes on the tag form (va
 <muxvideo src="geogebra-class.mp4" gif />
 <muxvideo src="intro.mp4" alt="Overview" autoplay loop />
 <muxvideo src="lecture.mp4" poster="cover.png" pin />
+<muxvideo src="lecture.mp4" width="50%" align="left" wrap />
 \`\`\`
 
-**Attributes:** \`gif\` — play it like an animated GIF (muted autoplay, looping, no controls, not clickable; browsers only autoplay muted video); \`autoplay\` (muted), \`loop\`, \`pin\` (pins into a corner overlay when scrolled past), \`poster\` (filename or URL overriding the auto thumbnail), \`alt\` (caption).
+**Attributes:** \`gif\` — play it like an animated GIF (muted autoplay, looping, no controls, not clickable; browsers only autoplay muted video); \`autoplay\` (muted), \`loop\`, \`pin\` (pins into a corner overlay when scrolled past), \`poster\` (filename or URL overriding the auto thumbnail), \`alt\` (caption). Layout like \`<excali>\`: \`width="50%"\` (of the column), \`align="left|center|right"\`, \`wrap\` (text flows around).
 
 In the dashboard preview these toggle from a toolbar in the video's top-right corner.
 
@@ -505,6 +506,7 @@ Three equivalent forms — all render the same player. Pick whichever reads best
 <youtube id="dQw4w9WgXcQ" startTime={120} caption="Caption" />
 <youtube playlist="PLxyz..." />
 <youtube id="dQw4w9WgXcQ" thumbnail="custom-teaser.png" />
+<youtube id="dQw4w9WgXcQ" width="50%" align="right" wrap />
 \`\`\`
 
 \`thumbnail\` overrides the default YouTube-hosted teaser image (auto maxresdefault/hqdefault) with a custom one. Accepts an uploaded filename, resolved via the skript's files, or an absolute URL.
@@ -951,7 +953,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Text alignment:** wrap content in \`<left>\`, \`<center>\`, or \`<right>\` — markdown parses inside with or without surrounding blank lines. Closing tag required.
 
-**Videos (uploaded):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`.
+**Videos (uploaded):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`, layout \`width="50%" align="left" wrap\`.
 
 **Pinned content:** \`<stickme [id="x"] [width="800px|50%"]>…</stickme>\` — docks wrapped content to the right margin while scrolling; \`width\` = default pinned width (reader resize overrides), default one third of the page.
 
@@ -991,7 +993,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Inline code with a language:** \`code\`{:python} — a language marker right after the closing backtick of inline code gets the same per-token color highlighting as a fenced block, without breaking it out of the sentence. Same language set as code editors/blocks (python, javascript/js, typescript/ts, sql, php, java, cpp, rust, go, html, css, json, xml, yaml). No marker → plain, uncolored inline code (the default).
 
-**YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption); add \`&end=300\` to stop playback at 300 s. Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists, \`thumbnail\`/\`data-thumbnail\` (filename or URL) for a custom teaser image.
+**YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption); add \`&end=300\` to stop playback at 300 s. Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists, \`thumbnail\`/\`data-thumbnail\` (filename or URL) for a custom teaser image; \`width="50%" align="left|right" wrap\` on the \`<youtube>\` tag for size/position.
 
 **Flag icons:** \`:flag-ch:\` / \`:flag-en-gb:\` / \`:flag-de-ch:\` inline anywhere in text, e.g. \`## User Manual :flag-en-gb:\`. Only these three codes exist.
 
