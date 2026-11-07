@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { deleteUserAccount } from '@/lib/account-deletion'
 import { invalidateSlugAliases, isSiteSlugTaken, recordSiteSlugRename } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import bcrypt from 'bcryptjs'
@@ -348,10 +349,9 @@ export async function DELETE(
       )
     }
 
-    // Delete user (this will cascade delete related records based on schema)
-    await prisma.user.delete({
-      where: { id },
-    })
+    // Same path as self-deletion: shared skripts/pages go to co-authors,
+    // sole-author content is deleted (src/lib/account-deletion.ts).
+    await deleteUserAccount(id, 'transfer')
 
     return NextResponse.json({ success: true, message: 'User deleted successfully' })
   } catch (error) {

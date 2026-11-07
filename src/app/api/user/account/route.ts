@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { deleteUserAccount } from '@/lib/account-deletion'
+import { deleteUserAccount, getAccountDeletionPreview, type AccountDeletionMode } from '@/lib/account-deletion'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /**
@@ -11,6 +11,10 @@ import { PRIMARY_SITE_ORDER } from '@/lib/sites'
  * This endpoint allows users to delete their account and associated data.
  * For students with submissions, we anonymize rather than fully delete
  * to preserve teacher records.
+ *
+ * Body (optional JSON): { mode: "delete" | "transfer" } — what happens to
+ * content shared with other authors (src/lib/account-deletion.ts). Missing
+ * body or mode → "transfer", the behaviour before the choice existed.
  */
 export async function DELETE(req: NextRequest) {
   try {
@@ -24,6 +28,15 @@ export async function DELETE(req: NextRequest) {
     }
 
     const userId = session.user.id
+
+    const body = await req.json().catch(() => ({})) as { mode?: unknown }
+    const mode: AccountDeletionMode | null =
+      body.mode === undefined ? 'transfer'
+        : body.mode === 'delete' || body.mode === 'transfer' ? body.mode
+          : null
+    if (!mode) {
+      return NextResponse.json({ error: 'mode must be "delete" or "transfer"' }, { status: 400 })
+    }
 
     // Prevent admins from deleting their own account if they're the last admin
     const user = await prisma.user.findUnique({
@@ -67,9 +80,9 @@ export async function DELETE(req: NextRequest) {
       })
     }
 
-    // FK cleanup, shared-file handover, sole-author skripts, cascade and S3
-    // (snaps + unreferenced blobs): see src/lib/account-deletion.ts.
-    await deleteUserAccount(userId)
+    // FK cleanup, shared-file handover, skripts/pages per mode, cascade and
+    // S3 (snaps + unreferenced blobs): see src/lib/account-deletion.ts.
+    await deleteUserAccount(userId, mode)
 
     return NextResponse.json({
       success: true,
@@ -87,7 +100,7 @@ export async function DELETE(req: NextRequest) {
 }
 
 /**
- * Get account information
+ * Get account information, plus (teachers only) the account-deletion preview.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -138,7 +151,11 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // What each deletion mode removes; shown in the delete dialog.
+    const deletion = user.accountType === 'teacher' ? await getAccountDeletionPreview(userId) : null
+
     return NextResponse.json({
+      deletion,
       user: {
         id: user.id,
         name: user.name,

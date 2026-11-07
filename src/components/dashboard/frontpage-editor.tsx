@@ -19,10 +19,11 @@ interface FrontPageVersion {
   version: number
   changeLog?: string
   createdAt: string
+  // null once the author deleted their account (FrontPageVersion.authorId SetNull)
   author: {
     name?: string
     email: string
-  }
+  } | null
 }
 
 interface FrontPageEditorProps {

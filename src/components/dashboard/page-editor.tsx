@@ -53,10 +53,11 @@ interface PageVersion {
   version: number
   changeLog?: string
   createdAt: string
+  // null once the author deleted their account (PageVersion.authorId SetNull)
   author: {
     name?: string
     email: string
-  }
+  } | null
 }
 
 interface SkriptPage {

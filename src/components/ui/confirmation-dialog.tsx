@@ -20,6 +20,8 @@ interface ConfirmationDialogProps {
   onConfirm: () => void | Promise<void>
   onCancel?: () => void
   trigger: React.ReactNode
+  /** Extra content between the description and the buttons (e.g. options). */
+  children?: React.ReactNode
 }
 
 export function ConfirmationDialog({
@@ -30,7 +32,8 @@ export function ConfirmationDialog({
   variant = 'default',
   onConfirm,
   onCancel,
-  trigger
+  trigger,
+  children
 }: ConfirmationDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -62,6 +65,7 @@ export function ConfirmationDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {children}
         <DialogFooter>
           <Button variant="outline" onClick={handleCancel} disabled={isLoading}>
             {cancelText}

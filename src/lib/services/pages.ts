@@ -514,7 +514,7 @@ export async function updatePageForUser(
     const coalesce =
       ctx.editSource === 'inline' &&
       currentVersion?.editSource === 'inline' &&
-      currentVersion.authorId === userId &&
+      currentVersion.authorId === userId && // null (author deleted) never coalesces
       Date.now() - currentVersion.createdAt.getTime() < INLINE_COALESCE_MS &&
       !(await prisma.examSubmission.findFirst({ where: { pageId, pageVersion: currentVersion.version }, select: { id: true } }))
     if (coalesce) {

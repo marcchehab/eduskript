@@ -449,7 +449,11 @@ model PageVersion {
   content    String
   version    Int
   changeLog  String?
-  authorId   String
+  // Null once the author's account is deleted: the version stays because the
+  // page may live on with co-authors and ExamSubmission.pageVersion may point
+  // at it (src/lib/account-deletion.ts). UI shows such versions as
+  // "Deleted user".
+  authorId   String?
   pageId     String
   // Attribution for AI-assisted edits — null = direct dashboard edit.
   // editSource is "mcp" (claude.ai / Cursor / Claude Code via /api/mcp), "inline"
@@ -459,8 +463,8 @@ model PageVersion {
   editClient String?  @map("edit_client")
   createdAt  DateTime @default(now())
 
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  page   Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  page   Page  @relation(fields: [pageId], references: [id], onDelete: Cascade)
 
   @@unique([pageId, version])
   @@map("page_versions")
@@ -846,11 +850,13 @@ model FrontPageVersion {
   content     String
   version     Int
   changeLog   String?  @map("change_log")
-  authorId    String   @map("author_id")
+  // Null once the author's account is deleted (skript frontpages are shared by
+  // the skript's authors, so their history must outlive one co-author).
+  authorId    String?  @map("author_id")
   frontPageId String   @map("front_page_id")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   frontPage FrontPage @relation(fields: [frontPageId], references: [id], onDelete: Cascade)
 
   @@unique([frontPageId, version])

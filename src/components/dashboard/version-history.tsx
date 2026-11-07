@@ -14,10 +14,11 @@ export interface PageVersion {
   createdAt: string
   editSource?: string | null
   editClient?: string | null
+  // null once the author deleted their account (PageVersion.authorId SetNull)
   author: {
     name?: string
     email: string
-  }
+  } | null
 }
 
 function attribution(v: { editSource?: string | null; editClient?: string | null }) {
@@ -119,7 +120,7 @@ export function VersionHistory({ versions, currentContent, onRestoreVersion }: V
                 <span className="text-red-600 dark:text-red-400">−{stats.removed}</span>
               </span>
               <span className="text-xs text-muted-foreground truncate">
-                {version.author.name || version.author.email}{attribution(version)}
+                {version.author ? version.author.name || version.author.email : 'Deleted user'}{attribution(version)}
               </span>
               <div className="ml-auto flex items-center gap-1.5">
                 <button
