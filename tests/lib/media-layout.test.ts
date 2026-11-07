@@ -11,6 +11,7 @@ import {
   setMediaLayoutAttrs,
 } from '@/lib/media-layout'
 import { buildMuxVideoTag } from '@/components/markdown/mux-video-options'
+import { replaceOutsideFences } from '@/lib/markdown-fences'
 
 const plain = { width: 100, align: 'center' as const, wrap: false }
 const noFlags = { gif: false, autoplay: false, loop: false, pin: false }
@@ -82,5 +83,34 @@ describe('layout attributes survive the compile pipeline', () => {
   it('a caption containing "wrap" is not the wrap flag', async () => {
     const out = await html('<youtube id="abc" caption="wrap up" />')
     expect(out).not.toMatch(/data-wrap/)
+  })
+})
+
+describe('replaceOutsideFences with a source line', () => {
+  const md = ['![a](x.png)', '', 'text', '', '![b](x.png)', '', '```', '![c](x.png)', '```', '', '![d](x.png)'].join('\n')
+  const pattern = /!\[[^\]]*\]\(x\.png\)/
+
+  it('rewrites the image on the given line, not the first one', () => {
+    const out = replaceOutsideFences(md, pattern, 'B', 5)?.split('\n')
+    expect(out?.[4]).toBe('B')
+    expect(out?.[0]).toBe('![a](x.png)')
+  })
+
+  it('returns null when nothing matches on that line (no twin elsewhere)', () => {
+    expect(replaceOutsideFences(md, pattern, 'X', 3)).toBeNull()
+    expect(replaceOutsideFences(md, pattern, 'X', 8)).toBeNull() // fenced example
+    expect(replaceOutsideFences(md, pattern, 'X', 99)).toBeNull()
+  })
+
+  it('first match without a line', () => {
+    expect(replaceOutsideFences(md, pattern, 'A')?.split('\n')[0]).toBe('A')
+  })
+})
+
+describe('source lines on video/molecule elements', () => {
+  it('youtube-embed and molecule carry data-source-line-start', async () => {
+    const out = renderToStaticMarkup((await compileMarkdown('# T\n\n<youtube id="abc" />\n\n<molecule smiles="CCO" />')) as ReactNode)
+    expect(out).toMatch(/<youtube-embed[^>]*data-source-line-start="3"/)
+    expect(out).toMatch(/<molecule[^>]*data-source-line-start="5"/)
   })
 })

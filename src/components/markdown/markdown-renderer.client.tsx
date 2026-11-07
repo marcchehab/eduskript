@@ -15,7 +15,7 @@ import { SurveyProvider } from './survey-provider'
 import { CoupledVideoProvider } from './coupled-video-context'
 import { StickMeProvider } from './stick-me'
 import { pageKaraClues } from '@/lib/kara/world'
-import { fencedRanges } from '@/lib/markdown-fences'
+import { replaceOutsideFences } from '@/lib/markdown-fences'
 import { getAiFeedbackSolution, setAiFeedbackSolution, insertHiddenSolution } from '@/lib/ai-feedback-solution-source'
 import { linkedSolutions } from '@/lib/ai/feedback-context'
 
@@ -31,28 +31,6 @@ interface MarkdownRendererProps {
   onFilesChanged?: () => void
   /** Site language (BCP-47) — localizes the GFM footnotes heading. null/undefined → English. */
   pageLanguage?: string | null
-}
-
-/**
- * Replace the first match of `pattern` that is NOT inside a fenced code
- * block. Gizmo-driven rewrites (resize/align on an image, molecule, spacer,
- * video) key on a tag's own attributes (src/smiles/id), not a real source
- * position — a first-match-in-whole-string replace happily rewrites a
- * literal example shown inside a ``` fence instead of the live tag below it
- * when both share the same attribute value. Returns null when no match
- * exists outside a fence (caller treats that as a no-op, same as a failed
- * `.test()` before).
- */
-function replaceOutsideFences(content: string, pattern: RegExp, replacement: string | ((match: string) => string)): string | null {
-  const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g')
-  const fences = fencedRanges(content)
-  for (const match of content.matchAll(globalPattern)) {
-    const start = match.index
-    if (fences.some(([fs, fe]) => start >= fs && start < fe)) continue
-    const text = typeof replacement === 'function' ? replacement(match[0]) : replacement
-    return content.slice(0, start) + text + content.slice(start + match[0].length)
-  }
-  return null
 }
 
 // Inner component that does the actual rendering
@@ -93,8 +71,9 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
   })
 
   // Stable callback: find/replace image markdown in content, then notify parent.
-  // Reads from refs so it always sees the latest content and callback.
-  const stableOnImageWidthChange = useCallback((srcForMatching: string, newMarkdown: string) => {
+  // `line` (data-source-line-start) picks the right one of several images with
+  // the same src (replaceOutsideFences). Reads from refs so it always sees the latest content and callback.
+  const stableOnImageWidthChange = useCallback((srcForMatching: string, newMarkdown: string, line?: number) => {
     const currentContent = contentRef.current
     const notify = onContentChangeRef.current
     if (!notify || !currentContent || !srcForMatching) return
@@ -108,9 +87,9 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     const markdownPattern = new RegExp(`!\\[([^\\]]*)\\]\\(${fileRefPattern(srcForMatching)}\\)(\\{[^}]*\\})?`)
 
     const newContent =
-      replaceOutsideFences(currentContent, excaliPattern, newMarkdown) ??
-      replaceOutsideFences(currentContent, imageComponentPattern, newMarkdown) ??
-      replaceOutsideFences(currentContent, markdownPattern, newMarkdown)
+      replaceOutsideFences(currentContent, excaliPattern, newMarkdown, line) ??
+      replaceOutsideFences(currentContent, imageComponentPattern, newMarkdown, line) ??
+      replaceOutsideFences(currentContent, markdownPattern, newMarkdown, line)
 
     if (newContent !== null && newContent !== currentContent) {
       notify(newContent)
@@ -150,7 +129,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
   // flag. Matches an existing <muxvideo …src="x"…> tag, or the image shorthand
   // `![caption](x.mp4)` — the shorthand is replaced by a full tag, since the
   // flags have no place in the bracket syntax.
-  const stableOnMuxVideoChange = useCallback((src: string, newMarkdown: string) => {
+  const stableOnMuxVideoChange = useCallback((src: string, newMarkdown: string, line?: number) => {
     const currentContent = contentRef.current
     const notify = onContentChangeRef.current
     if (!notify || !currentContent || !src) return
@@ -160,15 +139,15 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(${fileRefPattern(src)}\\)`)
 
     const newContent =
-      replaceOutsideFences(currentContent, tagPattern, newMarkdown) ??
-      replaceOutsideFences(currentContent, shorthandPattern, newMarkdown)
+      replaceOutsideFences(currentContent, tagPattern, newMarkdown, line) ??
+      replaceOutsideFences(currentContent, shorthandPattern, newMarkdown, line)
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
-  // Stable callback: set/remove startTime on the first <youtube …id="x"…> tag
-  // (start-time gizmo). Only the startTime attribute is touched; the rest of the
-  // tag stays as written. Two embeds of the same video both match the first one.
-  const stableOnYoutubeStartTimeChange = useCallback((id: string, startTime: number | null) => {
+  // Stable callback: set/remove startTime on the <youtube …id="x"…> tag at or
+  // after `line` (start-time gizmo). Only the startTime attribute is touched;
+  // the rest of the tag stays as written.
+  const stableOnYoutubeStartTimeChange = useCallback((id: string, startTime: number | null, line?: number) => {
     const currentContent = contentRef.current
     const notify = onContentChangeRef.current
     if (!notify || !currentContent || !id) return
@@ -179,18 +158,18 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       // Accepts the same shapes remark-plugins/youtube.ts parses: {123}, "123", '123', 123
       const stripped = tag.replace(/\s+startTime=(\{\d*\}|"\d*"|'\d*'|\d+)/, '')
       return startTime ? stripped.replace(/\s*(\/?>)$/, (_, end: string) => ` startTime="${startTime}"${end === '/>' ? ' />' : '>'}`) : stripped
-    })
+    }, line)
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
   // Stable callback: resize/align gizmo on a YouTube embed. Rewrites only the
-  // width/align/wrap attributes of the first <youtube …id="x"…> tag; for the
+  // width/align/wrap attributes of the <youtube …id="x"…> tag at or after
+  // `line` (data-source-line-start, see replaceOutsideFences); for the
   // image shorthand `![caption](https://youtu.be/x)` the whole shorthand is
   // replaced by `shorthandTag` (a <youtube> tag built by the component), since
-  // the bracket syntax has no place for layout. Same first-occurrence trade-off
-  // as the start-time gizmo above. The raw <youtube-embed data-id> form is not
+  // the bracket syntax has no place for layout. The raw <youtube-embed data-id> form is not
   // matched (the gizmo does nothing there).
-  const stableOnYoutubeLayoutChange = useCallback((id: string, layout: MediaLayout, shorthandTag: string) => {
+  const stableOnYoutubeLayoutChange = useCallback((id: string, layout: MediaLayout, shorthandTag: string, line?: number) => {
     const currentContent = contentRef.current
     const notify = onContentChangeRef.current
     if (!notify || !currentContent || !id) return
@@ -199,8 +178,8 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     const tagPattern = new RegExp(`<youtube\\s[^>]*\\bid=["']${escapedId}["'][^>]*>`, 'i')
     const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(\\s*<?https?://[^)\\s]*${escapedId}[^)]*\\)`)
     const newContent =
-      replaceOutsideFences(currentContent, tagPattern, (tag) => setMediaLayoutAttrs(tag, layout)) ??
-      replaceOutsideFences(currentContent, shorthandPattern, shorthandTag)
+      replaceOutsideFences(currentContent, tagPattern, (tag) => setMediaLayoutAttrs(tag, layout), line) ??
+      replaceOutsideFences(currentContent, shorthandPattern, shorthandTag, line)
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
@@ -214,18 +193,17 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
   }, [])
 
   // Stable callback: rewrite a <molecule> tag after a resize/align gizmo drag.
-  // Keyed by the SMILES string, the same way image rewrites key on src — two
-  // identical LIVE molecules on one page would both match the first-occurrence
-  // pick, which is the same trade-off images have lived with. A fenced code
-  // example showing the same tag is excluded by replaceOutsideFences below.
-  const stableOnMoleculeChange = useCallback((smiles: string, newMarkdown: string) => {
+  // Keyed by the SMILES string plus the tag's source line, the same way image
+  // rewrites key on src + line, so two identical molecules stay apart. A fenced
+  // code example showing the same tag is excluded by replaceOutsideFences.
+  const stableOnMoleculeChange = useCallback((smiles: string, newMarkdown: string, line?: number) => {
     const currentContent = contentRef.current
     const notify = onContentChangeRef.current
     if (!notify || !currentContent || !smiles) return
 
     const escaped = smiles.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const pattern = new RegExp(`<molecule[^>]*\\bsmiles="${escaped}"[^>]*/?>`)
-    const newContent = replaceOutsideFences(currentContent, pattern, newMarkdown)
+    const newContent = replaceOutsideFences(currentContent, pattern, newMarkdown, line)
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 

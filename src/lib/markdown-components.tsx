@@ -281,15 +281,15 @@ interface CreateMarkdownComponentsOptions {
   skriptId?: string  // For Python global imports (shared across editors in a skript)
   pageNav?: { prev: PageNavLink | null; next: PageNavLink | null }  // <page-nav> neighbours (server renderer only)
   karaClues?: KaraPageClue[]  // <evidence-board>: clue definitions of the page's Kara levels (pageKaraClues)
-  onImageWidthChange?: (srcForMatching: string, newMarkdown: string) => void  // Stable callback for image resize
+  onImageWidthChange?: (srcForMatching: string, newMarkdown: string, line?: number) => void  // Stable callback for image resize; line = data-source-line-start, picks the right one of several same-src images
   organizationSlug?: string  // For organization pages (OurTeachers component)
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
   onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
-  onMuxVideoChange?: (src: string, newMarkdown: string) => void  // Stable callback for the <muxvideo> options toolbar
-  onYoutubeStartTimeChange?: (id: string, startTime: number | null) => void  // Stable callback for the <youtube> start-time gizmo
-  onYoutubeLayoutChange?: (id: string, layout: MediaLayout, shorthandTag: string) => void  // Stable callback for the <youtube> resize/align gizmo
+  onMuxVideoChange?: (src: string, newMarkdown: string, line?: number) => void  // Stable callback for the <muxvideo> options toolbar
+  onYoutubeStartTimeChange?: (id: string, startTime: number | null, line?: number) => void  // Stable callback for the <youtube> start-time gizmo
+  onYoutubeLayoutChange?: (id: string, layout: MediaLayout, shorthandTag: string, line?: number) => void  // Stable callback for the <youtube> resize/align gizmo
   onTagAttributeChange?: (tag: string, line: number, attr: string, value: string | null) => void  // Stable callback for gizmos that set one attribute
-  onMoleculeChange?: (smiles: string, newMarkdown: string) => void  // Stable callback for the <molecule> resize/align gizmos
+  onMoleculeChange?: (smiles: string, newMarkdown: string, line?: number) => void  // Stable callback for the <molecule> resize/align gizmos
   aiFeedbackSolution?: AiFeedbackSolutionApi  // Editor only: "Provide solution" gizmo on <ai-feedback>
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
   isExam?: boolean  // Exam page: hide code-block copy buttons by default
@@ -307,6 +307,12 @@ function teacherSlot(props: Record<string, unknown>): number | null {
   const v = props[TEACHER_SLOT_ATTR] ?? props.dataTeacherSlot
   const n = typeof v === 'string' || typeof v === 'number' ? Number(v) : NaN
   return Number.isInteger(n) && n >= 0 ? n : null
+}
+
+/** data-source-line-start (string or number) → 1-based line, or undefined. */
+function toLine(value: unknown): number | undefined {
+  const n = Number(value)
+  return Number.isInteger(n) && n > 0 ? n : undefined
 }
 
 export function createMarkdownComponents(
@@ -341,7 +347,7 @@ export function createMarkdownComponents(
           wrap={dataWrap === 'true'}
           nozoom={dataNozoom === 'true'}
           files={files}
-          onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(dataExcalidraw, markdown) : undefined}
+          onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(dataExcalidraw, markdown, toLine(sourceLineStart)) : undefined}
           onEdit={onExcalidrawEdit}
           sourceLineStart={sourceLineStart}
           sourceLineEnd={sourceLineEnd}
@@ -377,7 +383,7 @@ export function createMarkdownComponents(
         nozoom={dataNozoom === 'true'}
         files={files}
         optimizeImages={optimizeImages}
-        onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(originalSrc || srcStr, markdown) : undefined}
+        onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(originalSrc || srcStr, markdown, toLine(sourceLineStart)) : undefined}
         sourceLineStart={sourceLineStart}
         sourceLineEnd={sourceLineEnd}
         printWidth={dataPrintWidth || undefined}
@@ -634,6 +640,7 @@ export function createMarkdownComponents(
       align: parseMediaAlign(props['align']),
       wrap: parseMediaFlag(props['wrap']),
     }
+    const line = toLine(props['data-source-line-start'] ?? props['dataSourceLineStart'])
     const editable = Boolean(onMuxVideoChange && src)
     const flags = { gif, autoplay, loop, pin }
 
@@ -642,7 +649,7 @@ export function createMarkdownComponents(
         initialWidth={layout.width}
         align={layout.align}
         wrap={layout.wrap}
-        onLayoutChange={editable ? (next) => onMuxVideoChange!(src, buildMuxVideoTag(src, alt, poster, flags, next)) : undefined}
+        onLayoutChange={editable ? (next) => onMuxVideoChange!(src, buildMuxVideoTag(src, alt, poster, flags, next), line) : undefined}
         // Editor-only options toolbar (client renderer passes onMuxVideoChange).
         extraControls={editable ? (
           <MuxVideoOptions
@@ -651,7 +658,7 @@ export function createMarkdownComponents(
             poster={poster}
             flags={flags}
             layout={layout}
-            onChange={onMuxVideoChange!}
+            onChange={(s, md) => onMuxVideoChange!(s, md, line)}
           />
         ) : undefined}
       >
@@ -695,7 +702,7 @@ export function createMarkdownComponents(
         wrap={dataWrap === 'true'}
         nozoom={dataNozoom === 'true'}
         files={files}
-        onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(src, markdown) : undefined}
+        onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(src, markdown, toLine(sourceLineStart)) : undefined}
         onEdit={onExcalidrawEdit}
         sourceLineStart={sourceLineStart}
         sourceLineEnd={sourceLineEnd}
@@ -715,6 +722,7 @@ export function createMarkdownComponents(
     const caption = (props['data-caption'] as string) || (props['dataCaption'] as string) || ''
     const thumbnail = (props['data-thumbnail'] as string) || (props['dataThumbnail'] as string) || ''
     const pin = (props['data-pin'] as string) === 'true' || (props['dataPin'] as string) === 'true'
+    const line = toLine(props['data-source-line-start'] ?? props['dataSourceLineStart'])
     const layout: MediaLayout = {
       width: parseMediaWidth(props['data-width'] ?? props['dataWidth']) ?? 100,
       align: parseMediaAlign(props['data-align'] ?? props['dataAlign']),
@@ -735,9 +743,9 @@ export function createMarkdownComponents(
         caption={caption || undefined}
         thumbnail={resolvedThumbnail}
         pin={pin}
-        onStartTimeChange={onYoutubeStartTimeChange && id ? (t) => onYoutubeStartTimeChange(id, t) : undefined}
+        onStartTimeChange={onYoutubeStartTimeChange && id ? (t) => onYoutubeStartTimeChange(id, t, line) : undefined}
         layout={layout}
-        onLayoutChange={onYoutubeLayoutChange && id ? (next) => onYoutubeLayoutChange(id, next, buildYoutubeTag({ id, playlist, startTime, endTime, caption, layout: next })) : undefined}
+        onLayoutChange={onYoutubeLayoutChange && id ? (next) => onYoutubeLayoutChange(id, next, buildYoutubeTag({ id, playlist, startTime, endTime, caption, layout: next }), line) : undefined}
       />
     )
   }
@@ -1007,7 +1015,7 @@ export function createMarkdownComponents(
           displayWidth={num('display-width') ?? num('displayWidth')}
           align={align === 'left' || align === 'right' ? align : 'center'}
           wrap={props['wrap'] === 'true' || props['wrap'] === ''}
-          onLayoutChange={onMoleculeChange}
+          onLayoutChange={onMoleculeChange ? (smiles, md) => onMoleculeChange(smiles, md, toLine(props['data-source-line-start'] ?? props['dataSourceLineStart'])) : undefined}
         />
       )
     },
@@ -1100,7 +1108,7 @@ export function createMarkdownComponents(
           lightonly={lightonly}
           nozoom={nozoom}
           files={files}
-          onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(filename, markdown) : undefined}
+          onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(filename, markdown, toLine(lineStart)) : undefined}
           onEdit={onExcalidrawEdit}
           printWidth={printWidth || undefined}
           sourceLineStart={lineStart != null ? String(lineStart) : undefined}

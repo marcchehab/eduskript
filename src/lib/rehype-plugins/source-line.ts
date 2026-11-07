@@ -65,6 +65,8 @@ export function rehypeSourceLine(lineMap?: number[]) {
       'ai-feedback', // keys the editor's "Provide solution" gizmo
       'leaderboard', 'plugin', // key the editor's list gizmo
       'muxvideo', // Video embeds
+      'youtube-embed', // keys the YouTube resize/start-time gizmos
+      'molecule', // keys the molecule resize gizmo
       'image', // Custom Image component
       'img', // Native images
       // Custom container components — so clicking inside them in the preview
