@@ -107,6 +107,9 @@ const isCorrect = ({ correct, is }: Pick<OptionProps, 'correct' | 'is'>): boolea
 // small type used for helper text.
 const PROMPT_CLASS = 'font-medium text-foreground'
 
+// Write-in line printed instead of the slider value on a blank worksheet.
+const PRINT_BLANK = '________'
+
 // True for the `<answer>` children the option indices are built from. Everything
 // else a <question> can contain — the <question-prompt> wrapper, whitespace text
 // nodes, an ```expected block — must NOT be counted, or the dense 0..N-1 indices
@@ -282,6 +285,23 @@ function QuestionInner({
   // stage/review locks.
   const locked = stageLocked || (checkMode && checked)
 
+  // Print view: a printout is a blank worksheet, so the card renders as if
+  // unanswered — nothing selected, empty text, sliders at their initial
+  // position, no marks/feedback/attempt counters. Render-only: the state and
+  // the stored record are untouched (no setState, so no autosave), and leaving
+  // print view shows the answer again. Not in review mode: a graded exam
+  // printed from the review view is a record of that student's answers.
+  const { active: printing, solutions: solutionMode } = usePrintState()
+  const blank = printing && !reviewMode
+  const shownSelected = blank ? [] : selected
+  const shownText = blank ? '' : textAnswer
+  const shownNumber = blank ? minValue : numberAnswer
+  const shownRange = blank ? { min: minValue, max: maxValue } : rangeAnswer
+  // The handlers also ignore input while blank, so touching the printed card
+  // cannot overwrite the stored answer. `lockedLook`: the disabled look, off on
+  // the blank card.
+  const lockedLook = locked && !blank
+
   // Review mode swaps initialData to the reviewed student's answer *after* mount
   // (it arrives from an async fetch), so re-sync local state when it changes.
   // useState only reads its initializer once. Gated to reviewMode (read-only),
@@ -303,7 +323,7 @@ function QuestionInner({
   // below. Edits are allowed any time the widget isn't frozen (handed-in stage
   // or graded review).
   const handleSelect = (index: number) => {
-    if (locked) return
+    if (locked || blank) return
 
     if (type === 'single') {
       setSelected([index])
@@ -346,17 +366,17 @@ function QuestionInner({
   }
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (locked) return
+    if (locked || blank) return
     setTextAnswer(e.target.value)
   }
 
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (locked) return
+    if (locked || blank) return
     setNumberAnswer(Number(e.target.value))
   }
 
   const handleRangeMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (locked) return
+    if (locked || blank) return
     const newMin = Number(e.target.value)
     setRangeAnswer(prev => ({
       min: Math.min(newMin, prev.max),
@@ -365,7 +385,7 @@ function QuestionInner({
   }
 
   const handleRangeMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (locked) return
+    if (locked || blank) return
     const newMax = Number(e.target.value)
     setRangeAnswer(prev => ({
       min: prev.min,
@@ -582,8 +602,8 @@ function QuestionInner({
   const partialReveal =
     checkMode && !checked && attemptsUsed > 0 && (lastCheckedSig === null || lastCheckedSig === answerSig)
   const revealed =
-    mode === 'review' || (mode === 'instant' && isSubmitted) || (checkMode && checked)
-  const showResult = revealed || partialReveal
+    !blank && (mode === 'review' || (mode === 'instant' && isSubmitted) || (checkMode && checked))
+  const showResult = revealed || (!blank && partialReveal)
   const attemptsLeft = attemptsMax - attemptsUsed
 
   // Shared by both slider types: the graded hint under the track. Same gating as
@@ -645,7 +665,6 @@ function QuestionInner({
   // would reveal it online (not with feedback="none", exams or surveys), always
   // in solution mode 'all' (except surveys), never in 'none'. The key renders
   // the answers' own nodes, so math and formatting survive.
-  const { active: printing, solutions: solutionMode } = usePrintState()
   const printRef = useRef<HTMLDivElement>(null)
   const printKey: ReactNode = (() => {
     if (type === 'single' || type === 'multiple') {
@@ -673,9 +692,22 @@ function QuestionInner({
   // layout but invisible while printing, so the card keeps its online height
   // and strokes below it stay on their text.
   const printInvisible = printing ? 'invisible' : ''
+  // The blank card is usually shorter than the answered one online (no
+  // feedback panels). Record the online height and mark the printed card with
+  // it, so strokes anchored below move by the difference (stroke-shift.ts),
+  // as PrintFallback does. Opened directly with ?print the card never laid out
+  // online, so that correction is missing there.
+  const [onlineHeight, setOnlineHeight] = useState<number | null>(null)
+  useEffect(() => {
+    const el = printRef.current
+    if (printing || !el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setOnlineHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [printing])
 
   return (
-    <div ref={printRef} className="relative space-y-4 border rounded-lg p-4 shadow-xs bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
+    <div ref={printRef} className="relative space-y-4 border rounded-lg p-4 shadow-xs bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd} data-print-online-height={printing && onlineHeight != null ? onlineHeight : undefined}>
       {/* Absolute in the bottom padding: adds no height (see printInvisible).
           First child: space-y-* margins key on the last child. */}
       {printing && printN != null && (
@@ -698,7 +730,7 @@ function QuestionInner({
             .map((element, index) => {
             const optionProps = element.props
             const { label, feedback } = splitAnswerContent(optionProps)
-            const isSelected = selected.includes(index)
+            const isSelected = shownSelected.includes(index)
             const optionIsCorrect = isCorrect(optionProps)
 
             return (
@@ -710,12 +742,12 @@ function QuestionInner({
                 aria-labelledby={`${optionIdBase}-opt-${index}`}
                 // Roving tabindex for the radio group: only the selected option
                 // (or the first, if none) is in the tab order. Checkboxes: all.
-                tabIndex={type === 'single' ? (index === (selected[0] ?? 0) ? 0 : -1) : 0}
+                tabIndex={type === 'single' ? (index === (shownSelected[0] ?? 0) ? 0 : -1) : 0}
                 onClick={() => handleSelect(index)}
                 onKeyDown={(e) => handleOptionKeyDown(e, index)}
                 className={cn(
                   'p-4 border rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                  locked ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50',
+                  lockedLook ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50',
                   isSelected && !showResult && 'border-primary bg-primary/5',
                   showResult && isSelected && optionIsCorrect && 'border-green-600 dark:border-green-500 bg-green-500/10',
                   showResult && isSelected && !optionIsCorrect && 'border-red-600 dark:border-red-500 bg-red-500/10',
@@ -788,13 +820,13 @@ function QuestionInner({
             {prompt}
           </div>
           <textarea
-            value={textAnswer}
+            value={shownText}
             onChange={handleTextChange}
             onBlur={commitAutosave}
             disabled={locked}
             className={cn(
               'w-full p-3 border rounded-lg min-h-[120px] bg-background resize-y',
-              locked && 'opacity-70 cursor-not-allowed'
+              lockedLook && 'opacity-70 cursor-not-allowed'
             )}
             placeholder="Enter your answer..."
           />
@@ -886,12 +918,12 @@ function QuestionInner({
               min={minValue}
               max={maxValue}
               step={step}
-              value={numberAnswer}
+              value={shownNumber}
               onChange={handleNumberChange}
               disabled={locked}
               className={cn(
                 'w-full',
-                locked && 'opacity-70 cursor-not-allowed'
+                lockedLook && 'opacity-70 cursor-not-allowed'
               )}
             />
             {/* Optional end labels — sit directly under the track, one at
@@ -905,7 +937,7 @@ function QuestionInner({
             {/* Current value beneath the track, in the button colour, so a
                 fresh slider does not read as a pre-filled "0" above it. */}
             <div className="text-center text-sm font-semibold text-primary">
-              Your answer: {numberAnswer}
+              Your answer: {blank ? PRINT_BLANK : shownNumber}
             </div>
           </div>
           {sliderPanel}
@@ -929,8 +961,8 @@ function QuestionInner({
               <div
                 className="absolute top-1/2 h-2 -translate-y-1/2 bg-primary rounded-full pointer-events-none"
                 style={{
-                  left: `${((rangeAnswer.min - minValue) / (maxValue - minValue)) * 100}%`,
-                  right: `${100 - ((rangeAnswer.max - minValue) / (maxValue - minValue)) * 100}%`
+                  left: `${((shownRange.min - minValue) / (maxValue - minValue)) * 100}%`,
+                  right: `${100 - ((shownRange.max - minValue) / (maxValue - minValue)) * 100}%`
                 }}
               />
               {/* Min slider - clipped to left half (up to midpoint between thumbs) */}
@@ -939,7 +971,7 @@ function QuestionInner({
                 min={minValue}
                 max={maxValue}
                 step={step}
-                value={rangeAnswer.min}
+                value={shownRange.min}
                 onChange={handleRangeMinChange}
                 disabled={locked}
                 className={cn(
@@ -953,10 +985,10 @@ function QuestionInner({
                   '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
                   '[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0',
                   '[&::-moz-range-track]:bg-transparent',
-                  locked && 'opacity-70 cursor-not-allowed'
+                  lockedLook && 'opacity-70 cursor-not-allowed'
                 )}
                 style={{
-                  clipPath: `inset(0 ${100 - ((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}% 0 0)`
+                  clipPath: `inset(0 ${100 - ((shownRange.min + shownRange.max) / 2 - minValue) / (maxValue - minValue) * 100}% 0 0)`
                 }}
               />
               {/* Max slider - clipped to right half (from midpoint between thumbs) */}
@@ -965,7 +997,7 @@ function QuestionInner({
                 min={minValue}
                 max={maxValue}
                 step={step}
-                value={rangeAnswer.max}
+                value={shownRange.max}
                 onChange={handleRangeMaxChange}
                 disabled={locked}
                 className={cn(
@@ -979,15 +1011,15 @@ function QuestionInner({
                   '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
                   '[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0',
                   '[&::-moz-range-track]:bg-transparent',
-                  locked && 'opacity-70 cursor-not-allowed'
+                  lockedLook && 'opacity-70 cursor-not-allowed'
                 )}
                 style={{
-                  clipPath: `inset(0 0 0 ${((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}%)`
+                  clipPath: `inset(0 0 0 ${((shownRange.min + shownRange.max) / 2 - minValue) / (maxValue - minValue) * 100}%)`
                 }}
               />
             </div>
             <div className="text-center text-sm font-semibold text-primary">
-              Your answer: {rangeAnswer.min} – {rangeAnswer.max}
+              Your answer: {blank ? <>{PRINT_BLANK} – {PRINT_BLANK}</> : <>{shownRange.min} – {shownRange.max}</>}
             </div>
           </div>
           {sliderPanel}
