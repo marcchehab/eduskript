@@ -193,8 +193,10 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const snappedPathRef = useRef<Array<{ x: number; y: number; pressure: number }> | null>(null)
     const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     // Which rule produced snappedPathRef: Shift previews vanish when Shift is
-    // released, hold snaps stay until the pointer clearly moves on.
-    const snapSourceRef = useRef<'shift' | 'hold' | null>(null)
+    // released; a hold-snapped line stays straight for the rest of the stroke
+    // (moving on only moves its endpoint); a hold-snapped circle/rectangle
+    // stays until the pointer clearly moves on.
+    const snapSourceRef = useRef<'shift' | 'line' | 'hold' | null>(null)
     const holdAnchorRef = useRef<{ x: number; y: number } | null>(null)
     const strokeStartTimeRef = useRef<number>(0) // Track when current stroke started for telemetry
     const currentModeRef = useRef<DrawMode>('draw') // Track the effective mode for current stroke
@@ -848,27 +850,32 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
             snappedPathRef.current = null
             snapSourceRef.current = null
           }
-          // Hold-to-snap: restart the timer whenever the pointer actually moves.
-          // After a snap fired, only a clear move drops it (stylus lift drift).
-          const anchor = holdAnchorRef.current
-          const tolerance =
-            snapSourceRef.current === 'hold' ? HOLD_SNAP_RELEASE_PX : HOLD_SNAP_TOLERANCE_PX
-          const moved =
-            !anchor || Math.hypot(last.x - anchor.x, last.y - anchor.y) > tolerance
-          if (moved) {
-            holdAnchorRef.current = { x: last.x, y: last.y }
-            snappedPathRef.current = null
-            snapSourceRef.current = null
-            clearHoldTimer()
-            holdTimerRef.current = setTimeout(() => {
-              holdTimerRef.current = null
-              if (!isDrawingRef.current) return
-              const shape = recognizeShape(currentPathRef.current)
-              if (!shape) return
-              snappedPathRef.current = shape.points
-              snapSourceRef.current = 'hold'
-              redrawInProgressStroke()
-            }, HOLD_SNAP_MS)
+          if (snapSourceRef.current === 'line') {
+            // Latched straight line: keep the start, follow the pointer.
+            snappedPathRef.current = straightenPath(path)
+          } else {
+            // Hold-to-snap: restart the timer whenever the pointer actually moves.
+            // After a snap fired, only a clear move drops it (stylus lift drift).
+            const anchor = holdAnchorRef.current
+            const tolerance =
+              snapSourceRef.current === 'hold' ? HOLD_SNAP_RELEASE_PX : HOLD_SNAP_TOLERANCE_PX
+            const moved =
+              !anchor || Math.hypot(last.x - anchor.x, last.y - anchor.y) > tolerance
+            if (moved) {
+              holdAnchorRef.current = { x: last.x, y: last.y }
+              snappedPathRef.current = null
+              snapSourceRef.current = null
+              clearHoldTimer()
+              holdTimerRef.current = setTimeout(() => {
+                holdTimerRef.current = null
+                if (!isDrawingRef.current) return
+                const shape = recognizeShape(currentPathRef.current)
+                if (!shape) return
+                snappedPathRef.current = shape.points
+                snapSourceRef.current = shape.kind === 'line' ? 'line' : 'hold'
+                redrawInProgressStroke()
+              }, HOLD_SNAP_MS)
+            }
           }
         }
       }
