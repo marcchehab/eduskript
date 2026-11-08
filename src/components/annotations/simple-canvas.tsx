@@ -70,6 +70,7 @@ import {
   HOLD_SNAP_TOLERANCE_PX,
   recognizeShape,
   straightenPath,
+  HOLD_SNAP_RELEASE_PX,
 } from '@/lib/annotations/shape-snap'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
 
@@ -191,6 +192,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     //   - holding still for HOLD_SNAP_MS: recognise line / circle / rectangle
     const snappedPathRef = useRef<Array<{ x: number; y: number; pressure: number }> | null>(null)
     const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Which rule produced snappedPathRef: Shift previews vanish when Shift is
+    // released, hold snaps stay until the pointer clearly moves on.
+    const snapSourceRef = useRef<'shift' | 'hold' | null>(null)
     const holdAnchorRef = useRef<{ x: number; y: number } | null>(null)
     const strokeStartTimeRef = useRef<number>(0) // Track when current stroke started for telemetry
     const currentModeRef = useRef<DrawMode>('draw') // Track the effective mode for current stroke
@@ -650,6 +654,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       currentPathRef.current = [{ x, y, pressure }]
       snappedPathRef.current = null
+      snapSourceRef.current = null
       holdAnchorRef.current = { x, y }
       clearHoldTimer()
     }, [mode, clearHoldTimer, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, screenToPaper, updateEraserCursor, svgHandlesDisplay])
@@ -835,19 +840,25 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           // additionally snaps the angle. Releasing Shift returns to freehand,
           // because the raw path was never overwritten.
           snappedPathRef.current = straightenPath(path, e.altKey)
+          snapSourceRef.current = 'shift'
           clearHoldTimer()
         } else if (last) {
-          if (snappedPathRef.current && snappedPathRef.current.length === 2) {
+          if (snapSourceRef.current === 'shift') {
             // Shift was released mid-stroke — drop the straight preview.
             snappedPathRef.current = null
+            snapSourceRef.current = null
           }
           // Hold-to-snap: restart the timer whenever the pointer actually moves.
+          // After a snap fired, only a clear move drops it (stylus lift drift).
           const anchor = holdAnchorRef.current
+          const tolerance =
+            snapSourceRef.current === 'hold' ? HOLD_SNAP_RELEASE_PX : HOLD_SNAP_TOLERANCE_PX
           const moved =
-            !anchor || Math.hypot(last.x - anchor.x, last.y - anchor.y) > HOLD_SNAP_TOLERANCE_PX
+            !anchor || Math.hypot(last.x - anchor.x, last.y - anchor.y) > tolerance
           if (moved) {
             holdAnchorRef.current = { x: last.x, y: last.y }
             snappedPathRef.current = null
+            snapSourceRef.current = null
             clearHoldTimer()
             holdTimerRef.current = setTimeout(() => {
               holdTimerRef.current = null
@@ -855,6 +866,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
               const shape = recognizeShape(currentPathRef.current)
               if (!shape) return
               snappedPathRef.current = shape.points
+              snapSourceRef.current = 'hold'
               redrawInProgressStroke()
             }, HOLD_SNAP_MS)
           }
@@ -963,6 +975,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         currentPathRef.current = snappedPathRef.current
         snappedPathRef.current = null
       }
+      snapSourceRef.current = null
 
       // If we just finished an eraser stroke, delete all marked strokes
       if (currentModeRef.current === 'erase') {

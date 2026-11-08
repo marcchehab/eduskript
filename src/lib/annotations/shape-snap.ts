@@ -29,6 +29,12 @@ export const SNAP_ANGLE_DEG = 15
 export const HOLD_SNAP_MS = 500
 /** Movement below this (paper px) still counts as holding still. */
 export const HOLD_SNAP_TOLERANCE_PX = 3
+/**
+ * Once a hold snap fired, the pointer must move this far (paper px) before the
+ * snap is dropped again. Lifting a stylus drifts a few px; with the small
+ * hold tolerance that drift used to discard the snapped shape on release.
+ */
+export const HOLD_SNAP_RELEASE_PX = 14
 
 /** Points sampled along a recognised circle or rectangle. */
 const CIRCLE_SAMPLES = 64
