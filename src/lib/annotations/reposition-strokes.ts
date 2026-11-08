@@ -115,3 +115,55 @@ export function repositionCanvasDataToLive(
 
   return changed ? JSON.stringify(next) : canvasData
 }
+
+/**
+ * Measures every `[data-section-id]` element inside `container` as a
+ * {@link HeadingPosition} (paper-y relative to `originTop`, unscaled by
+ * `scale`).
+ *
+ * Dynamic-height elements (foldable callouts, code editors, flex rows) also
+ * get a `${id}-end` entry for their bottom edge — but ONLY when the DOM has no
+ * real `${id}-end` sentinel. The rehype plugin inserts such a 0-height sentinel
+ * right after each dynamic-height element, and that sentinel is what the
+ * stroke renderer and the draw-commit measurement anchor to. It sits below the
+ * element's bottom MARGIN, not its border-box bottom, so a synthetic entry
+ * measured from `rect.bottom` sits ~one margin (20 px for a callout) higher.
+ * With both in the list, `find()` returned the synthetic one first and every
+ * consumer that shifts by `headingPositions` (eraser hit-test, layer badges)
+ * was off by that margin for strokes below a foldable callout — the eraser
+ * removed strokes ~20 px below its circle.
+ */
+export function measureHeadingPositions(
+  container: ParentNode,
+  originTop: number,
+  scale: number,
+): HeadingPosition[] {
+  const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-section-id]'))
+  const present = new Set(elements.map(el => el.getAttribute('data-section-id')))
+  const positions: HeadingPosition[] = []
+  const s = scale || 1
+
+  for (const element of elements) {
+    const sectionId = element.getAttribute('data-section-id')
+    if (!sectionId) continue
+    const rect = element.getBoundingClientRect()
+    positions.push({
+      sectionId,
+      offsetY: (rect.top - originTop) / s,
+      headingText: element.getAttribute('data-heading-text') || '',
+    })
+    // Track the bottom so annotations BELOW the element follow it when it
+    // expands/collapses — unless a real end sentinel already does that.
+    if (
+      element.getAttribute('data-dynamic-height') === 'true' &&
+      !present.has(`${sectionId}-end`)
+    ) {
+      positions.push({
+        sectionId: `${sectionId}-end`,
+        offsetY: (rect.bottom - originTop) / s,
+        headingText: '',
+      })
+    }
+  }
+  return positions
+}

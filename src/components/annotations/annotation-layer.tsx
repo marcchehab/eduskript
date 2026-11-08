@@ -99,7 +99,7 @@ import type { SnapsData, SpacersData } from '@/lib/userdata/adapters'
 import type { Spacer, SpacerPattern } from '@/types/spacer'
 import { generateContentHash, type HeadingPosition, type StrokeData } from '@/lib/indexeddb/annotations'
 import { getStrokeAvg } from '@/lib/annotations/stroke-grouping'
-import { determineSectionFromY, repositionCanvasDataToLive } from '@/lib/annotations/reposition-strokes'
+import { determineSectionFromY, measureHeadingPositions, repositionCanvasDataToLive } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
@@ -1714,10 +1714,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       setPaperWidth(paperElement.offsetWidth)
     }
 
-    // Query for all elements with data-section-id (headings, code blocks, callouts, etc.)
-    const sectionElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
-    const positions: HeadingPosition[] = []
-
     // Get the CSS transform scale factor applied to paper (for mobile responsive scaling)
     // getBoundingClientRect() returns scaled coordinates, but we need unscaled for canvas.
     // Compute scale from WIDTH not height: paper width is hard-locked at 1280 px so
@@ -1740,36 +1736,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     const wrapperEl = paperElement!.querySelector('.annotation-content-wrapper') as HTMLElement | null
     const originRect = wrapperEl ? wrapperEl.getBoundingClientRect() : paperRect
 
-    sectionElements.forEach((element) => {
-      const sectionId = element.getAttribute('data-section-id')
-      const headingText = element.getAttribute('data-heading-text')
-      const isDynamicHeight = element.getAttribute('data-dynamic-height') === 'true'
-
-      if (sectionId) {
-        // Get the element's position relative to paper element
-        // Divide by scale to convert from scaled (getBoundingClientRect) to unscaled (canvas) coordinates
-        const rect = element.getBoundingClientRect()
-        const unscaledOffsetY = (rect.top - originRect.top) / scale
-
-        // Add top reference point
-        positions.push({
-          sectionId,
-          offsetY: unscaledOffsetY,
-          headingText: headingText || ''
-        })
-
-
-        // For dynamic-height elements (callouts, code editors), also track bottom
-        // This ensures annotations BELOW these elements move when they expand/collapse
-        if (isDynamicHeight) {
-          positions.push({
-            sectionId: `${sectionId}-end`,
-            offsetY: (rect.bottom - originRect.top) / scale,
-            headingText: ''
-          })
-        }
-      }
-    })
+    // All [data-section-id] elements (headings, code blocks, callouts, …), plus
+    // a synthetic `-end` for dynamic-height elements that lack a DOM sentinel.
+    const positions = measureHeadingPositions(contentRef.current, originRect.top, scale)
 
     log('recalcHeadingPositions:', positions.map(p => `${p.sectionId}@${Math.round(p.offsetY)}`).join(', '))
     setHeadingPositions(positions)
@@ -2416,40 +2385,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     if (currentHeadingPositions.length === 0 && contentRef.current) {
       const paperElement = document.getElementById('paper')
       if (paperElement) {
-        const sectionElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
-        const positions: HeadingPosition[] = []
         const paperRect = paperElement.getBoundingClientRect()
         // Divide by CSS transform scale to get unscaled coordinates (same as recalculateHeadingPositions)
         const scale = (paperRect.width / paperElement.offsetWidth) || 1
         const wrapperEl = paperElement.querySelector('.annotation-content-wrapper') as HTMLElement | null
         const originRect = wrapperEl ? wrapperEl.getBoundingClientRect() : paperRect
 
-        sectionElements.forEach((element) => {
-          const sectionId = element.getAttribute('data-section-id')
-          const headingText = element.getAttribute('data-heading-text')
-          const isDynamicHeight = element.getAttribute('data-dynamic-height') === 'true'
-
-          if (sectionId) {
-            const rect = element.getBoundingClientRect()
-            const unscaledOffsetY = (rect.top - originRect.top) / scale
-
-            // Add top reference point
-            positions.push({
-              sectionId,
-              offsetY: unscaledOffsetY,
-              headingText: headingText || ''
-            })
-
-            // For dynamic-height elements, also track bottom
-            if (isDynamicHeight) {
-              positions.push({
-                sectionId: `${sectionId}-end`,
-                offsetY: (rect.bottom - originRect.top) / scale,
-                headingText: ''
-              })
-            }
-          }
-        })
+        const positions = measureHeadingPositions(contentRef.current, originRect.top, scale)
 
         currentHeadingPositions = positions
         // Update the ref and state for future use
