@@ -133,7 +133,24 @@ export function Callout({ children, className, type, isFoldable, initiallyFolded
           const childProps = (child as { props: { className?: string; children?: ReactNode } }).props
           if (childProps.className?.includes('callout-title')) {
             return (
-              <div key={i} className={childProps.className}>
+              <div
+                key={i}
+                className={childProps.className}
+                // role=button: keyboard/screen-reader access, and lets the
+                // annotation canvas's tap-through forward finger taps here
+                // while stylus mode covers the page (simple-canvas.tsx).
+                {...(isFoldable ? {
+                  role: 'button',
+                  tabIndex: 0,
+                  'aria-expanded': open,
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setIsOpen(!isOpen)
+                    }
+                  },
+                } : {})}
+              >
                 <div className="flex items-center gap-2 w-full">
                   {Icon && <Icon className="w-5 h-5 shrink-0" />}
                   <span className="flex-1">
