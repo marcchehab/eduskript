@@ -181,6 +181,9 @@ function applySetting(key: string, value: string, spec: PlotSpec): void {
     case 'caption':
       spec.caption = value
       return
+    case 'alt':
+      spec.alt = value
+      return
     case 'grid':
       spec.grid = isOn(value)
       return
@@ -191,7 +194,7 @@ function applySetting(key: string, value: string, spec: PlotSpec): void {
       spec.legend = isOn(value)
       return
     default:
-      throw new LineError(`Unknown setting '${key}'. Known: x, y, size, aspect, caption, grid, axes, legend`)
+      throw new LineError(`Unknown setting '${key}'. Known: x, y, size, aspect, caption, alt, grid, axes, legend`)
   }
 }
 

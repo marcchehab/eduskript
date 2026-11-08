@@ -110,6 +110,17 @@ describe('plot rendering', () => {
     expect(result.plot.alt).toContain('x^2')
   })
 
+  it('alt text: explicit alt, else caption, else the terms', () => {
+    const alt = (src: string) => {
+      const r = renderPlot(src)
+      return 'plot' in r ? r.plot.alt : null
+    }
+    expect(alt('f(x) = 4x^2-3\nalt: Graph A')).toBe('Graph A')
+    expect(alt('f(x) = 4x^2-3\ncaption: Graph B')).toBe('Graph B')
+    expect(alt('f(x) = 4x^2-3\ncaption: Graph B\nalt: Parabel')).toBe('Parabel')
+    expect(alt('f(x) = 4x^2-3')).toContain('4x^2-3')
+  })
+
   it('escapes the characters that would break a data URL', () => {
     const url = svgToDataUrl('<svg>#100% Höhe & "more"</svg>')
     // Only percent-escapes survive; the raw characters would break the URL or

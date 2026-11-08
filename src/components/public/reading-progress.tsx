@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
+import { headingText } from '@/lib/heading-text'
 
 interface Chapter {
   id: string
@@ -41,9 +42,7 @@ function getChaptersFromDOM(): Chapter[] {
   const firstH2Top = getOffsetRelativeTo(firstH2, paper)
   if (firstH2Top > 10) {
     const h1 = article.querySelector('h1')
-    // h1 may have nested <a> from rehypeAutolinkHeadings — use innerText to avoid duplication
-    const h1Title = h1?.querySelector('.heading-link')?.textContent?.trim()
-      || h1?.innerText?.trim() || ''
+    const h1Title = h1 ? headingText(h1) : ''
     rawChapters.push({
       id: 'intro',
       title: h1Title,
@@ -61,8 +60,7 @@ function getChaptersFromDOM(): Chapter[] {
       : articleHeight
     rawChapters.push({
       id: el.id || `chapter-${i}`,
-      title: el.querySelector('.heading-link')?.textContent?.trim()
-        || el.innerText?.trim() || `Chapter ${i + 1}`,
+      title: headingText(el) || `Chapter ${i + 1}`,
       offsetTop: top,
       height: nextTop - top,
       widthPercent: 0,

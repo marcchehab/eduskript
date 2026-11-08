@@ -683,7 +683,7 @@ vline x=-1 dashed
 - \`f(x) = <term>\`, \`y = <term>\` or a bare \`<term>\` — a curve. Later curves may use earlier ones: \`g(x) = f(x) + 2\`.
 - \`A = (a, b)\` — a point. \`vline x=-1\` / \`hline y=2\` — a guide line.
 - \`x: -4..4\`, \`y: -3..3\` — the window. Leave \`y:\` out and it is derived from the curve.
-- Flags: \`grid\` / \`nogrid\`, \`axes\` / \`noaxes\`, \`legend\` / \`nolegend\`, \`aspect: equal\`, \`size: 640x400\`, \`caption: …\`.
+- Flags: \`grid\` / \`nogrid\`, \`axes\` / \`noaxes\`, \`legend\` / \`nolegend\`, \`aspect: equal\`, \`size: 640x400\`, \`caption: …\`, \`alt: …\` (image alt text; default is the caption, else the plotted terms, which give away graph-matching tasks).
 - Options after a comma: a colour word (\`red\`, \`blue\`, \`green\`, \`orange\`, \`purple\`, \`teal\`, \`pink\`, \`brown\`, \`gray\`, \`grey\`, \`black\`) or \`color=#2563eb\`, \`label="…"\`, \`dashed\`, \`dotted\`, \`thick\`.
 
 **Terms:** implicit multiplication works the way it is written on paper (\`2x\`, \`2sin(x)\`, \`1/3x^3\`). Functions: \`sin cos tan asin acos atan sinh cosh tanh exp ln log log2 sqrt abs sign floor ceil round min max mod\` — \`ln\` is the natural logarithm, \`log\`/\`lg\` are both base 10. Constants \`pi\` and \`e\`. Poles (\`1/x\`, \`tan\`) are detected, so no vertical line is drawn through an asymptote.

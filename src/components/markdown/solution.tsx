@@ -66,7 +66,8 @@ export function Solution({ title, pageId, teacher = false, children }: { title?:
   const anchor = useRef<HTMLDivElement>(null)
   const empty = isEmptyContent(children)
   const n = useRegisterSolution(active && visibility.inPrint && !visibility.inPlace && !empty, anchor, children, title)
-  const label = title ? `Solution: ${title}` : 'Solution'
+  // The title alone: an English prefix before a German title read badly (QA). Same as in print.
+  const label = title || 'Solution'
 
   if (active) {
     if (!visibility.inPrint || empty) return null

@@ -55,8 +55,10 @@ describe('check mode (non-exam default)', () => {
   it('disables the button until an answer exists', () => {
     renderChoice()
     expect(checkButton()).toBeDisabled()
+    expect(screen.getByText('Select an answer first.')).toBeInTheDocument()
     pick('21')
     expect(checkButton()).toBeEnabled()
+    expect(screen.queryByText('Select an answer first.')).not.toBeInTheDocument()
   })
 
   it('locks after one wrong check and reveals the key', () => {

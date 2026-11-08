@@ -1038,6 +1038,16 @@ function QuestionInner({
                 : `Not correct yet. ${attemptsLeft} ${attemptsLeft === 1 ? 'attempt' : 'attempts'} left.`}
             </span>
           )}
+          {/* Disabled button alone gave no clue why (QA: students thought it was broken). */}
+          {isEmptyAnswer && !partialReveal && (
+            <span className="text-sm text-muted-foreground">
+              {type === 'single' || type === 'multiple'
+                ? 'Select an answer first.'
+                : type === 'text'
+                  ? 'Type an answer first.'
+                  : 'Set a value first.'}
+            </span>
+          )}
           <Button size="sm" onClick={handleCheck} disabled={isEmptyAnswer}>
             {attemptsUsed === 0
               ? 'Check answer'

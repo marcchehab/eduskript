@@ -17,7 +17,8 @@ export function GitInfo() {
   const shortSha = gitSha ? gitSha.substring(0, 7) : 'unknown'
   
   return (
-    <div className="fixed bottom-2 right-2 z-50">
+    // print-hide: the browser's own print (Ctrl+P, outside the print view) printed the commit hash.
+    <div className="print-hide fixed bottom-2 right-2 z-50">
       <div 
         className={`
           bg-black/10 dark:bg-white/10 backdrop-blur-xs rounded-lg p-2 text-xs 

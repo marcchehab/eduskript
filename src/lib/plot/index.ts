@@ -56,7 +56,9 @@ function compute(source: string): PlotResult {
         dark: svgToDataUrl(renderPlotSvg(spec, 'dark')),
         width: spec.width,
         height: spec.height,
-        alt: buildAlt(spec.curves.map((c) => `${c.name}(x) = ${c.term}`)),
+        // Explicit alt, else the caption, else the terms. The term fallback reveals
+        // the function, which spoils "match graph to equation" tasks: use alt/caption there.
+        alt: spec.alt ?? spec.caption ?? buildAlt(spec.curves.map((c) => `${c.name}(x) = ${c.term}`)),
         caption: spec.caption,
       },
     }

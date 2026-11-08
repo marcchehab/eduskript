@@ -45,6 +45,8 @@ export interface PlotSpec {
   width: number
   height: number
   caption?: string
+  /** img alt text; overrides the default built from the terms (which would give away matching tasks). */
+  alt?: string
 }
 
 export interface PlotSpecError {

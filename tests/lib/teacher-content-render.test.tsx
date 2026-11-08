@@ -60,7 +60,8 @@ describe('teacher content, editor preview (full markdown)', () => {
 
   it('marks a teacher solution as "Teachers only"', async () => {
     const html = await render(PAGE)
-    expect(html).toContain('Solution: Für Lehrpersonen')
+    expect(html).toContain('Für Lehrpersonen')
+    expect(html).not.toContain('Solution: Für Lehrpersonen')
     expect(html).toContain('Teachers only')
   })
 })
