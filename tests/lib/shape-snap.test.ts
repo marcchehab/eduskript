@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recognizeShape, straightenPath, type StrokePoint } from '@/lib/annotations/shape-snap'
+import { recognizeShape, snapLineToAxis, straightenPath, type StrokePoint } from '@/lib/annotations/shape-snap'
 
 const P = (x: number, y: number, pressure = 0.5): StrokePoint => ({ x, y, pressure })
 
@@ -94,5 +94,31 @@ describe('recognizeShape', () => {
 
   it('ignores dots and very short ticks', () => {
     expect(recognizeShape([P(0, 0), P(1, 1), P(2, 1), P(2, 2)])).toBeNull()
+  })
+})
+
+describe('snapLineToAxis', () => {
+  it('lays a nearly horizontal line flat, keeping start and length', () => {
+    const line = snapLineToAxis([P(10, 10), P(110, 15)]) // ~2.9°
+    expect(line[0]).toEqual(P(10, 10))
+    expect(line[1].y).toBeCloseTo(10)
+    expect(line[1].x - 10).toBeCloseTo(Math.hypot(100, 5))
+  })
+
+  it('stands a nearly vertical line upright, also upwards', () => {
+    const line = snapLineToAxis([P(0, 0), P(4, -100)]) // ~2.3° off vertical
+    expect(line[1].x).toBeCloseTo(0)
+    expect(line[1].y).toBeLessThan(0)
+  })
+
+  it('leaves clearly slanted lines alone', () => {
+    const raw = [P(0, 0), P(100, 12)] // ~6.8°
+    expect(snapLineToAxis(raw)).toBe(raw)
+  })
+
+  it('applies to lines found by recognizeShape', () => {
+    const shape = recognizeShape(wobblyLine(0, 0, 200, 8))
+    expect(shape?.kind).toBe('line')
+    expect(shape?.points[1].y).toBeCloseTo(shape!.points[0].y)
   })
 })

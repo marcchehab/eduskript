@@ -23,10 +23,15 @@ export interface StrokePoint {
 
 export type ShapeKind = 'line' | 'circle' | 'rect'
 
-/** Angle grid for Shift+Alt, in degrees. */
+/** Angle grid while Shift is held, in degrees. */
 export const SNAP_ANGLE_DEG = 15
 /** How long the pointer must hold still before the shape snap fires. */
 export const HOLD_SNAP_MS = 500
+/**
+ * A recognised line closer than this (degrees) to horizontal or vertical
+ * lands exactly on the axis — no key needed, so it works on a tablet.
+ */
+export const AXIS_SNAP_DEG = 4
 /** Movement below this (paper px) still counts as holding still. */
 export const HOLD_SNAP_TOLERANCE_PX = 3
 /**
@@ -38,6 +43,27 @@ export const HOLD_SNAP_RELEASE_PX = 14
 
 /** Points sampled along a recognised circle or rectangle. */
 const CIRCLE_SAMPLES = 64
+
+/**
+ * Lay a two-point line exactly horizontal or vertical when it is within
+ * AXIS_SNAP_DEG of that axis. The start and the length stay the same.
+ */
+export function snapLineToAxis(line: StrokePoint[]): StrokePoint[] {
+  if (line.length !== 2) return line
+  const [start, end] = line
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = Math.hypot(dx, dy)
+  if (length === 0) return line
+  const angle = Math.atan2(dy, dx)
+  const quarter = Math.PI / 2
+  const axis = Math.round(angle / quarter) * quarter
+  if (Math.abs(angle - axis) > (AXIS_SNAP_DEG * Math.PI) / 180) return line
+  return [
+    start,
+    { x: start.x + Math.cos(axis) * length, y: start.y + Math.sin(axis) * length, pressure: end.pressure },
+  ]
+}
 
 export function straightenPath(points: StrokePoint[], snapAngle = false): StrokePoint[] {
   if (points.length < 2) return points
@@ -87,7 +113,7 @@ export function recognizeShape(
     const deviation = maxDistanceToLine(points, start, end)
     const span = Math.hypot(end.x - start.x, end.y - start.y)
     if (span > 0 && deviation / span < 0.12) {
-      return { kind: 'line', points: straightenPath(points) }
+      return { kind: 'line', points: snapLineToAxis(straightenPath(points)) }
     }
     return null
   }

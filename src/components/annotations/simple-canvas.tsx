@@ -70,6 +70,7 @@ import {
   HOLD_SNAP_TOLERANCE_PX,
   recognizeShape,
   straightenPath,
+  snapLineToAxis,
   HOLD_SNAP_RELEASE_PX,
 } from '@/lib/annotations/shape-snap'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
@@ -188,7 +189,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     // straighten rule fires, the drawn AND committed geometry comes from
     // `snappedPathRef` instead, so releasing the modifier restores freehand.
     //   - Shift: straight line from the stroke's start to the live position
-    //     (Shift+Alt snaps the angle to a 15° grid)
+    //     with the angle snapped to a 15° grid
     //   - holding still for HOLD_SNAP_MS: recognise line / circle / rectangle
     const snappedPathRef = useRef<Array<{ x: number; y: number; pressure: number }> | null>(null)
     const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -838,11 +839,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const last = path[path.length - 1]
 
         if (e.shiftKey && path.length > 1) {
-          // Shift: straight from the stroke's start to the live position. Alt
-          // additionally snaps the angle. Releasing Shift returns to freehand,
-          // because the raw path was never overwritten.
-          snappedPathRef.current = straightenPath(path, e.altKey)
-          snapSourceRef.current = 'shift'
+          // Shift: straight from the stroke's start to the live position, the
+          // angle snapped to 15° steps. Releasing Shift returns to freehand
+          // (raw path was never overwritten) or to a latched hold line.
+          snappedPathRef.current = straightenPath(path, true)
+          if (snapSourceRef.current !== 'line') snapSourceRef.current = 'shift'
           clearHoldTimer()
         } else if (last) {
           if (snapSourceRef.current === 'shift') {
@@ -851,8 +852,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
             snapSourceRef.current = null
           }
           if (snapSourceRef.current === 'line') {
-            // Latched straight line: keep the start, follow the pointer.
-            snappedPathRef.current = straightenPath(path)
+            // Latched straight line: keep the start, follow the pointer; lands
+            // exactly on horizontal/vertical when close to it.
+            snappedPathRef.current = snapLineToAxis(straightenPath(path))
           } else {
             // Hold-to-snap: restart the timer whenever the pointer actually moves.
             // After a snap fired, only a clear move drops it (stylus lift drift).

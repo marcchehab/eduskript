@@ -119,9 +119,9 @@ Freihand ist für Notizen in Ordnung, für Achsen, Tangenten und Kästen weniger
 
 | | |
 |---|---|
-| **Shift beim Zeichnen gedrückt halten** | Der Strich wird zu einer geraden Linie von deinem Startpunkt bis zur aktuellen Position des Zeigers. Lass Shift los, und du bist wieder im Freihandmodus. |
-| **Shift + Alt** | Dasselbe, aber der Winkel rastet in 15°-Schritten ein — horizontal, vertikal und 45° werden exakt. |
+| **Shift beim Zeichnen gedrückt halten** | Der Strich wird zu einer geraden Linie von deinem Startpunkt bis zur aktuellen Position des Zeigers. Der Winkel rastet in 15°-Schritten ein — horizontal, vertikal und 45° werden exakt. Lass Shift los, und du bist wieder im Freihandmodus. |
 | **Eine halbe Sekunde stillhalten, dann abheben** | Der Strich wird erkannt und neu gezeichnet: ein ungefähr gerader wird zur Linie, ein geschlossener runder zum Kreis, ein kastenförmiger zum Rechteck. Was nicht klar passt, bleibt genau so, wie es gezeichnet wurde. |
+| **Stillhalten, dann weiterzeichnen** | Ist die Linie einmal gerade geworden, bleibt sie gerade: Weiterzeichnen verschiebt nur den Endpunkt. Nahe an waagrecht oder senkrecht (innerhalb von 4°) liegt sie exakt auf der Achse. |
 
 Das Ergebnis ist ein gewöhnlicher Strich — Radierer, Rückgängig, Teilen mit einer Klasse und das KI-Feedback behandeln ihn wie alles andere, was du zeichnest.
 

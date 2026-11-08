@@ -119,9 +119,9 @@ Freehand is fine for notes, less so for axes, tangents and boxes. Two ways to ge
 
 | | |
 |---|---|
-| **Hold Shift while drawing** | The stroke becomes a straight line from where you started to where the pointer is now. Let go of Shift and you are back to freehand. |
-| **Shift + Alt** | Same, but the angle snaps to 15° steps — horizontal, vertical and 45° come out exact. |
+| **Hold Shift while drawing** | The stroke becomes a straight line from where you started to where the pointer is now, its angle snapping to 15° steps — horizontal, vertical and 45° come out exact. Let go of Shift and you are back to freehand. |
 | **Hold still for half a second, then lift** | The stroke is recognised and redrawn: a roughly straight one becomes a line, a closed round one a circle, a boxy one a rectangle. Anything that doesn't clearly fit is left exactly as drawn. |
+| **Hold still, then keep drawing** | Once a line has snapped, it stays straight: moving on only moves its endpoint. Close to horizontal or vertical (within 4°) it lands exactly on the axis. |
 
 The result is an ordinary stroke — the eraser, undo, sharing with a class and the AI feedback all treat it like anything else you draw.
 
