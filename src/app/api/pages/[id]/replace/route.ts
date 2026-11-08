@@ -11,7 +11,8 @@
  * With `line` (1-based), `old` (non-empty) must instead be exactly the lines
  * starting at that line; it may occur elsewhere too. Used by the print
  * preview's layout edits (src/lib/print/print-edits.ts lineRangeEdit), where
- * the same image line can repeat on a page.
+ * the same image line can repeat on a page. `old` may also be the public
+ * (teacher-stripped) text of those lines: src/lib/print/apply-line-edit.ts.
  *
  * Known limitation: read and write are two steps; a save landing between
  * them is overwritten (no row lock). Fine for single-author inline tweaks.
@@ -20,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { applyLineRangeEdit } from '@/lib/print/apply-line-edit'
 import { NotFoundError, PermissionDeniedError, ValidationError, loadPageForActor, updatePageForUser } from '@/lib/services/pages'
 
 const MAX_SNIPPET = 200_000
@@ -46,12 +48,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (typeof line !== 'number' || !Number.isInteger(line) || line < 1) {
       return NextResponse.json({ error: 'line must be a positive integer' }, { status: 400 })
     }
-    const lines = page.content.split('\n')
-    const oldLines = oldText.split('\n')
-    if (line - 1 + oldLines.length > lines.length || lines.slice(line - 1, line - 1 + oldLines.length).join('\n') !== oldText) {
+    // `old` may come from the public (teacher-stripped) markdown; see apply-line-edit.ts.
+    const next = applyLineRangeEdit(page.content, oldText, newText, line)
+    if (next === null) {
       return NextResponse.json({ error: 'The page changed meanwhile. Reload and try again.' }, { status: 409 })
     }
-    const next = [...lines.slice(0, line - 1), newText, ...lines.slice(line - 1 + oldLines.length)].join('\n')
     return save(session.user.id, session.user.isAdmin, id, next)
   }
 
