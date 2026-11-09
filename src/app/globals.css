@@ -2259,6 +2259,38 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   background-color: var(--callout-question-accent) !important;
 }
 
+/* Compact callouts in the print view (html.print-layout — on screen in the
+   preview and in actual print, so the paginator measures what prints): no
+   grey body, a lighter and lower title bar, no paragraph margin at the
+   content edges. Annotations follow their section anchors; a note written
+   into empty space inside a callout moves closer to the text. */
+.print-layout .prose-theme blockquote.callout {
+  margin: 12px 0;
+  background: transparent;
+}
+.print-layout .prose-theme blockquote.callout > .callout-title {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  font-size: 0.92em;
+  /* lightens whatever accent colour the type sets (saves ink) */
+  background-image: linear-gradient(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.55));
+}
+.print-layout .prose-theme blockquote.callout .callout-content {
+  padding: 6px 10px;
+}
+.print-layout .prose-theme blockquote.callout .callout-content :is(p, ul, ol) {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+.print-layout .prose-theme blockquote.callout .callout-content > :first-child,
+.print-layout .prose-theme blockquote.callout .callout-content > :first-child > :first-child {
+  margin-top: 0;
+}
+.print-layout .prose-theme blockquote.callout .callout-content > :last-child,
+.print-layout .prose-theme blockquote.callout .callout-content > :last-child > :last-child {
+  margin-bottom: 0;
+}
+
 /* ===== Theme presets ===== */
 /* Two independent per-site choices, both set on the public layout wrapper
  * (src/components/public/layout.tsx, src/components/exam/exam-layout.tsx):
