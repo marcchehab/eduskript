@@ -35,8 +35,13 @@ export function fencedRanges(content: string): Array<[number, number]> {
  * returns null instead of hitting a twin elsewhere — callers chain patterns
  * with `??`. Without `onLine` the first match wins. Returns null when no
  * match exists (caller treats that as a no-op). O(n) in content length.
+ *
+ * `nth` (0-based) skips that many matches first — on `onLine`, or in the
+ * whole document without a line. It separates twins that share one line
+ * (`<youtube id="x" /> <youtube id="x" />`); see the `data-source-nth`
+ * attribute set by rehypeSourceLine, which counts the same way.
  */
-export function replaceOutsideFences(content: string, pattern: RegExp, replacement: string | ((match: string) => string), onLine?: number): string | null {
+export function replaceOutsideFences(content: string, pattern: RegExp, replacement: string | ((match: string) => string), onLine?: number, nth = 0): string | null {
   let from = 0
   let to = Infinity
   if (onLine) {
@@ -46,11 +51,13 @@ export function replaceOutsideFences(content: string, pattern: RegExp, replaceme
   }
   const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g')
   const fences = fencedRanges(content)
+  let skip = nth
   for (const match of content.matchAll(globalPattern)) {
     const start = match.index
     if (start < from) continue
     if (start >= to) return null
     if (fences.some(([fs, fe]) => start >= fs && start < fe)) continue
+    if (skip-- > 0) continue
     const text = typeof replacement === 'function' ? replacement(match[0]) : replacement
     return content.slice(0, start) + text + content.slice(start + match[0].length)
   }

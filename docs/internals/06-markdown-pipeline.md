@@ -282,6 +282,45 @@ make them work here:
   `ServerMarkdownRenderer` / `MarkdownRenderer`. Styling lives in `globals.css`
   under `.prose-theme .footnotes`.
 
+## Gizmo source rewrites (preview → markdown)
+
+Preview gizmos (resize/align on images, `<excali>`, `<muxvideo>`, YouTube,
+`<molecule>`; YouTube start time) change the markdown by searching the source
+for the element's tag, not by a real source range.
+
+**Current approach:** the element carries `data-source-line-start` (from
+`rehypeSourceLine`, mapped back through preprocessing by `lineMap`). The
+callback runs `replaceOutsideFences(content, pattern, replacement, line, nth)`
+(`src/lib/markdown-fences.ts`): only a match that starts on that line and is
+outside ``` fences counts. YouTube embeds also get `data-source-nth` (the nth
+embed of that id on that line, or in the document without a line), and all
+three source forms (`<youtube>`, `![](youtu.be/…)`, raw `<youtube-embed>`) are
+counted in one pattern (`src/lib/youtube-rewrite.ts`). Other gizmos use line
+only, so two identical images on ONE line still hit the first.
+
+Known limits: a twin inside an HTML comment shifts the YouTube count; content
+without a line (re-parsed `<question>` prompts) falls back to document order;
+the whole content is replaced, so the editor's undo sees one big change.
+
+**Deferred: exact source ranges (offset map).** The robust fix is to address
+an element by its character range instead of pattern + line + count:
+
+1. `preprocessMarkdown` returns an offset map (processed offset → original
+   offset), not only a line map. Each preprocessing step must report its
+   insertions/deletions. This is the hard part — today's `lineMap` is built by
+   diffing lines and knows nothing about columns.
+2. `rehypeSourceLine` adds `data-source-start` / `data-source-end` from
+   `node.position.start.offset` / `end.offset`, mapped through the offset map.
+3. One helper replaces `content.slice(start, end)`, after checking the slice
+   still matches the expected tag (stale render → no-op, never a wrong edit).
+   No regex search, no fence check, no twin counting.
+4. Apply it as a CodeMirror transaction on that range instead of replacing the
+   whole document, so undo history and cursor survive.
+
+Rough effort: offset map ~1 day, migrating all gizmos to the helper ~½ day,
+CodeMirror range transactions ~½ day. Not done yet (2026-11-07): line + nth
+covers the realistic cases; revisit when gizmo edits should be undo-friendly.
+
 ## Debugging Tips
 
 **Plugin not running:** check TypeScript types (especially `tree: Root` parameter). Add `console.log()` to verify execution.

@@ -2,7 +2,7 @@
 
 import { setTagAttribute } from '@/lib/tag-attribute'
 import { fileRefPattern } from '@/lib/file-refs'
-import { setMediaLayoutAttrs, type MediaLayout } from '@/lib/media-layout'
+import type { MediaLayout } from '@/lib/media-layout'
 import React, { useState, useEffect, useLayoutEffect, useRef, useDeferredValue, useCallback, memo, useMemo, type ReactNode } from 'react'
 import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
@@ -18,6 +18,7 @@ import { pageKaraClues } from '@/lib/kara/world'
 import { replaceOutsideFences } from '@/lib/markdown-fences'
 import { getAiFeedbackSolution, setAiFeedbackSolution, insertHiddenSolution } from '@/lib/ai-feedback-solution-source'
 import { linkedSolutions } from '@/lib/ai/feedback-context'
+import { rewriteYoutubeStartTime, rewriteYoutubeLayout } from '@/lib/youtube-rewrite'
 
 interface MarkdownRendererProps {
   content: string
@@ -144,43 +145,22 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
-  // Stable callback: set/remove startTime on the <youtube …id="x"…> tag at or
-  // after `line` (start-time gizmo). Only the startTime attribute is touched;
-  // the rest of the tag stays as written.
-  const stableOnYoutubeStartTimeChange = useCallback((id: string, startTime: number | null, line?: number) => {
-    const currentContent = contentRef.current
+  // Stable callbacks for the YouTube gizmos (start time, resize/align/wrap).
+  // `line` + `nth` (data-source-line-start / data-source-nth) address the
+  // video, so the second of two identical embeds is the one rewritten.
+  // Logic in src/lib/youtube-rewrite.ts.
+  const stableOnYoutubeStartTimeChange = useCallback((id: string, startTime: number | null, line?: number, nth?: number) => {
     const notify = onContentChangeRef.current
-    if (!notify || !currentContent || !id) return
-
-    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const tagPattern = new RegExp(`<youtube\\s[^>]*\\bid=["']${escapedId}["'][^>]*>`, 'i')
-    const newContent = replaceOutsideFences(currentContent, tagPattern, (tag) => {
-      // Accepts the same shapes remark-plugins/youtube.ts parses: {123}, "123", '123', 123
-      const stripped = tag.replace(/\s+startTime=(\{\d*\}|"\d*"|'\d*'|\d+)/, '')
-      return startTime ? stripped.replace(/\s*(\/?>)$/, (_, end: string) => ` startTime="${startTime}"${end === '/>' ? ' />' : '>'}`) : stripped
-    }, line)
-    if (newContent !== null && newContent !== currentContent) notify(newContent)
+    if (!notify) return
+    const newContent = rewriteYoutubeStartTime(contentRef.current, id, startTime, line, nth)
+    if (newContent !== null) notify(newContent)
   }, [])
 
-  // Stable callback: resize/align gizmo on a YouTube embed. Rewrites only the
-  // width/align/wrap attributes of the <youtube …id="x"…> tag at or after
-  // `line` (data-source-line-start, see replaceOutsideFences); for the
-  // image shorthand `![caption](https://youtu.be/x)` the whole shorthand is
-  // replaced by `shorthandTag` (a <youtube> tag built by the component), since
-  // the bracket syntax has no place for layout. The raw <youtube-embed data-id> form is not
-  // matched (the gizmo does nothing there).
-  const stableOnYoutubeLayoutChange = useCallback((id: string, layout: MediaLayout, shorthandTag: string, line?: number) => {
-    const currentContent = contentRef.current
+  const stableOnYoutubeLayoutChange = useCallback((id: string, layout: MediaLayout, shorthandTag: string, line?: number, nth?: number) => {
     const notify = onContentChangeRef.current
-    if (!notify || !currentContent || !id) return
-
-    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const tagPattern = new RegExp(`<youtube\\s[^>]*\\bid=["']${escapedId}["'][^>]*>`, 'i')
-    const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(\\s*<?https?://[^)\\s]*${escapedId}[^)]*\\)`)
-    const newContent =
-      replaceOutsideFences(currentContent, tagPattern, (tag) => setMediaLayoutAttrs(tag, layout), line) ??
-      replaceOutsideFences(currentContent, shorthandPattern, shorthandTag, line)
-    if (newContent !== null && newContent !== currentContent) notify(newContent)
+    if (!notify) return
+    const newContent = rewriteYoutubeLayout(contentRef.current, id, layout, shorthandTag, line, nth)
+    if (newContent !== null) notify(newContent)
   }, [])
 
   // Stable callback: set/remove one attribute of the tag at a source line.

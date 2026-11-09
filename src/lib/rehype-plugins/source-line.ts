@@ -106,5 +106,30 @@ export function rehypeSourceLine(lineMap?: number[]) {
       node.properties['data-source-line-start'] = toOriginal(startLine)
       node.properties['data-source-line-end'] = toOriginal(endLine)
     })
+
+    // data-source-nth on <youtube-embed>: how many embeds of the same video id
+    // come before this one on the same source line (or in the whole document
+    // when the embed has no line, e.g. inside a re-parsed <question> prompt).
+    // The YouTube gizmos pass it to replaceOutsideFences(…, line, nth), so the
+    // second of two identical videos — even on one line — is the one rewritten.
+    // Assumes rendered embeds and source matches appear in the same order;
+    // a twin hidden in an HTML comment would shift the count (known limit).
+    const perLine = new Map<string, number>()
+    const perDoc = new Map<string, number>()
+    visit(tree, 'element', (node: any) => {
+      if (node.tagName !== 'youtube-embed') return
+      const id = String(node.properties?.dataId ?? node.properties?.['data-id'] ?? '')
+      if (!id) return
+      const docIndex = perDoc.get(id) ?? 0
+      perDoc.set(id, docIndex + 1)
+      const line = node.properties['data-source-line-start']
+      let nth = docIndex
+      if (line != null) {
+        const key = `${line}\u0000${id}`
+        nth = perLine.get(key) ?? 0
+        perLine.set(key, nth + 1)
+      }
+      node.properties['data-source-nth'] = nth
+    })
   }
 }

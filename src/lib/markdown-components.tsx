@@ -287,8 +287,8 @@ interface CreateMarkdownComponentsOptions {
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
   onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
   onMuxVideoChange?: (src: string, newMarkdown: string, line?: number) => void  // Stable callback for the <muxvideo> options toolbar
-  onYoutubeStartTimeChange?: (id: string, startTime: number | null, line?: number) => void  // Stable callback for the <youtube> start-time gizmo
-  onYoutubeLayoutChange?: (id: string, layout: MediaLayout, shorthandTag: string, line?: number) => void  // Stable callback for the <youtube> resize/align gizmo
+  onYoutubeStartTimeChange?: (id: string, startTime: number | null, line?: number, nth?: number) => void  // Stable callback for the <youtube> start-time gizmo; line + nth = data-source-line-start / data-source-nth
+  onYoutubeLayoutChange?: (id: string, layout: MediaLayout, shorthandTag: string, line?: number, nth?: number) => void  // Stable callback for the <youtube> resize/align gizmo; line + nth as above
   onTagAttributeChange?: (tag: string, line: number, attr: string, value: string | null) => void  // Stable callback for gizmos that set one attribute
   onMoleculeChange?: (smiles: string, newMarkdown: string, line?: number) => void  // Stable callback for the <molecule> resize/align gizmos
   aiFeedbackSolution?: AiFeedbackSolutionApi  // Editor only: "Provide solution" gizmo on <ai-feedback>
@@ -746,6 +746,9 @@ export function createMarkdownComponents(
     const thumbnail = (props['data-thumbnail'] as string) || (props['dataThumbnail'] as string) || ''
     const pin = (props['data-pin'] as string) === 'true' || (props['dataPin'] as string) === 'true'
     const line = toLine(props['data-source-line-start'] ?? props['dataSourceLineStart'])
+    // Which embed of this id on that line (or page, without a line): rehypeSourceLine.
+    const nthRaw = Number(props['data-source-nth'] ?? props['dataSourceNth'])
+    const nth = Number.isInteger(nthRaw) && nthRaw >= 0 ? nthRaw : 0
     const layout: MediaLayout = {
       width: parseMediaWidth(props['data-width'] ?? props['dataWidth']) ?? 100,
       align: parseMediaAlign(props['data-align'] ?? props['dataAlign']),
@@ -766,9 +769,9 @@ export function createMarkdownComponents(
         caption={caption || undefined}
         thumbnail={resolvedThumbnail}
         pin={pin}
-        onStartTimeChange={onYoutubeStartTimeChange && id ? (t) => onYoutubeStartTimeChange(id, t, line) : undefined}
+        onStartTimeChange={onYoutubeStartTimeChange && id ? (t) => onYoutubeStartTimeChange(id, t, line, nth) : undefined}
         layout={layout}
-        onLayoutChange={onYoutubeLayoutChange && id ? (next) => onYoutubeLayoutChange(id, next, buildYoutubeTag({ id, playlist, startTime, endTime, caption, layout: next }), line) : undefined}
+        onLayoutChange={onYoutubeLayoutChange && id ? (next) => onYoutubeLayoutChange(id, next, buildYoutubeTag({ id, playlist, startTime, endTime, caption, layout: next }), line, nth) : undefined}
       />
     )
   }

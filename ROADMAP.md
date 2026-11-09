@@ -19,6 +19,8 @@ leads to: https://www.informatikgarten.ch/preview/ig/grundjahr/computer-os/betri
 
 ## Backlog
 
+**Gizmo rewrites by exact source range** (offset map instead of line + twin count; undo-friendly CodeMirror transactions). Plan and effort: `docs/internals/06-markdown-pipeline.md` → "Gizmo source rewrites".
+
 **metrics** don't work well at all - get rid of them?
 
 
