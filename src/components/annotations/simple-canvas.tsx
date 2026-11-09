@@ -41,8 +41,19 @@
  *    strokes and all points. Large drawings get slower. Could be optimized
  *    with spatial indexing (quadtree).
  *
- * 3. **No partial stroke editing**: Can only delete entire strokes, not
- *    portions. More advanced erasing would require stroke splitting.
+ * 3. **Two eraser variants** (`eraserVariant`): 'stroke' deletes whole
+ *    strokes (marked during the gesture, removed on pointer up); 'point'
+ *    splits strokes under a circular rubber (lib/annotations/eraser.ts).
+ *    The point eraser edits pathsRef live, previews via onPointErasePreview
+ *    (RAF-throttled, only when something was cut) and commits once per
+ *    gesture through onUpdate — one save/sync per gesture. pointercancel
+ *    restores the gesture-start strokes.
+ *
+ * 3b. **Lasso**: in draw mode the hold timer (shape snap) first checks for a
+ *    closed-ish loop enclosing strokes of this canvas; if so it calls
+ *    onLassoSelect and the loop is never committed. Rules + thresholds in
+ *    lib/annotations/selection.ts; the selection UI lives in
+ *    annotation-selection.tsx / annotation-layer.tsx.
  *
  * 4. **Hardware eraser detection**: Uses heuristics (button === 5, pointerType
  *    checks) that may not work on all stylus hardware.
@@ -62,7 +73,7 @@
 'use client'
 
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useState } from 'react'
-import { determineSectionFromY, liveSectionYShift, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
+import { determineSectionFromY, liveSectionYShift, measureSectionOffsetY, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
 import { HIGHLIGHTER_OPACITY_LIGHT, strokeOutline } from '@/lib/annotations/svg-path'
 import { safeRandomUUID } from '@/lib/uuid'
 import {
@@ -74,8 +85,24 @@ import {
   HOLD_SNAP_RELEASE_PX,
 } from '@/lib/annotations/shape-snap'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
+import { POINT_ERASER_RADIUS, eraserSamples, splitStrokeAtCircle, type EraserVariant } from '@/lib/annotations/eraser'
+import { findEnclosedStrokes, isLassoLoop } from '@/lib/annotations/selection'
 
 export type DrawMode = 'draw' | 'erase'
+
+/** A committed stroke as held by the canvas (and serialized on save). */
+export interface CanvasStroke {
+  id: string  // Unique identifier for per-stroke animations
+  points: Array<{ x: number; y: number; pressure: number }>
+  mode: DrawMode
+  color: string
+  width: number
+  sectionId: string
+  sectionOffsetY: number
+  avgX?: number  // Average X position of all points (for grouping)
+  avgY?: number  // Average Y position of all points (for section detection)
+  tool?: 'highlighter'
+}
 
 // Telemetry sampling rate - collect every Nth stroke
 const TELEMETRY_SAMPLE_RATE = 10
@@ -160,6 +187,15 @@ interface SimpleCanvasProps {
   svgHandlesDisplay?: boolean  // When true, skip rendering committed strokes (SVG layer shows them)
   scrollContainer?: HTMLElement | null  // For viewport-sized canvas (svgHandlesDisplay mode)
   highlighter?: boolean  // Active pen is a highlighter: strokes are stored with tool 'highlighter'
+  eraserVariant?: EraserVariant  // 'stroke' (default): whole strokes; 'point': split under a circular rubber
+  /** Point eraser only: the full stroke list while a gesture is cutting
+   *  (RAF-throttled), then null when the gesture ends. Lets the parent show
+   *  the cut without saving per pointermove. */
+  onPointErasePreview?: (strokes: CanvasStroke[] | null) => void
+  /** Lasso: a closed-ish loop + hold that encloses strokes of this canvas
+   *  calls this with their ids instead of snapping/committing the loop (see
+   *  lib/annotations/selection.ts). Omitted → hold behaves as before. */
+  onLassoSelect?: (ids: string[]) => void
 }
 
 export interface SimpleCanvasHandle {
@@ -168,22 +204,11 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onEraserMarksChange, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null, highlighter = false }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onEraserMarksChange, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null, highlighter = false, eraserVariant = 'stroke', onPointErasePreview, onLassoSelect }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
     const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
-    const pathsRef = useRef<Array<{
-      id: string  // Unique identifier for per-stroke animations
-      points: Array<{ x: number; y: number; pressure: number }>
-      mode: DrawMode
-      color: string
-      width: number
-      sectionId: string
-      sectionOffsetY: number
-      avgX?: number  // Average X position of all points (for grouping)
-      avgY?: number  // Average Y position of all points (for section detection)
-      tool?: 'highlighter'
-    }>>([])
+    const pathsRef = useRef<CanvasStroke[]>([])
     const currentPathRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
     // Straightening. `currentPathRef` always holds the raw hand path; when a
     // straighten rule fires, the drawn AND committed geometry comes from
@@ -226,6 +251,22 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     // liveSectionYShift.
     const headingPositionsRef = useRef<HeadingPosition[]>(headingPositions)
     headingPositionsRef.current = headingPositions
+    // Point-eraser gesture state. `pointEraseStartRef` holds pathsRef as it
+    // was at pointer down (restored on pointercancel); `pointEraseLastRef` is
+    // the previous eraser sample (gap filling); `pointEraseShiftRef` maps
+    // sectionId → live y-shift, computed once per gesture instead of a
+    // headingPositions scan per stroke per sample.
+    const pointEraseStartRef = useRef<CanvasStroke[] | null>(null)
+    const pointEraseLastRef = useRef<{ x: number; y: number } | null>(null)
+    const pointEraseShiftRef = useRef<Map<string, number>>(new Map())
+    const pointEraseChangedRef = useRef(false)
+    const pointErasePreviewRafRef = useRef<number | null>(null)
+    const isPointEraser = eraserVariant === 'point'
+    // Lasso: set when the hold turned the current stroke into a selection.
+    // The rest of the gesture is ignored and nothing is committed.
+    const lassoFiredRef = useRef(false)
+    const onLassoSelectRef = useRef(onLassoSelect)
+    onLassoSelectRef.current = onLassoSelect
 
     // Update eraser cursor state and apply styles directly (no React re-render)
     const updateEraserCursor = useCallback((isActive: boolean) => {
@@ -368,6 +409,62 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         })
       }
     }, [redrawCanvas])
+
+    // Point eraser: hand the parent the current strokes at most once per frame,
+    // and only after a cut actually changed something.
+    const schedulePointErasePreview = useCallback(() => {
+      if (pointErasePreviewRafRef.current !== null) return
+      pointErasePreviewRafRef.current = requestAnimationFrame(() => {
+        pointErasePreviewRafRef.current = null
+        if (!isDrawingRef.current || !pointEraseStartRef.current) return
+        if (svgHandlesDisplay) onPointErasePreview?.([...pathsRef.current])
+        else redrawCanvas()
+      })
+    }, [svgHandlesDisplay, onPointErasePreview, redrawCanvas])
+
+    const cancelPointErasePreview = useCallback(() => {
+      if (pointErasePreviewRafRef.current !== null) {
+        cancelAnimationFrame(pointErasePreviewRafRef.current)
+        pointErasePreviewRafRef.current = null
+      }
+    }, [])
+
+    // Point eraser at paper position (x, y): sample the gap since the last
+    // position, split every stroke the circle touches, replace it in place
+    // (keeps z-order). Strokes are hit where the SVG layer paints them, i.e.
+    // stored y + live section shift (see headingPositionsRef above); the cut
+    // happens in stored coords, so pieces keep the original anchor.
+    // Cost per sample: O(strokes) bbox rejects + O(points) of touched strokes.
+    const pointEraseAt = useCallback((x: number, y: number) => {
+      const samples = eraserSamples(pointEraseLastRef.current, { x, y }, POINT_ERASER_RADIUS / 2)
+      pointEraseLastRef.current = { x, y }
+      const shifts = pointEraseShiftRef.current
+      let paths = pathsRef.current
+      let changed = false
+      for (const sample of samples) {
+        let next: CanvasStroke[] | null = null
+        for (let i = 0; i < paths.length; i++) {
+          const stroke = paths[i]
+          const shift = shifts.get(stroke.sectionId) ?? 0
+          const pieces = splitStrokeAtCircle(stroke, sample.x, sample.y - shift, POINT_ERASER_RADIUS)
+          if (pieces === null) {
+            next?.push(stroke)
+            continue
+          }
+          if (!next) next = paths.slice(0, i)
+          next.push(...pieces)
+        }
+        if (next) {
+          paths = next
+          changed = true
+        }
+      }
+      if (changed) {
+        pathsRef.current = paths
+        pointEraseChangedRef.current = true
+        schedulePointErasePreview()
+      }
+    }, [schedulePointErasePreview])
 
     // Set up canvas sizing.
     // Viewport mode (svgHandlesDisplay + scrollContainer): canvas covers only the visible
@@ -607,6 +704,21 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         return
       }
 
+      if (currentModeRef.current === 'erase' && isPointEraser) {
+        pointEraseStartRef.current = pathsRef.current
+        pointEraseLastRef.current = null
+        pointEraseChangedRef.current = false
+        const shifts = new Map<string, number>()
+        for (const stroke of pathsRef.current) {
+          if (!shifts.has(stroke.sectionId)) {
+            shifts.set(stroke.sectionId, liveSectionYShift(stroke.sectionId, stroke.sectionOffsetY, headingPositionsRef.current))
+          }
+        }
+        pointEraseShiftRef.current = shifts
+      } else {
+        pointEraseStartRef.current = null
+      }
+
       // Chrome fix: Explicitly capture pointer for pen input to ensure we get all move events
       // Without this, Chrome may stop sending pointermove events after the first few
       if (isStylusInput) {
@@ -618,6 +730,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
 
       isDrawingRef.current = true
+      lassoFiredRef.current = false
       strokeStartTimeRef.current = Date.now() // Track start time for telemetry
 
       // Capture canvas snapshot for real-time drawing (draw mode only).
@@ -656,11 +769,16 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
       currentPathRef.current = [{ x, y, pressure }]
+      if (currentModeRef.current === 'erase') {
+        // Touch has no hover: show the circle from the first contact on.
+        updateEraserCursorPosition(x, y)
+        if (pointEraseStartRef.current) pointEraseAt(x, y)
+      }
       snappedPathRef.current = null
       snapSourceRef.current = null
       holdAnchorRef.current = { x, y }
       clearHoldTimer()
-    }, [mode, clearHoldTimer, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, screenToPaper, updateEraserCursor, svgHandlesDisplay])
+    }, [mode, clearHoldTimer, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, screenToPaper, updateEraserCursor, updateEraserCursorPosition, svgHandlesDisplay, isPointEraser, pointEraseAt])
 
     // Paint the in-progress stroke: restore the snapshot, then draw either the
     // raw hand path or, when a straighten rule fired, the snapped geometry.
@@ -752,6 +870,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
 
       if (!isDrawingRef.current || mode === 'view') return
+      // The loop became a selection: wait for the pointer to lift.
+      if (lassoFiredRef.current) return
 
       const canvas = canvasRef.current
       if (!canvas) return
@@ -795,6 +915,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         if (currentModeRef.current === 'erase') {
           // Update eraser cursor position (direct DOM manipulation, no re-render)
           updateEraserCursorPosition(x, y)
+
+          if (pointEraseStartRef.current) {
+            pointEraseAt(x, y)
+            return
+          }
 
           // Check for stroke collisions and only redraw when marking NEW strokes.
           // pathsRef holds stored paper coords; the SVG layer may have carried the
@@ -871,6 +996,24 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
               holdTimerRef.current = setTimeout(() => {
                 holdTimerRef.current = null
                 if (!isDrawingRef.current) return
+                // Lasso first: a closed-ish loop around existing strokes
+                // selects them. Encloses nothing → shape snap as before.
+                const lassoCb = onLassoSelectRef.current
+                if (lassoCb && isLassoLoop(currentPathRef.current)) {
+                  const hp = headingPositionsRef.current
+                  const ids = findEnclosedStrokes(pathsRef.current, currentPathRef.current, (st) =>
+                    liveSectionYShift(st.sectionId, st.sectionOffsetY, hp),
+                  )
+                  if (ids.length > 0) {
+                    lassoFiredRef.current = true
+                    currentPathRef.current = []
+                    snappedPathRef.current = null
+                    snapSourceRef.current = null
+                    redrawInProgressStroke() // clears the loop off the canvas
+                    lassoCb(ids)
+                    return
+                  }
+                }
                 const shape = recognizeShape(currentPathRef.current)
                 if (!shape) return
                 snappedPathRef.current = shape.points
@@ -886,7 +1029,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (currentModeRef.current !== 'erase') {
         redrawInProgressStroke()
       }
-    }, [mode, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, redrawInProgressStroke, clearHoldTimer, svgHandlesDisplay])
+    }, [mode, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, redrawInProgressStroke, clearHoldTimer, svgHandlesDisplay, pointEraseAt])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking
@@ -976,6 +1119,15 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       isDrawingRef.current = false
 
+      if (lassoFiredRef.current) {
+        lassoFiredRef.current = false
+        clearHoldTimer()
+        holdAnchorRef.current = null
+        currentPathRef.current = []
+        snapshotCanvasRef.current = null
+        return
+      }
+
       // A straightened stroke commits as its snapped geometry — from here on it
       // is an ordinary stroke: same storage, eraser, undo, sync, section anchor.
       clearHoldTimer()
@@ -985,6 +1137,25 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         snappedPathRef.current = null
       }
       snapSourceRef.current = null
+
+      // Point eraser: commit the whole gesture as ONE update (originals out,
+      // pieces in), then drop the preview — both state updates land in the
+      // same React batch, so the SVG layer switches without a flicker.
+      if (currentModeRef.current === 'erase' && pointEraseStartRef.current) {
+        cancelPointErasePreview()
+        pointEraseStartRef.current = null
+        pointEraseLastRef.current = null
+        currentPathRef.current = []
+        if (pointEraseChangedRef.current) {
+          pointEraseChangedRef.current = false
+          onUpdate?.(JSON.stringify(pathsRef.current))
+        }
+        onPointErasePreview?.(null)
+        hideEraserCursor()
+        updateEraserCursor(false)
+        redrawCanvas()
+        return
+      }
 
       // If we just finished an eraser stroke, delete all marked strokes
       if (currentModeRef.current === 'erase') {
@@ -1058,20 +1229,10 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         //      screen position at heavy zoom.
         //   3. Live-measure rather than trust the debounced headingPositions
         //      cache, which can be stale at draw-commit time.
-        let sectionOffsetY = headingPositions.find(h => h.sectionId === sectionId)?.offsetY ?? 0
-        if (typeof document !== 'undefined') {
-          const sectionEl = document.querySelector(`[data-section-id="${CSS.escape(sectionId)}"]`)
-          const paperEl = document.getElementById('paper')
-          if (sectionEl instanceof HTMLElement && paperEl) {
-            const paperRect = paperEl.getBoundingClientRect()
-            const sectionRect = sectionEl.getBoundingClientRect()
-            const liveScale = paperRect.width / paperEl.offsetWidth || 1
-            const canvas = canvasRef.current
-            const wrapperEl = (canvas?.offsetParent ?? paperEl) as HTMLElement
-            const wrapperRect = wrapperEl.getBoundingClientRect()
-            sectionOffsetY = (sectionRect.top - wrapperRect.top) / liveScale
-          }
-        }
+        // (implemented in measureSectionOffsetY, shared with selection moves)
+        const sectionOffsetY =
+          measureSectionOffsetY(sectionId, (canvasRef.current?.offsetParent as HTMLElement | null) ?? null) ??
+          headingPositions.find(h => h.sectionId === sectionId)?.offsetY ?? 0
 
         // Telemetry: sample every Nth stroke
         telemetryStrokeCountRef.current++
@@ -1121,7 +1282,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const data = JSON.stringify(pathsRef.current)
         onUpdate?.(data)
       }
-    }, [mode, strokeColor, strokeWidth, highlighter, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange, clearHoldTimer])
+    }, [mode, strokeColor, strokeWidth, highlighter, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange, clearHoldTimer, cancelPointErasePreview, onPointErasePreview])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Clean up when pointer is cancelled
@@ -1143,7 +1304,21 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         currentPathRef.current = []
         snapshotCanvasRef.current = null
       }
-    }, [])
+      lassoFiredRef.current = false
+
+      // A cancelled point-erase gesture (e.g. the browser took over for a
+      // scroll) is undone: nothing was saved yet, so restoring is enough.
+      if (pointEraseStartRef.current) {
+        cancelPointErasePreview()
+        pathsRef.current = pointEraseStartRef.current
+        pointEraseStartRef.current = null
+        pointEraseLastRef.current = null
+        pointEraseChangedRef.current = false
+        onPointErasePreview?.(null)
+        hideEraserCursor()
+        redrawCanvas()
+      }
+    }, [cancelPointErasePreview, onPointErasePreview, hideEraserCursor, redrawCanvas])
 
     // Expose methods
     useImperativeHandle(ref, () => {
@@ -1178,6 +1353,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         if (eraserRedrawRafRef.current !== null) {
           cancelAnimationFrame(eraserRedrawRafRef.current)
         }
+        if (pointErasePreviewRafRef.current !== null) {
+          cancelAnimationFrame(pointErasePreviewRafRef.current)
+        }
         if (drawRafRef.current !== null) {
           // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: drawRafRef holds the live RAF id, not a DOM node; reading it at cleanup time is correct.
           cancelAnimationFrame(drawRafRef.current)
@@ -1211,18 +1389,23 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
             pointerEvents: (mode !== 'view' || stylusModeActive) ? 'auto' : 'none'
           }}
         />
-        {/* Eraser cursor element - positioned via direct DOM manipulation */}
+        {/* Eraser cursor element - positioned via direct DOM manipulation.
+            Sized in paper px, so it scales with zoom like the strokes. The
+            point eraser's circle is exactly its cut radius: ink ends at the
+            ring (see splitStrokeAtCircle). */}
         <div
           ref={eraserCursorRef}
           className="eraser-cursor"
+          data-eraser-variant={eraserVariant}
           style={{
             position: 'absolute',
             display: 'none',
-            width: '20px',
-            height: '20px',
+            boxSizing: 'border-box',
+            width: isPointEraser ? `${POINT_ERASER_RADIUS * 2}px` : '20px',
+            height: isPointEraser ? `${POINT_ERASER_RADIUS * 2}px` : '20px',
             borderRadius: '50%',
-            backgroundColor: 'rgba(136, 136, 136, 0.8)',
-            border: '2px solid rgba(102, 102, 102, 0.8)',
+            backgroundColor: isPointEraser ? 'rgba(255, 255, 255, 0.5)' : 'rgba(136, 136, 136, 0.8)',
+            border: isPointEraser ? '1.5px solid rgba(102, 102, 102, 0.9)' : '2px solid rgba(102, 102, 102, 0.8)',
             pointerEvents: 'none',
             transform: 'translate(-50%, -50%)',
             zIndex: 1000

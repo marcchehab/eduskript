@@ -17,9 +17,11 @@
  *   distractor-only answers and answers without `match` do not shift the index.
  *   Like choice indices, reordering rows after students answered reassigns
  *   stored answers to other rows.
- * - The targets offered in every row's dropdown are all distinct `match` values
- *   of the question (rows + distractors), trimmed, in natural sort order
- *   ("Parabel 2" < "Parabel 10"), so the order never reveals the key.
+ * - The targets are all distinct `match` values of the question (rows +
+ *   distractors), trimmed. `matchTargets` returns them in natural sort order
+ *   ("Parabel 2" < "Parabel 10") as a canonical list; the widget displays them
+ *   in the column shuffled by `shuffleTargets` (seeded, stable across reloads),
+ *   so the order never reveals the key.
  * - Stored answer: `QuizData.matchAnswer = { "<row index>": "<target>" }`.
  * - Score: points × (correct rows / rows), rounded to 0.1 like the other
  *   auto-checks (scoreFromRatio).
@@ -46,6 +48,43 @@ export function matchTargets(matches: Array<string | undefined | null>): string[
     if (t) set.add(t)
   }
   return [...set].sort(naturalCompare)
+}
+
+// FNV-1a 32-bit string hash → PRNG seed.
+function hashSeed(seed: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return h >>> 0
+}
+
+// mulberry32: small seeded PRNG, uniform enough for shuffling a short list.
+function mulberry32(a: number): () => number {
+  return () => {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/**
+ * Deterministic Fisher–Yates shuffle of the targets (O(n)). Same seed + same
+ * input list → same order, so a reload shows the targets where they were. The
+ * widget seeds with question id + user id (see quiz.tsx). Input order matters:
+ * pass the canonical `matchTargets` list. The result may coincide with the
+ * input order (no derangement is forced).
+ */
+export function shuffleTargets(targets: string[], seed: string): string[] {
+  const out = [...targets]
+  const rand = mulberry32(hashSeed(seed))
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
 }
 
 export interface MatchResult {

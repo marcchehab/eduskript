@@ -118,7 +118,7 @@ Ordnen Sie jeder Funktion die passende Parabel zu.
 <answer match="Parabel 4"></answer>
 </question>
 
-Jedes `<answer match="…">` mit Inhalt ist eine Zeile. Die Schüler wählen für jede Zeile ein Ziel aus einer Liste, die alle `match`-Werte der Frage in natürlicher Reihenfolge enthält («Parabel 2» vor «Parabel 10») – die Reihenfolge verrät also nichts. Ein Ziel darf zu mehreren Zeilen gehören. Ein leeres `<answer match="…"></answer>` fügt nur ein Ablenkungsziel hinzu. Bewertet wird mit Teilpunkten: `points` × richtige Zeilen / Zeilen. Nach dem Prüfen ist jede Zeile markiert, bei falschen Zeilen steht das richtige Ziel, und das `feedback` einer Antwort erscheint unter ihrer Zeile.
+Jedes `<answer match="…">` mit Inhalt ist eine Zeile in der linken Spalte. Die rechte Spalte enthält alle `match`-Werte der Frage in gemischter Reihenfolge (für einen Schüler bei jedem Besuch gleich, zwischen Schülern verschieden) – die Reihenfolge verrät also nichts. Die Schüler verbinden jede Zeile mit einem Ziel, indem sie eine Linie von der Zeile zum Ziel ziehen oder zuerst die Zeile und dann das Ziel antippen; mit der Tastatur: Enter auf einer Zeile, Pfeiltasten zum Ziel, Enter. Eine Zeile ins Leere ziehen oder ihr × anklicken entfernt die Linie. Ein Ziel darf zu mehreren Zeilen gehören. Ein leeres `<answer match="…"></answer>` fügt nur ein Ablenkungsziel hinzu. Bewertet wird mit Teilpunkten: `points` × richtige Zeilen / Zeilen. Nach dem Prüfen ist jede Zeile markiert, bei falschen Zeilen steht das richtige Ziel, und das `feedback` einer Antwort erscheint unter ihrer Zeile.
 
 ### Question-Attribute
 

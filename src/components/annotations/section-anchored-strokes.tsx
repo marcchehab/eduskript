@@ -78,6 +78,8 @@ interface SectionAnchoredStrokesProps {
   /** Handles are only interactive while no drawing tool is active — otherwise
    *  they would swallow the first stroke of every new drawing. */
   lineEditEnabled?: boolean
+  /** Lasso-selected strokes (active layer): drawn with a highlight halo. */
+  selectedIds?: Set<string>
 }
 
 interface PathDatum {
@@ -106,7 +108,22 @@ interface SectionBounds {
 
 const isRenderable = (s: AnimatedStroke) => s.mode !== 'erase' && s.points.length >= 2
 
+// Outline per stroke OBJECT. Stroke objects are never mutated (edits replace
+// them), so a cached datum stays valid. Matters for the point-eraser preview:
+// it re-renders once per frame with mostly the same objects, and only the new
+// pieces need perfect-freehand. Entries go away with their stroke objects.
+const pathCache = new WeakMap<AnimatedStroke, PathDatum>()
+
 function buildPath(stroke: AnimatedStroke): PathDatum {
+  let datum = pathCache.get(stroke)
+  if (!datum) {
+    datum = computePath(stroke)
+    pathCache.set(stroke, datum)
+  }
+  return datum
+}
+
+function computePath(stroke: AnimatedStroke): PathDatum {
   const outline = strokeOutline(stroke.points, stroke.width, stroke.tool)
   let minY = Infinity
   let maxY = -Infinity
@@ -142,6 +159,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   showBadge = true,
   onLineEdit,
   lineEditEnabled = false,
+  selectedIds,
 }: SectionAnchoredStrokesProps) {
   // Live drag preview: the dragged line is hidden in the committed SVG and drawn
   // by the handle overlay instead, so there is exactly one line on screen.
@@ -387,6 +405,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
               opacity={opacity}
               zIndex={zIndex}
               hiddenId={preview?.id}
+              selectedIds={selectedIds}
             />
             <SectionStrokeSvg
               paths={paths}
@@ -401,6 +420,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
               opacity={opacity}
               zIndex={zIndex}
               hiddenId={preview?.id}
+              selectedIds={selectedIds}
             />
             {lineEditEnabled && onLineEdit && (
               <SectionLineHandles
@@ -670,6 +690,7 @@ function SectionStrokeSvg({
   opacity,
   zIndex,
   hiddenId,
+  selectedIds,
 }: {
   /** Render only the highlighter strokes (else only the pen strokes). */
   highlighter?: boolean
@@ -690,6 +711,8 @@ function SectionStrokeSvg({
   zIndex?: number
   /** Stroke currently being dragged — drawn by the handle overlay instead. */
   hiddenId?: string
+  /** Lasso-selected strokes — get the `.annotation-selected` halo (globals.css). */
+  selectedIds?: Set<string>
 }) {
   // Strokes drawn at different sectionOffsetY values (e.g. user drew, then layout
   // shifted, then drew again before saving) need their own translate so each lands
@@ -757,6 +780,7 @@ function SectionStrokeSvg({
               transform={dy ? `translate(0 ${dy})` : undefined}
               d={p.d}
               fill={p.color}
+              className={selectedIds?.has(p.id) ? 'annotation-selected' : undefined}
               opacity={p.id === hiddenId ? 0 : markedForDeletion?.has(p.id) ? 0.3 : 1}
             />
             )

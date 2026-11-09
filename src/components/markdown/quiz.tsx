@@ -29,7 +29,9 @@ import { TextAnswerHistory } from './text-answer-history'
 import { withSite } from '@/lib/site-scope-client'
 import { usePrintState } from '@/lib/print/print-mode'
 import { useRegisterSolution } from '@/lib/print/solutions'
-import { matchResult, matchTargets, answeredRowCount, type MatchAnswer } from '@/lib/match-question'
+import { matchResult, matchTargets, answeredRowCount, shuffleTargets, type MatchAnswer } from '@/lib/match-question'
+import { MatchBoard } from './match-board'
+import { useSession } from 'next-auth/react'
 
 type QuestionType = 'single' | 'multiple' | 'text' | 'number' | 'range' | 'match'
 
@@ -201,10 +203,11 @@ interface MatchRowInfo {
 }
 
 /**
- * Rows and dropdown targets of a type="match" question. Rows: `<answer>`s with
- * a non-empty `match` and content, densely indexed in authored order (the
- * stored `matchAnswer` keys). Targets: every distinct `match` value incl.
- * distractor-only answers, natural-sorted (lib/match-question.ts).
+ * Rows and targets of a type="match" question. Rows: `<answer>`s with a
+ * non-empty `match` and content, densely indexed in authored order (the stored
+ * `matchAnswer` keys). Targets: every distinct `match` value incl.
+ * distractor-only answers, natural-sorted as the canonical list; the board
+ * displays them shuffled (shuffleTargets, lib/match-question.ts).
  */
 function extractMatchInfo(children: ReactNode): { rows: MatchRowInfo[]; targets: string[] } {
   const rows: MatchRowInfo[] = []
@@ -262,6 +265,7 @@ function QuestionInner({
   componentId,
   reviewMode = false,
   onAutosaveCheckpoint,
+  shuffleSeed,
   sourceLineStart,
   sourceLineEnd,
 }: Omit<QuestionProps, 'id' | 'pageId'> & {
@@ -276,6 +280,8 @@ function QuestionInner({
   /** Called after a text answer autosaves so the parent can snapshot it as a
    *  checkpoint (exam answer-history timeline). Text questions only. */
   onAutosaveCheckpoint?: (data: QuizData) => void
+  /** type="match": question part of the target-shuffle seed (`quiz-<id>`). */
+  shuffleSeed?: string
 }) {
   const isExamPage = useIsExamPage()
   // Feedback mode. Review/grade always reveals; surveys and exam attempts never
@@ -460,6 +466,17 @@ function QuestionInner({
       ? matchResult(matchAnswer, matchRows.map((r) => r.match))
       : null
   const matchAnswered = type === 'match' ? answeredRowCount(matchAnswer) : 0
+  // Display order of the targets: shuffled, seeded with question + user so it
+  // is stable across reloads but differs between students. In grade mode the
+  // graded student's id, so the teacher sees that student's order. While the
+  // session loads the user part is unknown; the board stays invisible then
+  // instead of visibly reordering once it arrives.
+  const { review: gradeReview, studentId: reviewStudentId } = useComponentReview(componentId ?? '')
+  const { data: session, status: sessionStatus } = useSession()
+  const shuffleUser = reviewStudentId ?? session?.user?.id ?? ''
+  const shownTargets = matchInfo
+    ? shuffleTargets(matchInfo.targets, `${shuffleSeed ?? ''}:${shuffleUser}`)
+    : []
 
   const isEmptyAnswer =
     ((type === 'single' || type === 'multiple') && selected.length === 0) ||
@@ -559,12 +576,15 @@ function QuestionInner({
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const commitAutosave = () => {
-    if (reviewMode || locked || isEmptyAnswer) return
-    const data = buildQuizData(true)
+    // Match: removing the last connection must persist too, or the old
+    // connections come back on reload. Saved as an unsubmitted empty answer.
+    const clearedMatch = type === 'match' && isEmptyAnswer && lastSavedSigRef.current !== null
+    if (reviewMode || locked || (isEmptyAnswer && !clearedMatch)) return
+    const data = buildQuizData(!clearedMatch)
     const sig = JSON.stringify(data)
     if (sig === lastSavedSigRef.current) return
     lastSavedSigRef.current = sig
-    if (!isSubmitted) setIsSubmitted(true)
+    if (!isSubmitted && !clearedMatch) setIsSubmitted(true)
     void updateData(data, { immediate: true })
     // Snapshot text answers (exam pages only) so the teacher gets an answer
     // history. Deduped by the signature check above. Survey passes no callback.
@@ -596,7 +616,6 @@ function QuestionInner({
   // score below is no longer the result. Keep the box (the diff is still useful)
   // but say it was overridden instead of showing its stale points; the grade
   // badge underneath shows the teacher's points.
-  const { review: gradeReview } = useComponentReview(componentId ?? '')
   const autoCheckOverridden = mode === 'review' && gradeReview?.overridden === true
   // "Partially correct" only when the shown percentage is above 0 — a result
   // that rounds to 0% reads "Incorrect".
@@ -1120,68 +1139,52 @@ function QuestionInner({
         </div>
       )}
 
-      {/* Matching question: one row per <answer match> with content — the
-          answer's rendered label, then a dropdown of all targets. Stacked
-          (label above select) below the sm breakpoint, side by side above. */}
+      {/* Matching question: rows (left) connected to shuffled targets (right)
+          on a two-column board with drawn lines (match-board.tsx). Feedback:
+          rows/lines coloured, on full reveal the key as a dashed line plus
+          "Correct match" text. */}
       {type === 'match' && (
         <div className="space-y-3">
           {prompt && <div id={`${optionIdBase}-prompt`} className={PROMPT_CLASS}>{prompt}</div>}
-          <div role="group" aria-labelledby={prompt ? `${optionIdBase}-prompt` : undefined} className="space-y-2">
-            {matchRows.map((row, index) => {
-              const value = shownMatch[String(index)] ?? ''
-              const rowResult = showResult && matchRes ? matchRes.rows[index] : undefined
-              const labelId = `${optionIdBase}-row-${index}`
-              return (
-                <div
-                  key={index}
-                  data-match-row={index}
-                  className={cn(
-                    'rounded-lg border p-3',
-                    rowResult === true && 'border-green-600 dark:border-green-500 bg-green-500/10',
-                    rowResult === false && 'border-red-600 dark:border-red-500 bg-red-500/10',
-                    // A blank row counts as wrong once the key is out (not in instant
-                    // mode, where a half-filled answer is still being worked on).
-                    revealed && mode !== 'instant' && rowResult === null && 'border-red-600/50 dark:border-red-500/50'
-                  )}
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-                    <div id={labelId} className="min-w-0 flex-1">{row.label}</div>
-                    <div className="flex items-center gap-2 sm:shrink-0">
-                      <select
-                        aria-labelledby={labelId}
-                        value={value}
-                        onChange={(e) => handleMatchChange(index, e.target.value)}
-                        disabled={locked}
-                        className={cn(
-                          'h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm sm:w-auto sm:min-w-40',
-                          lockedLook && 'opacity-70 cursor-not-allowed'
-                        )}
-                      >
-                        <option value="">{blank ? '' : 'Choose…'}</option>
-                        {(matchInfo?.targets ?? []).map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                      {rowResult === true && <Check className="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" aria-label="Correct" />}
-                      {rowResult === false && <X className="w-4 h-4 shrink-0 text-red-600 dark:text-red-400" aria-label="Incorrect" />}
-                    </div>
-                  </div>
-                  {/* The key only on full reveal (attempts used up / instant /
-                      review); a partial result just marks the rows. Instant
-                      mode reveals wrong rows only, not the still-blank ones. */}
-                  {revealed && matchRes && (rowResult === false || (rowResult === null && mode !== 'instant')) && (
-                    <div className="mt-2 text-sm">
-                      Correct match: <span className="font-semibold">{row.match}</span>
-                    </div>
-                  )}
-                  {/* Row feedback: once that row was answered and checked, or
-                      on full reveal. */}
-                  {showResult && matchRes && row.feedback && (rowResult != null || revealed) && (
-                    <div className="mt-2 p-2 rounded text-sm bg-muted/50">{row.feedback}</div>
-                  )}
-                </div>
-              )
-            })}
+          <div className={cn(sessionStatus === 'loading' && 'invisible')}>
+            <MatchBoard
+              idBase={optionIdBase}
+              labelledBy={prompt ? `${optionIdBase}-prompt` : undefined}
+              targets={shownTargets}
+              answer={shownMatch}
+              disabled={locked || blank}
+              onConnect={handleMatchChange}
+              onDisconnect={(row) => handleMatchChange(row, '')}
+              rows={matchRows.map((row, index) => {
+                const rowResult = showResult && matchRes ? matchRes.rows[index] : undefined
+                // A blank row counts as wrong once the key is out (not in
+                // instant mode, where a half-filled answer is still being
+                // worked on). Partial results only mark answered rows.
+                const keyShown =
+                  revealed && !!matchRes && (rowResult === false || (rowResult === null && mode !== 'instant'))
+                const result =
+                  rowResult === null ? (revealed && mode !== 'instant' ? null : undefined) : rowResult
+                return {
+                  label: row.label,
+                  result,
+                  keyTarget: keyShown ? row.match : undefined,
+                  extra: (
+                    <>
+                      {keyShown && (
+                        <div className="mt-1.5 text-xs sm:text-sm">
+                          Correct match: <span className="font-semibold">{row.match}</span>
+                        </div>
+                      )}
+                      {/* Row feedback: once that row was answered and checked,
+                          or on full reveal. */}
+                      {showResult && matchRes && row.feedback && (rowResult != null || revealed) && (
+                        <div className="mt-1.5 rounded bg-muted/50 p-1.5 text-xs sm:text-sm">{row.feedback}</div>
+                      )}
+                    </>
+                  ),
+                }
+              })}
+            />
           </div>
           {showResult && matchRes && (
             <div
@@ -1227,7 +1230,7 @@ function QuestionInner({
                 : type === 'text'
                   ? 'Type an answer first.'
                   : type === 'match'
-                    ? 'Choose a match for every row first.'
+                    ? 'Connect every row first.'
                     : 'Set a value first.'}
             </span>
           )}
@@ -1414,6 +1417,7 @@ function SurveyQuestion({
         initialData={data}
         updateData={updateDataAndNotify}
         surveyMode={true}
+        shuffleSeed={componentId}
       >
         {children}
       </QuestionInner>
@@ -1630,6 +1634,7 @@ function SyncedQuestion({
         updateData={updateDataAndGate}
         componentId={componentId}
         reviewMode={reviewActive}
+        shuffleSeed={componentId}
         onAutosaveCheckpoint={(qd) => {
           void postCheckpoint({ pageId, componentId, kind: 'autosave', payload: qd })
         }}

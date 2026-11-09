@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon, Plus } from 'lucide-react'
+import { Pen, Eraser, Circle, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon, Plus } from 'lucide-react'
 import { type PenConfig, type PenType, hueToColor, colorToHue, TRACK_MIN, MIN_PENS, MAX_PENS, penSizeRange } from '@/lib/annotations/pens'
 import type { SpacerPattern } from '@/types/spacer'
+import type { EraserVariant } from '@/lib/annotations/eraser'
 import { cn } from '@/lib/utils'
 import { useLayout } from '@/contexts/layout-context'
 import { useIsExamPage } from '@/contexts/exam-page-context'
@@ -185,7 +186,16 @@ interface AnnotationToolbarProps {
   stickyNotePlacementMode?: boolean
   onStickyNotePlacementToggle?: () => void
   stickyNoteCount?: number
+  // Eraser variant: 'stroke' deletes whole strokes, 'point' rubs out only what
+  // it touches. Picked in the eraser's hover / long-press popover.
+  eraserVariant?: EraserVariant
+  onEraserVariantChange?: (variant: EraserVariant) => void
 }
+
+const ERASER_VARIANTS: Array<{ value: EraserVariant; label: string; hint: string }> = [
+  { value: 'stroke', label: 'Stroke eraser', hint: 'Removes whole strokes' },
+  { value: 'point', label: 'Point eraser', hint: 'Removes only what it touches' },
+]
 
 export function AnnotationToolbar({
   mode,
@@ -246,6 +256,8 @@ export function AnnotationToolbar({
   stickyNotePlacementMode = false,
   onStickyNotePlacementToggle,
   stickyNoteCount = 0,
+  eraserVariant = 'stroke',
+  onEraserVariantChange,
 }: AnnotationToolbarProps) {
   // Get layout context for centering toolbar on page content (not viewport)
   const { sidebarWidth } = useLayout()
@@ -319,6 +331,13 @@ export function AnnotationToolbar({
   const longPressStartPos = useRef<{ x: number; y: number } | null>(null)
 
   const [showDeleteControls, setShowDeleteControls] = useState(false)
+  // Eraser variant popover: hover (mouse) / long-press (touch, pen), same
+  // timings as the pen popover.
+  const [showEraserControls, setShowEraserControls] = useState(false)
+  const eraserHoverTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const eraserHideTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const eraserLongPressTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const eraserLongPressStartPos = useRef<{ x: number; y: number } | null>(null)
   const deleteHoverTimerRef = useRef<NodeJS.Timeout | null>(null)
   const deleteHideTimerRef = useRef<NodeJS.Timeout | null>(null)
   const deleteLongPressTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -357,6 +376,7 @@ export function AnnotationToolbar({
         if (!isOnToolbar) {
           setShowPenControls(null)
           setShowDeleteControls(false)
+          setShowEraserControls(false)
         }
         return
       }
@@ -372,11 +392,14 @@ export function AnnotationToolbar({
       if (showDeleteControls) {
         setShowDeleteControls(false)
       }
+      if (showEraserControls) {
+        setShowEraserControls(false)
+      }
     }
 
     document.addEventListener('pointerdown', handlePointerDown, true)
     return () => document.removeEventListener('pointerdown', handlePointerDown, true)
-  }, [showPenControls, showDeleteControls])
+  }, [showPenControls, showDeleteControls, showEraserControls])
 
   const handlePenMouseEnter = (id: string) => {
     // Clear any pending hide timer
@@ -464,7 +487,67 @@ export function AnnotationToolbar({
   }
 
   const handleEraserClick = () => {
+    if (eraserHoverTimerRef.current) {
+      clearTimeout(eraserHoverTimerRef.current)
+      eraserHoverTimerRef.current = null
+    }
+    setShowEraserControls(false)
     onModeChange(mode === 'erase' ? 'view' : 'erase')
+  }
+
+  const handleEraserMouseEnter = () => {
+    if (eraserHideTimerRef.current) {
+      clearTimeout(eraserHideTimerRef.current)
+      eraserHideTimerRef.current = null
+    }
+    eraserHoverTimerRef.current = setTimeout(() => setShowEraserControls(true), 300)
+  }
+
+  const handleEraserMouseLeave = () => {
+    if (eraserHoverTimerRef.current) {
+      clearTimeout(eraserHoverTimerRef.current)
+      eraserHoverTimerRef.current = null
+    }
+    if (showEraserControls) {
+      eraserHideTimerRef.current = setTimeout(() => setShowEraserControls(false), 200)
+    }
+  }
+
+  const handleEraserPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse') return
+    e.preventDefault()
+    eraserLongPressStartPos.current = { x: e.clientX, y: e.clientY }
+    eraserLongPressTimerRef.current = setTimeout(() => {
+      setShowEraserControls(true)
+      eraserLongPressTimerRef.current = null
+    }, 500)
+  }
+
+  const handleEraserPointerMove = (e: React.PointerEvent) => {
+    if (!eraserLongPressStartPos.current || !eraserLongPressTimerRef.current) return
+    const dx = e.clientX - eraserLongPressStartPos.current.x
+    const dy = e.clientY - eraserLongPressStartPos.current.y
+    if (Math.sqrt(dx * dx + dy * dy) > 10) {
+      clearTimeout(eraserLongPressTimerRef.current)
+      eraserLongPressTimerRef.current = null
+      eraserLongPressStartPos.current = null
+    }
+  }
+
+  const handleEraserPointerUp = () => {
+    if (eraserLongPressTimerRef.current) {
+      clearTimeout(eraserLongPressTimerRef.current)
+      eraserLongPressTimerRef.current = null
+    }
+    eraserLongPressStartPos.current = null
+  }
+
+  // Picking a variant also activates the eraser (like picking a pen colour
+  // activates that pen).
+  const handleEraserVariantSelect = (variant: EraserVariant) => {
+    onEraserVariantChange?.(variant)
+    setShowEraserControls(false)
+    if (mode !== 'erase') onModeChange('erase')
   }
 
   const handleDeleteMouseEnter = () => {
@@ -859,19 +942,68 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
             </div>
           ))}
 
-          {/* Eraser Tool */}
-          <button
-            onClick={handleEraserClick}
-            className={cn(
-              'p-2 rounded-md transition-colors',
-              mode === 'erase'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+          {/* Eraser Tool — hover / long-press opens the variant popover */}
+          <div className="relative">
+            <button
+              onClick={handleEraserClick}
+              onMouseEnter={handleEraserMouseEnter}
+              onMouseLeave={handleEraserMouseLeave}
+              onPointerDown={handleEraserPointerDown}
+              onPointerMove={handleEraserPointerMove}
+              onPointerUp={handleEraserPointerUp}
+              onPointerCancel={handleEraserPointerUp}
+              className={cn(
+                'p-2 rounded-md transition-colors relative',
+                mode === 'erase'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              )}
+              title={eraserVariant === 'point' ? 'Point eraser' : 'Stroke eraser'}
+              aria-label={eraserVariant === 'point' ? 'Point eraser' : 'Stroke eraser'}
+              data-eraser-variant={eraserVariant}
+            >
+              <Eraser className="w-4 h-4" />
+              {/* Point eraser marker: a small ring, like its cursor */}
+              {eraserVariant === 'point' && (
+                <Circle className="absolute bottom-0.5 right-0.5 w-2 h-2" strokeWidth={3} aria-hidden="true" />
+              )}
+            </button>
+
+            {showEraserControls && (
+              <div
+                className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 flex flex-col gap-1 rounded-lg border border-border bg-background p-1 shadow-lg"
+                role="menu"
+                aria-label="Eraser type"
+                onMouseEnter={() => {
+                  if (eraserHoverTimerRef.current) clearTimeout(eraserHoverTimerRef.current)
+                  if (eraserHideTimerRef.current) {
+                    clearTimeout(eraserHideTimerRef.current)
+                    eraserHideTimerRef.current = null
+                  }
+                }}
+                onMouseLeave={() => setShowEraserControls(false)}
+              >
+                {ERASER_VARIANTS.map(({ value, label, hint }) => (
+                  <button
+                    key={value}
+                    role="menuitemradio"
+                    aria-checked={eraserVariant === value}
+                    onClick={() => handleEraserVariantSelect(value)}
+                    title={hint}
+                    className={cn(
+                      'flex items-center gap-2 whitespace-nowrap rounded px-2 py-1 text-sm transition-colors',
+                      eraserVariant === value
+                        ? 'bg-accent text-foreground font-medium'
+                        : 'text-foreground hover:bg-accent'
+                    )}
+                  >
+                    {value === 'point' ? <Circle className="w-4 h-4" /> : <Eraser className="w-4 h-4" />}
+                    {label}
+                  </button>
+                ))}
+              </div>
             )}
-            title="Erase"
-          >
-            <Eraser className="w-4 h-4" />
-          </button>
+          </div>
 
           {/* Add pen / highlighter */}
           {pens.length < MAX_PENS && (

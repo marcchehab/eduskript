@@ -167,3 +167,25 @@ export function measureHeadingPositions(
   }
   return positions
 }
+
+/**
+ * Live paper-y of a section's top, measured against `originEl` (the element
+ * whose top is paper-y 0 for strokes — the canvas wrapper, i.e. the canvas's
+ * offsetParent). Returns null when the section or #paper is not in the DOM.
+ *
+ * Measured, not taken from the debounced headingPositions cache, which can be
+ * stale at commit time. Scale = paperRect.width / offsetWidth (width-based:
+ * offsetHeight is integer-rounded); origin = the wrapper's own rect, not
+ * paper top + border × scale (border rendering is device-pixel rounded).
+ * Used by the draw commit (simple-canvas.tsx) and selection moves
+ * (annotation-layer.tsx) so both anchor identically.
+ */
+export function measureSectionOffsetY(sectionId: string, originEl: HTMLElement | null): number | null {
+  if (typeof document === 'undefined') return null
+  const sectionEl = document.querySelector(`[data-section-id="${CSS.escape(sectionId)}"]`)
+  const paperEl = document.getElementById('paper')
+  if (!(sectionEl instanceof HTMLElement) || !paperEl) return null
+  const liveScale = paperEl.getBoundingClientRect().width / paperEl.offsetWidth || 1
+  const origin = originEl ?? paperEl
+  return (sectionEl.getBoundingClientRect().top - origin.getBoundingClientRect().top) / liveScale
+}

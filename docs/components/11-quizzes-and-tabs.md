@@ -118,7 +118,7 @@ Match each function to its parabola.
 <answer match="Parabola 4"></answer>
 </question>
 
-Each `<answer match="…">` with content is one row. The student picks a target for every row from a dropdown that lists all `match` values of the question in natural order ("Parabola 2" before "Parabola 10"), so the order gives nothing away. A target may belong to several rows. An empty `<answer match="…"></answer>` only adds a distractor target. Scoring gives partial credit: `points` × correct rows / rows. After a check, every row is marked, wrong rows show the correct target, and an answer's `feedback` appears under its row.
+Each `<answer match="…">` with content is one row in the left column. The right column lists every `match` value of the question in a shuffled order (the same for a student on every visit, different between students), so the order gives nothing away. Students connect each row to a target by dragging a line from the row to the target, or by tapping the row and then the target; with the keyboard: Enter on a row, arrow keys to a target, Enter. Dragging a row into empty space or clicking its × removes the line. A target may belong to several rows. An empty `<answer match="…"></answer>` only adds a distractor target. Scoring gives partial credit: `points` × correct rows / rows. After a check, every row is marked, wrong rows show the correct target, and an answer's `feedback` appears under its row.
 
 ### Question attributes
 

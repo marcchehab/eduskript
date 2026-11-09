@@ -6,6 +6,7 @@ import {
   matchTargets,
   parseMatchQuestionMarkdown,
   sanitizeMatchAnswer,
+  shuffleTargets,
 } from '@/lib/match-question'
 import { parseGradableComponents } from '@/lib/scoring/components'
 import { scoreFromRatio } from '@/lib/output-comparison'
@@ -110,5 +111,27 @@ describe('parseGradableComponents with type="match"', () => {
     expect(match.matchRows).toHaveLength(3)
     expect(single.componentId).toBe('quiz-q2')
     expect(single.matchRows).toBeUndefined()
+  })
+})
+
+describe('shuffleTargets', () => {
+  const list = ['A', 'B', 'C', 'D', 'E', 'F']
+
+  it('is a permutation and stable for the same seed', () => {
+    const a = shuffleTargets(list, 'quiz-z:u1')
+    expect([...a].sort()).toEqual(list)
+    expect(shuffleTargets(list, 'quiz-z:u1')).toEqual(a)
+    expect(list).toEqual(['A', 'B', 'C', 'D', 'E', 'F']) // input untouched
+  })
+
+  it('depends on the seed', () => {
+    const orders = new Set(Array.from({ length: 20 }, (_, i) => shuffleTargets(list, `quiz-z:u${i}`).join('')))
+    expect(orders.size).toBeGreaterThan(5)
+    expect(shuffleTargets(list, 'quiz-a:')).not.toEqual(shuffleTargets(list, 'quiz-b:'))
+  })
+
+  it('handles empty and single lists', () => {
+    expect(shuffleTargets([], 's')).toEqual([])
+    expect(shuffleTargets(['A'], 's')).toEqual(['A'])
   })
 })

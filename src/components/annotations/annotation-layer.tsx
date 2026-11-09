@@ -87,7 +87,10 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, User, Users, MessageSquare, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-canvas'
+import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode, type CanvasStroke } from './simple-canvas'
+import { DEFAULT_ERASER_VARIANT, loadEraserVariant, saveEraserVariant, type EraserVariant } from '@/lib/annotations/eraser'
+import { deleteStrokes, duplicateStrokes, moveStrokes, selectionBounds, type AnchorFor, type SelectableStroke } from '@/lib/annotations/selection'
+import { AnnotationSelection } from './annotation-selection'
 import { AnnotationSvgLayer } from './annotation-svg-layer'
 import { reanchorLine } from '@/lib/annotations/line-edit'
 import { SectionAnchoredStrokes } from './section-anchored-strokes'
@@ -99,7 +102,7 @@ import type { SnapsData, SpacersData } from '@/lib/userdata/adapters'
 import type { Spacer, SpacerPattern } from '@/types/spacer'
 import { generateContentHash, type HeadingPosition, type StrokeData } from '@/lib/indexeddb/annotations'
 import { getStrokeAvg } from '@/lib/annotations/stroke-grouping'
-import { determineSectionFromY, measureHeadingPositions, repositionCanvasDataToLive } from '@/lib/annotations/reposition-strokes'
+import { determineSectionFromY, liveSectionYShift, measureHeadingPositions, measureSectionOffsetY, repositionCanvasDataToLive } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
@@ -775,22 +778,70 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
   const [mode, setMode] = useState<AnnotationMode>('view')
 
-  // Esc returns to view mode from any active tool (draw/erase/spacer).
+  // Lasso selection on the active layer (see lib/annotations/selection.ts):
+  // ids of the selected strokes, and the live drag delta while moving them.
+  // Only exists in draw mode; cleared on any mode / audience switch.
+  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null)
+  const [selectionDrag, setSelectionDrag] = useState<{ dx: number; dy: number } | null>(null)
+  const selectedIdsRef = useRef(selectedIds)
+  selectedIdsRef.current = selectedIds
+  const clearSelection = useCallback(() => {
+    setSelectedIds(null)
+    setSelectionDrag(null)
+  }, [])
+  const handleLassoSelect = useCallback((ids: string[]) => {
+    setSelectedIds(new Set(ids))
+  }, [])
+  // Reset on tool / audience switch: the selection belongs to the previous
+  // tool + layer.
+  useEffect(() => {
+    clearSelection()
+  }, [mode, viewMode, selectedClass?.id, selectedStudent?.id, clearSelection])
+
+  // Esc ends a selection first; otherwise it returns to view mode from any
+  // active tool (draw/erase/spacer).
   // Sticky-note placement has its own Esc handler in sticky-notes-layer.tsx;
   // both can fire harmlessly because each only acts when its mode is active.
   useEffect(() => {
     if (mode === 'view') return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMode('view')
+      if (e.key !== 'Escape') return
+      if (selectedIdsRef.current) clearSelection()
+      else setMode('view')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [mode])
+  }, [mode, clearSelection])
   const [pageVersion, setPageVersion] = useState<string>('')
   const [hasAnnotations, setHasAnnotations] = useState(false)
   const [canvasData, setCanvasData] = useState<string>('')
   // Memoized parsed strokes for SVG rendering of committed strokes
   const parsedStrokes = useMemo(() => parseStrokes(canvasData), [canvasData])
+  // Point eraser: while a gesture cuts, the canvas hands us its working stroke
+  // list (RAF-throttled) and we render that instead of the committed data; on
+  // pointer up it commits through handleCanvasUpdate and clears this. Strokes
+  // the gesture did not touch are mapped back to their parsedStrokes objects,
+  // so SectionAnchoredStrokes' per-object outline cache only builds the new
+  // pieces. O(strokes) per preview frame.
+  const [pointErasePreview, setPointErasePreview] = useState<CanvasStroke[] | null>(null)
+  const parsedStrokesById = useMemo(() => new Map(parsedStrokes.map(s => [s.id, s])), [parsedStrokes])
+  // Selection: drop ids that no longer exist (erased, remote update).
+  const activeSelection = useMemo(() => {
+    if (!selectedIds) return null
+    const live = new Set<string>()
+    for (const id of selectedIds) if (parsedStrokesById.has(id)) live.add(id)
+    return live.size > 0 ? live : null
+  }, [selectedIds, parsedStrokesById])
+  const displayedStrokes = useMemo(() => {
+    const base = pointErasePreview
+      ? pointErasePreview.map(s => parsedStrokesById.get(s.id) ?? s)
+      : parsedStrokes
+    // Selection drag preview: selected strokes moved in stored coords, old
+    // anchor kept (re-anchoring happens once, on release).
+    return activeSelection && selectionDrag
+      ? moveStrokes(base, activeSelection, selectionDrag.dx, selectionDrag.dy, () => 0, null)
+      : base
+  }, [pointErasePreview, parsedStrokes, parsedStrokesById, activeSelection, selectionDrag])
   // Layer badges visibility - hidden by default, shown when hovering layers dropdown in toolbar
   const [showLayerBadges, setShowLayerBadges] = useState(false)
 
@@ -1212,6 +1263,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     setActivePenId((prev) => (loaded.some((p) => p.id === prev) ? prev : loaded[0].id))
   }, [])
   const contentRef = useRef<HTMLDivElement>(null)
+  // Canvas wrapper portaled into #paper: its top is paper-y 0 for strokes
+  // (origin for live section measurements in selection edits).
+  const canvasWrapperRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLElement | null>(null)
   const [eraserMarkedIds, setEraserMarkedIds] = useState<Set<string>>(new Set())
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -2606,6 +2660,80 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
    * and jump back on the next reflow (the trap sticky notes solve in
    * `anchorForY`).
    */
+  // Selection edits. Each reads the committed strokes, applies ONE pure edit
+  // from lib/annotations/selection.ts and commits it through
+  // handleCanvasUpdate — one save/sync per move, delete or duplicate.
+  //
+  // Re-anchoring (move, duplicate): strokes are rebased to where they are
+  // painted now (stored y + live shift of their section, measured from the
+  // DOM like the draw commit) and then anchored to the section under their
+  // first point, with that section's live-measured top as sectionOffsetY.
+  // Same anchoring as a freshly drawn stroke, so they stay put on reflow.
+  const selectionAnchoring = useCallback(() => {
+    const origin = canvasWrapperRef.current
+    const hp = headingPositionsRef.current
+    const measured = new Map<string, number | null>()
+    const measure = (sid: string) => {
+      if (!measured.has(sid)) measured.set(sid, measureSectionOffsetY(sid === 'unknown' ? 'paper-top' : sid, origin))
+      return measured.get(sid)!
+    }
+    const shiftFor = (s: SelectableStroke) => {
+      const live = s.sectionId ? measure(s.sectionId) : null
+      return live !== null && s.sectionOffsetY !== undefined
+        ? live - s.sectionOffsetY
+        : liveSectionYShift(s.sectionId, s.sectionOffsetY, hp)
+    }
+    const anchorFor: AnchorFor = (points) => {
+      const sectionId = determineSectionFromY(points[0].y, hp) || 'paper-top'
+      const sectionOffsetY = measure(sectionId) ?? hp.find(h => h.sectionId === sectionId)?.offsetY ?? 0
+      return { sectionId, sectionOffsetY }
+    }
+    return { shiftFor, anchorFor }
+  }, [])
+
+  const readCommittedStrokes = useCallback((): StrokeData[] | null => {
+    try {
+      return JSON.parse(canvasDataRef.current || '[]') as StrokeData[]
+    } catch {
+      return null
+    }
+  }, [])
+
+  const handleSelectionMove = useCallback((dx: number, dy: number) => {
+    const ids = selectedIdsRef.current
+    const strokes = readCommittedStrokes()
+    if (!ids || !strokes) return
+    const { shiftFor, anchorFor } = selectionAnchoring()
+    handleCanvasUpdate(JSON.stringify(moveStrokes(strokes, ids, dx, dy, shiftFor, anchorFor)))
+  }, [readCommittedStrokes, selectionAnchoring, handleCanvasUpdate])
+
+  const handleSelectionDelete = useCallback(() => {
+    const ids = selectedIdsRef.current
+    const strokes = readCommittedStrokes()
+    if (!ids || !strokes) return
+    clearSelection()
+    handleCanvasUpdate(JSON.stringify(deleteStrokes(strokes, ids)))
+  }, [readCommittedStrokes, clearSelection, handleCanvasUpdate])
+
+  const handleSelectionDuplicate = useCallback(() => {
+    const ids = selectedIdsRef.current
+    const strokes = readCommittedStrokes()
+    if (!ids || !strokes) return
+    const { shiftFor, anchorFor } = selectionAnchoring()
+    const result = duplicateStrokes(strokes, ids, shiftFor, anchorFor)
+    handleCanvasUpdate(JSON.stringify(result.strokes))
+    // The copies become the selection, ready to be dragged into place.
+    setSelectedIds(new Set(result.newIds))
+  }, [readCommittedStrokes, selectionAnchoring, handleCanvasUpdate])
+
+  // Live-coords box of the selection (follows the drag preview).
+  const selectionBox = useMemo(
+    () => activeSelection
+      ? selectionBounds(displayedStrokes, activeSelection, s => liveSectionYShift(s.sectionId, s.sectionOffsetY, headingPositions))
+      : null,
+    [activeSelection, displayedStrokes, headingPositions],
+  )
+
   const handleLineEdit = useCallback((strokeId: string, points: Array<{ x: number; y: number; pressure: number }>) => {
     let strokes: StrokeData[]
     try {
@@ -2749,6 +2877,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
   const handlePenSelect = useCallback((id: string) => {
     setActivePenId(id)
+  }, [])
+
+  // Eraser variant ('stroke' | 'point'), remembered per device like the pens.
+  // Default for SSR + first render; the saved choice is loaded after mount.
+  const [eraserVariant, setEraserVariant] = useState<EraserVariant>(DEFAULT_ERASER_VARIANT)
+  useEffect(() => {
+    setEraserVariant(loadEraserVariant())
+  }, [])
+  const handleEraserVariantChange = useCallback((variant: EraserVariant) => {
+    setEraserVariant(variant)
+    saveEraserVariant(variant)
   }, [])
 
   const handlePenColorChange = useCallback((id: string, color: string) => {
@@ -3313,6 +3452,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       {/* Canvas portaled directly into #paper - always matches paper bounds */}
       {paperElement && pageHeight > 0 && initialLoadComplete && createPortal(
         <div
+          ref={canvasWrapperRef}
           // While a highlighter is active the wrapper (a z-index stacking
           // context holding the live canvas) blends with the page like the
           // committed highlighter SVGs, so the in-progress stroke looks the same.
@@ -3347,6 +3487,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
             height={pageHeight}
             mode={(mode === 'view' || mode === 'spacer') ? 'view' : (mode as DrawMode)}
             highlighter={activePen.type === 'highlight'}
+            eraserVariant={eraserVariant}
+            onPointErasePreview={setPointErasePreview}
+            onLassoSelect={handleLassoSelect}
             onUpdate={handleCanvasUpdate}
             onTelemetry={handleTelemetry}
             onDrawStart={ensureActiveLayerVisible}
@@ -3363,6 +3506,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
             svgHandlesDisplay
             scrollContainer={scrollContainerRef.current}
           />
+          {mode === 'draw' && selectionBox && (
+            <AnnotationSelection
+              bounds={selectionBox}
+              zoom={zoom}
+              onPreviewMove={setSelectionDrag}
+              onCommitMove={handleSelectionMove}
+              onDelete={handleSelectionDelete}
+              onDuplicate={handleSelectionDuplicate}
+              onDismiss={clearSelection}
+            />
+          )}
           {/* Badge for active layer - shown on toolbar hover only */}
           {showActiveLayerBadge && hasAnnotations && (
             <LayerBadges
@@ -3387,7 +3541,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           paper-anchored fallback above. */}
       {paperElement && pageHeight > 0 && initialLoadComplete && activeLayerVisible && (
         <SectionAnchoredStrokes
-          strokes={parsedStrokes}
+          strokes={displayedStrokes}
           paperWidth={paperWidth}
           paperHeight={pageHeight}
           paperPaddingLeft={currentPaddingLeft}
@@ -3397,7 +3551,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           onLineEdit={handleLineEdit}
           // Handles stay out of the way while a tool is active: in draw/erase
           // mode the first click of a new stroke must reach the canvas.
-          lineEditEnabled={mode === 'view' && !stylusModeActive}
+          // A selection hides them too, so a selected line has one owner.
+          lineEditEnabled={mode === 'view' && !stylusModeActive && !activeSelection}
+          selectedIds={activeSelection ?? undefined}
         />
       )}
 
@@ -3679,6 +3835,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         stickyNotePlacementMode={stickyNotePlacementMode}
         onStickyNotePlacementToggle={handleStickyNotePlacementToggle}
         stickyNoteCount={stickyNoteCount}
+        eraserVariant={eraserVariant}
+        onEraserVariantChange={handleEraserVariantChange}
       />
 
       {/* Spacer click-to-place overlay - portaled into paper, captures pointer events (touch + stylus) */}

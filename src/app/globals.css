@@ -1947,6 +1947,12 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   cursor: none !important;
 }
 
+/* Lasso-selected annotation strokes (section-anchored-strokes.tsx): primary-
+   coloured halo around the ink; the dashed box comes from annotation-selection.tsx. */
+.annotation-selected {
+  filter: drop-shadow(0 0 1.5px hsl(var(--primary))) drop-shadow(0 0 1.5px hsl(var(--primary)));
+}
+
 /* Paper shadow that works in both light and dark mode */
 .paper-shadow {
   box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
