@@ -255,4 +255,41 @@ describe('POST /api/survey-responses', () => {
     }, '203.0.113.1'))
     expect(sixth.status).toBe(429)
   })
+  describe('type="match" answers', () => {
+    const surveyPage = {
+      id: VALID_PAGE_ID,
+      title: 'Survey',
+      content: '<survey><question id="m1" type="match">x</question></survey>',
+    }
+
+    it('stores a match answer as matchAnswer', async () => {
+      vi.mocked(getServerSession).mockResolvedValue(null)
+      mockPrisma.page.findUnique.mockResolvedValue(surveyPage)
+      const res = await POST(makeRequest({
+        ...validBody,
+        answers: [{ questionId: 'm1', type: 'match', value: { '0': 'Parabel 1', '2': 'Parabel 3', x: 'dropped', '1': 7 } }],
+      }))
+      expect(res.status).toBe(201)
+      expect(mockPrisma.userData.create).toHaveBeenCalledTimes(1)
+      const row = mockPrisma.userData.create.mock.calls[0][0].data
+      expect(row.adapter).toBe('quiz-m1')
+      // Non-numeric keys and non-string targets are dropped.
+      expect(row.data).toEqual({ isSubmitted: true, matchAnswer: { '0': 'Parabel 1', '2': 'Parabel 3' } })
+    })
+
+    it.each([
+      ['an array', ['Parabel 1']],
+      ['a string', 'Parabel 1'],
+      ['null', null],
+    ])('rejects a match value that is %s (400)', async (_name, value) => {
+      vi.mocked(getServerSession).mockResolvedValue(null)
+      mockPrisma.page.findUnique.mockResolvedValue(surveyPage)
+      const res = await POST(makeRequest({
+        ...validBody,
+        answers: [{ questionId: 'm1', type: 'match', value }],
+      }))
+      expect(res.status).toBe(400)
+      expect(mockPrisma.userData.create).not.toHaveBeenCalled()
+    })
+  })
 })

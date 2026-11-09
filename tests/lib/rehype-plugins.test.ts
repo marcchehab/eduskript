@@ -15,6 +15,41 @@ import { compileMarkdown, sanitizeSchema } from '@/lib/markdown-compiler'
 
 describe('Rehype Plugins', () => {
   describe('rehypeHeadingSectionIds', () => {
+    it('numbers repeated plugins so each gets its own top and end anchor', async () => {
+      const markdown = [
+        '<plugin src="a/graph" id="one"></plugin>',
+        '',
+        '<plugin src="a/other"></plugin>',
+        '',
+        '<plugin src="a/graph" id="two"></plugin>',
+        '',
+        '<plugin src="a/graph"></plugin>',
+      ].join('\n')
+
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkRehype, { allowDangerousHtml: true })
+        .use(rehypeRaw)
+        .use(rehypeHeadingSectionIds)
+
+      const hast = await processor.run(processor.parse(markdown))
+      const ids: string[] = []
+      const walk = (n: any) => {
+        const id = n.properties?.['data-section-id']
+        if (id && id !== 'paper-top') ids.push(id)
+        n.children?.forEach(walk)
+      }
+      walk(hast)
+
+      // The first occurrence keeps the pre-2026-11-09 ID (existing strokes).
+      expect(ids).toEqual([
+        'plugin-a-graph', 'plugin-a-graph-end',
+        'plugin-a-other', 'plugin-a-other-end',
+        'plugin-a-graph-2', 'plugin-a-graph-2-end',
+        'plugin-a-graph-3', 'plugin-a-graph-3-end',
+      ])
+    })
+
     it('should add data-section-id to h1 headings', async () => {
       const markdown = '# Main Heading'
 

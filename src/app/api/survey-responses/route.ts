@@ -29,6 +29,7 @@ import { prisma } from '@/lib/prisma'
 import { generatePseudonym, getStableStudentNickname } from '@/lib/privacy/pseudonym'
 import { RateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { isItemPlacedOnSite } from '@/lib/site-access'
+import { sanitizeMatchAnswer } from '@/lib/match-question'
 
 const SURVEY_PROVIDER = 'survey'
 
@@ -46,7 +47,7 @@ const MAX_ANSWERS_PER_SUBMISSION = 50
 
 interface SurveyAnswerInput {
   questionId: string
-  type: 'single' | 'multiple' | 'text' | 'number' | 'range'
+  type: 'single' | 'multiple' | 'text' | 'number' | 'range' | 'match'
   value: unknown
 }
 
@@ -70,7 +71,9 @@ function isValidBody(body: unknown): body is SurveyResponseBody {
     const ans = a as Record<string, unknown>
     if (typeof ans.questionId !== 'string' || !ans.questionId) return false
     if (typeof ans.type !== 'string') return false
-    if (!['single', 'multiple', 'text', 'number', 'range'].includes(ans.type)) return false
+    if (!['single', 'multiple', 'text', 'number', 'range', 'match'].includes(ans.type)) return false
+    // match: { "<row index>": "<target>" } — reject any other shape outright.
+    if (ans.type === 'match' && sanitizeMatchAnswer(ans.value) === null) return false
   }
   return true
 }
@@ -107,6 +110,13 @@ function answerValueToQuizData(a: SurveyAnswerInput): Prisma.InputJsonValue {
         },
       }
     }
+    case 'match':
+      // Shape already checked in isValidBody; this drops bad entries
+      // (non-numeric keys, non-string or oversized targets).
+      return {
+        isSubmitted: true,
+        matchAnswer: sanitizeMatchAnswer(a.value) ?? {},
+      }
   }
 }
 

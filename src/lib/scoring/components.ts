@@ -24,13 +24,15 @@
  * Related: [[score-component]], [[aggregate]].
  */
 
+import { parseMatchQuestionMarkdown } from '@/lib/match-question'
+
 export type GradableKind = 'quiz' | 'python'
 
 export interface GradableComponent {
   componentId: string
   kind: GradableKind
   /** Quiz subtype; undefined for python. */
-  questionType?: 'single' | 'multiple' | 'text' | 'number' | 'range'
+  questionType?: 'single' | 'multiple' | 'text' | 'number' | 'range' | 'match'
   /** Declared max points from the markdown, if the author set `points=`. */
   maxPoints?: number
   /** Human label for the table — nearest preceding heading, else the id. */
@@ -40,6 +42,9 @@ export interface GradableComponent {
   /** python only: the editor's starter/default code (already given to the
    *  student) — so rubric generation doesn't credit pre-provided scaffolding. */
   starterCode?: string
+  /** quiz type="match" only: rows (raw markdown label + correct target), so
+   *  answers can be shown as "label → target" (submissions.ts). */
+  matchRows?: Array<{ label: string; match: string }>
 }
 
 function attr(tag: string, name: string): string | undefined {
@@ -76,7 +81,8 @@ export function parseGradableComponents(content: string): GradableComponent[] {
   let pendingEditorId: string | null = null
   let editorBody: string[] = []
 
-  for (const line of lines) {
+  for (let lineNo = 0; lineNo < lines.length; lineNo++) {
+    const line = lines[lineNo]
     const fenceMatch = line.match(/^\s*```+\s*(.*)$/)
     if (fenceMatch) {
       if (!inFence) {
@@ -134,13 +140,22 @@ export function parseGradableComponents(content: string): GradableComponent[] {
       const id = attr(tag, 'id')
       if (id) {
         const type = (attr(tag, 'type') as GradableComponent['questionType']) ?? 'multiple'
-        out.push({
+        const component: GradableComponent = {
           componentId: `quiz-${id}`,
           kind: 'quiz',
           questionType: type,
           maxPoints: num(attr(tag, 'points')),
           label: lastHeading,
-        })
+        }
+        if (type === 'match') {
+          // The question body: from the opening tag to the first </question>
+          // (the outer loop still scans those lines; answers are not headings
+          // or questions, so nothing is emitted twice).
+          const rest = [line.slice(line.indexOf(tag) + tag.length), ...lines.slice(lineNo + 1)].join('\n')
+          const end = rest.search(/<\/question>/i)
+          component.matchRows = parseMatchQuestionMarkdown(end >= 0 ? rest.slice(0, end) : rest).rows
+        }
+        out.push(component)
       }
     }
   }

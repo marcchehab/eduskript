@@ -96,12 +96,36 @@ Wird gerendert als:
   <p>Was ist die Hauptstadt der Schweiz?</p>
 </question>
 
+### Zuordnen
+
+```html
+<question id="q-match-demo" type="match" points="3">
+Ordnen Sie jeder Funktion die passende Parabel zu.
+<answer match="Parabel 1">$f(x)=x^2-1$</answer>
+<answer match="Parabel 2">$f(x)=x^2-5$</answer>
+<answer match="Parabel 3" feedback="Um 3 nach oben verschoben.">$f(x)=x^2+3$</answer>
+<answer match="Parabel 4"></answer>
+</question>
+```
+
+Wird dargestellt als:
+
+<question id="q-match-demo" type="match" points="3">
+Ordnen Sie jeder Funktion die passende Parabel zu.
+<answer match="Parabel 1">$f(x)=x^2-1$</answer>
+<answer match="Parabel 2">$f(x)=x^2-5$</answer>
+<answer match="Parabel 3" feedback="Um 3 nach oben verschoben.">$f(x)=x^2+3$</answer>
+<answer match="Parabel 4"></answer>
+</question>
+
+Jedes `<answer match="…">` mit Inhalt ist eine Zeile. Die Schüler wählen für jede Zeile ein Ziel aus einer Liste, die alle `match`-Werte der Frage in natürlicher Reihenfolge enthält («Parabel 2» vor «Parabel 10») – die Reihenfolge verrät also nichts. Ein Ziel darf zu mehreren Zeilen gehören. Ein leeres `<answer match="…"></answer>` fügt nur ein Ablenkungsziel hinzu. Bewertet wird mit Teilpunkten: `points` × richtige Zeilen / Zeilen. Nach dem Prüfen ist jede Zeile markiert, bei falschen Zeilen steht das richtige Ziel, und das `feedback` einer Antwort erscheint unter ihrer Zeile.
+
 ### Question-Attribute
 
 | Attribut | Werte | Wirkung |
 |-----------|--------|--------|
 | `id` | String | Eindeutige ID pro Seite; dient zur Zuordnung der Schülerantworten |
-| `type` | `single` / `multiple` / `text` / `number` / `range` | Fragestil. Standard `multiple`, also explizit setzen |
+| `type` | `single` / `multiple` / `text` / `number` / `range` / `match` | Fragestil. Standard `multiple`, also explizit setzen |
 | `points` | Zahl (Standard 1) | Punktegewicht |
 | `feedback` | `check` (Standard) / `instant` / `none` | Wann die Richtigkeit auf einer Nicht-Prüfungsseite angezeigt wird. `check`: ein **Check answer**-Button, nichts wird angezeigt, bis er gedrückt wird, sperrt nach Abschluss. `instant`: bei jeder Änderung. `none`: still, keine Richtigkeit (Umfragen). Prüfungsseiten ignorieren das und bleiben still, bis die Prüfung zurückgegeben wird |
 | `attempts` | Zahl (Standard 1) / `unlimited` | Check-Modus: wie viele Check-Klicks, bis die Frage sperrt. Ein falscher, nicht letzter Check markiert nur die eigene Auswahl des Schülers; die richtige Antwort bleibt verborgen. Eine richtige Antwort schliesst die Frage immer ab |

@@ -7,6 +7,8 @@
  *   (`code-editor-<id>`), falling back to the latest live UserData. Mirrors the
  *   read in api/exams/[pageId]/check-inputs.
  * - quiz text: the free-text answer (QuizData.textAnswer).
+ * - quiz match: "1: <row label> → <chosen target>; 2: …" (labels from the page
+ *   markdown via GradableComponent.matchRows).
  * - quiz single/multiple/number/range: a compact textual rendering of the stored
  *   answer (these are auto-scored by the check source; AI scoring is mainly for
  *   code + free text, but we surface something rather than nothing).
@@ -17,6 +19,7 @@
 import { prisma } from '@/lib/prisma'
 import type { GradableComponent } from './components'
 import type { QuizData } from '@/lib/userdata/types'
+import { formatMatchAnswer } from '@/lib/match-question'
 
 export interface ComponentSubmission {
   studentId: string
@@ -40,8 +43,11 @@ function codeText(raw: unknown): string {
   return ordered.map((f) => `# ${f.name ?? 'file.py'}\n${f.content ?? ''}`).join('\n\n')
 }
 
-function quizText(raw: unknown): string {
+function quizText(raw: unknown, component?: GradableComponent): string {
   const d = (raw ?? {}) as QuizData
+  if (d.matchAnswer && Object.keys(d.matchAnswer).length) {
+    return formatMatchAnswer(d.matchAnswer, component?.matchRows?.map((r) => r.label))
+  }
   if (typeof d.textAnswer === 'string' && d.textAnswer.trim()) return d.textAnswer
   if (Array.isArray(d.selected) && d.selected.length) return `Selected options: ${d.selected.join(', ')}`
   if (typeof d.numberAnswer === 'number') return `Answer: ${d.numberAnswer}`
@@ -95,6 +101,6 @@ export async function readComponentSubmissions(
     select: { userId: true, siteId: true, data: true },
   })
   const byStudent = new Map(rows.filter((r) => mine(r.userId, r.siteId)).map((r) => [r.userId, r.data]))
-  for (const sid of studentIds) put(sid, quizText(byStudent.get(sid) ?? null))
+  for (const sid of studentIds) put(sid, quizText(byStudent.get(sid) ?? null, component))
   return result
 }

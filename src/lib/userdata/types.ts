@@ -120,6 +120,13 @@ export interface QuizData {
   // buys. Absent when the author set no target, and in surveys.
   sliderRatio?: number
   sliderScore?: number
+  // Matching question (type="match"): row index (as string) → chosen target.
+  // See lib/match-question.ts. matchRatio/matchScore are the client-computed
+  // correct-rows ratio and partial-credit points (live teacher view only; exam
+  // grading re-derives them on the teacher's device). Absent in surveys.
+  matchAnswer?: Record<string, string>
+  matchRatio?: number
+  matchScore?: number
   // Check mode (feedback="check", the non-exam default): how many times the
   // student pressed Check, and whether the question is finished — correct, or
   // attempts exhausted — which reveals the answer key and locks the inputs.

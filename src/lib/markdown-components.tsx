@@ -833,7 +833,7 @@ export function createMarkdownComponents(
   // Quiz components
   function QuizQuestionComponent({ children, ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const id = (props['id'] as string) || ''
-    const type = ((props['type'] as string) || 'multiple') as 'single' | 'multiple' | 'text' | 'number' | 'range'
+    const type = ((props['type'] as string) || 'multiple') as 'single' | 'multiple' | 'text' | 'number' | 'range' | 'match'
     // Explicit author value if set; otherwise undefined so the Question can
     // default it per context (exam pages default feedback OFF — see QuestionInner).
     const showFeedbackSet = props['showFeedback'] !== undefined || props['showfeedback'] !== undefined
@@ -929,9 +929,10 @@ export function createMarkdownComponents(
 
   // QuizOptionComponent - wrapper that preserves props for parent Question to read
   // Note: uses "correct" instead of "is" because "is" is a reserved React attribute
-  function QuizOptionComponent({ children, correct, feedback, from }: React.HTMLAttributes<HTMLElement> & { correct?: string; feedback?: string; from?: string }) {
+  // `match` = the row's target in a type="match" question (lib/match-question.ts).
+  function QuizOptionComponent({ children, correct, feedback, from, match }: React.HTMLAttributes<HTMLElement> & { correct?: string; feedback?: string; from?: string; match?: string }) {
     return (
-      <Option correct={correct} feedback={feedback} from={from}>
+      <Option correct={correct} feedback={feedback} from={from} match={match}>
         {children}
       </Option>
     )

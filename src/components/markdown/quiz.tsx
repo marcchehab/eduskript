@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useId, ReactNode, ReactElement, Children } from 'react'
+import { useState, useEffect, useRef, useId, ReactNode, ReactElement, Children, isValidElement } from 'react'
 import { useSyncedUserData } from '@/lib/userdata'
 import type { QuizData } from '@/lib/userdata/types'
 import { cn } from '@/lib/utils'
@@ -29,10 +29,13 @@ import { TextAnswerHistory } from './text-answer-history'
 import { withSite } from '@/lib/site-scope-client'
 import { usePrintState } from '@/lib/print/print-mode'
 import { useRegisterSolution } from '@/lib/print/solutions'
+import { matchResult, matchTargets, answeredRowCount, type MatchAnswer } from '@/lib/match-question'
+
+type QuestionType = 'single' | 'multiple' | 'text' | 'number' | 'range' | 'match'
 
 interface QuestionProps {
   children: ReactNode
-  type?: 'single' | 'multiple' | 'text' | 'number' | 'range'
+  type?: QuestionType
   id: string
   pageId: string
   /** Legacy alias: `showFeedback="true"` = feedback="instant", "false" = "none". */
@@ -90,6 +93,8 @@ interface OptionProps {
   is?: string
   /** Slider feedback band: shown when the auto-check ratio reaches this value. */
   from?: string
+  /** type="match": this row's correct target (lib/match-question.ts). */
+  match?: string
 }
 
 // Parse the `correct` attribute. A bare `<answer correct>` reaches us as '' (the
@@ -175,6 +180,45 @@ function extractPrompt(children: ReactNode): ReactNode {
   if (wrapper) return wrapper.props.children ?? null
   const text = parts.filter((c) => typeof c === 'string').join('').trim()
   return text || null
+}
+
+// True when a label has something to show: non-blank text or any element
+// (math, image, code). An empty `<answer match="X"></answer>` is a
+// distractor target, not a row.
+function hasLabelContent(label: ReactNode): boolean {
+  return Children.toArray(label).some((c) =>
+    typeof c === 'string' ? c.trim() !== '' : typeof c === 'number' || isValidElement(c)
+  )
+}
+
+interface MatchRowInfo {
+  label: ReactNode
+  feedback: ReactNode
+  /** Correct target, trimmed. */
+  match: string
+  /** Plain text of the label, for the teacher view. */
+  text: string
+}
+
+/**
+ * Rows and dropdown targets of a type="match" question. Rows: `<answer>`s with
+ * a non-empty `match` and content, densely indexed in authored order (the
+ * stored `matchAnswer` keys). Targets: every distinct `match` value incl.
+ * distractor-only answers, natural-sorted (lib/match-question.ts).
+ */
+function extractMatchInfo(children: ReactNode): { rows: MatchRowInfo[]; targets: string[] } {
+  const rows: MatchRowInfo[] = []
+  const all: string[] = []
+  Children.forEach(children, (child) => {
+    if (!isAnswerElement(child)) return
+    const match = child.props.match?.trim()
+    if (!match) return
+    all.push(match)
+    const { label, feedback } = splitAnswerContent(child.props)
+    if (!hasLabelContent(label)) return
+    rows.push({ label, feedback, match, text: extractTextFromChildren(label).trim() })
+  })
+  return { rows, targets: matchTargets(all) }
 }
 
 // Idle delay before an edited answer is autosaved. Text gets a longer window
@@ -270,6 +314,7 @@ function QuestionInner({
   const [rangeAnswer, setRangeAnswer] = useState<{ min: number; max: number }>(
     initialData?.rangeAnswer ?? { min: minValue, max: maxValue }
   )
+  const [matchAnswer, setMatchAnswer] = useState<MatchAnswer>(initialData?.matchAnswer ?? {})
   const [isSubmitted, setIsSubmitted] = useState(initialData?.isSubmitted ?? false)
   // Check mode: presses so far, and whether the question is finished (locked +
   // key revealed). `lastCheckedSig` is the answer that was last checked, so a
@@ -297,6 +342,7 @@ function QuestionInner({
   const shownText = blank ? '' : textAnswer
   const shownNumber = blank ? minValue : numberAnswer
   const shownRange = blank ? { min: minValue, max: maxValue } : rangeAnswer
+  const shownMatch: MatchAnswer = blank ? {} : matchAnswer
   // The handlers also ignore input while blank, so touching the printed card
   // cannot overwrite the stored answer. `lockedLook`: the disabled look, off on
   // the blank card.
@@ -312,6 +358,7 @@ function QuestionInner({
     setTextAnswer(initialData?.textAnswer ?? '')
     setNumberAnswer(initialData?.numberAnswer ?? minValue)
     setRangeAnswer(initialData?.rangeAnswer ?? { min: minValue, max: maxValue })
+    setMatchAnswer(initialData?.matchAnswer ?? {})
     setIsSubmitted(initialData?.isSubmitted ?? false)
     setAttemptsUsed(initialData?.attempts ?? 0)
     setChecked(initialData?.checked ?? false)
@@ -393,11 +440,37 @@ function QuestionInner({
     }))
   }
 
+  const handleMatchChange = (row: number, target: string) => {
+    if (locked || blank) return
+    setMatchAnswer((prev) => {
+      const next = { ...prev }
+      if (target) next[String(row)] = target
+      else delete next[String(row)]
+      return next
+    })
+  }
+
+  // Matching question: rows/targets from the <answer match> children and the
+  // live result against the key. Null result in surveys (no right/wrong) or
+  // when the question has no rows.
+  const matchInfo = type === 'match' ? extractMatchInfo(children) : null
+  const matchRows = matchInfo?.rows ?? []
+  const matchRes =
+    type === 'match' && !surveyMode && matchRows.length > 0
+      ? matchResult(matchAnswer, matchRows.map((r) => r.match))
+      : null
+  const matchAnswered = type === 'match' ? answeredRowCount(matchAnswer) : 0
+
   const isEmptyAnswer =
     ((type === 'single' || type === 'multiple') && selected.length === 0) ||
     (type === 'text' && !textAnswer.trim()) ||
     (type === 'number' && numberAnswer === undefined) ||
-    (type === 'range' && rangeAnswer === undefined)
+    (type === 'range' && rangeAnswer === undefined) ||
+    (type === 'match' && matchAnswered === 0)
+  // Check is only offered once every row has a target, so a stray click does
+  // not burn an attempt on a half-filled answer. Autosave still runs on any
+  // non-empty answer.
+  const checkBlocked = isEmptyAnswer || (type === 'match' && matchAnswered < matchRows.length)
 
   // Slider auto-check: how close is the current answer to the author's target?
   // 1 = spot on, 0 = nothing to award. Null when the author set no `expected`,
@@ -453,6 +526,15 @@ function QuestionInner({
       sliderFields = { sliderRatio, sliderScore: scoreFromRatio(sliderRatio, maxPoints) }
     }
 
+    let matchFields: Partial<QuizData> = {}
+    if (type === 'match') {
+      matchFields = { matchAnswer }
+      if (matchRes) {
+        matchFields.matchRatio = matchRes.ratio
+        matchFields.matchScore = scoreFromRatio(matchRes.ratio, maxPoints)
+      }
+    }
+
     return {
       isSubmitted: submitted,
       ...(checkMode ? { attempts: attemptsUsed, checked } : {}),
@@ -460,6 +542,7 @@ function QuestionInner({
       ...choiceFields,
       ...textFields,
       ...sliderFields,
+      ...matchFields,
       ...(type === 'number' ? { numberAnswer } : {}),
       ...(type === 'range' ? { rangeAnswer } : {})
     }
@@ -503,7 +586,7 @@ function QuestionInner({
     autosaveTimerRef.current = t
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, textAnswer, numberAnswer, rangeAnswer, reviewMode, stageLocked])
+  }, [selected, textAnswer, numberAnswer, rangeAnswer, matchAnswer, reviewMode, stageLocked])
 
   // Live auto-check result for the text feedback panel (recomputed from the
   // current answer; matches the persisted score when the answer is unedited).
@@ -548,7 +631,9 @@ function QuestionInner({
         ? textAnswer
         : type === 'number'
           ? numberAnswer
-          : rangeAnswer
+          : type === 'match'
+            ? Object.entries(matchAnswer).sort(([a], [b]) => Number(a) - Number(b))
+            : rangeAnswer
   )
 
   // Is the current answer correct? null = nothing to grade against (choice
@@ -564,6 +649,7 @@ function QuestionInner({
       return sel.length === cor.length && sel.every((v, i) => v === cor[i])
     }
     if (type === 'text') return textResult ? textResult.exact : null
+    if (type === 'match') return matchRes ? matchRes.ratio >= 1 : null
     return sliderRatio == null ? null : sliderRatio >= 1
   })()
 
@@ -573,12 +659,12 @@ function QuestionInner({
   // immediately (not through the debounced autosave) so a reload right after
   // the click can't lose the lock.
   const reportForLeaderboard = (data: QuizData) => {
-    const earned = data.choiceScore ?? data.textScore ?? data.sliderScore
+    const earned = data.choiceScore ?? data.textScore ?? data.sliderScore ?? data.matchScore
     if (points != null && earned != null && componentId && !isExamPage) reportScore({ componentId, earned })
   }
 
   const handleCheck = () => {
-    if (!checkMode || locked || isEmptyAnswer) return
+    if (!checkMode || locked || checkBlocked) return
     // A pending autosave closes over the unchecked state and would overwrite
     // the record saved below, reopening the question after a reload.
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
@@ -677,6 +763,14 @@ function QuestionInner({
       )
     }
     if (type === 'text') return expected != null ? String(expected) : null
+    if (type === 'match') {
+      if (matchRows.length === 0) return null
+      return (
+        <ul className="m-0">
+          {matchRows.map((r, i) => <li key={i} className="my-0">{r.label} → {r.match}</li>)}
+        </ul>
+      )
+    }
     return sliderTarget ?? null
   })()
   const keyVisible = mode === 'check' || mode === 'instant' || mode === 'review'
@@ -1026,6 +1120,93 @@ function QuestionInner({
         </div>
       )}
 
+      {/* Matching question: one row per <answer match> with content — the
+          answer's rendered label, then a dropdown of all targets. Stacked
+          (label above select) below the sm breakpoint, side by side above. */}
+      {type === 'match' && (
+        <div className="space-y-3">
+          {prompt && <div id={`${optionIdBase}-prompt`} className={PROMPT_CLASS}>{prompt}</div>}
+          <div role="group" aria-labelledby={prompt ? `${optionIdBase}-prompt` : undefined} className="space-y-2">
+            {matchRows.map((row, index) => {
+              const value = shownMatch[String(index)] ?? ''
+              const rowResult = showResult && matchRes ? matchRes.rows[index] : undefined
+              const labelId = `${optionIdBase}-row-${index}`
+              return (
+                <div
+                  key={index}
+                  data-match-row={index}
+                  className={cn(
+                    'rounded-lg border p-3',
+                    rowResult === true && 'border-green-600 dark:border-green-500 bg-green-500/10',
+                    rowResult === false && 'border-red-600 dark:border-red-500 bg-red-500/10',
+                    // A blank row counts as wrong once the key is out (not in instant
+                    // mode, where a half-filled answer is still being worked on).
+                    revealed && mode !== 'instant' && rowResult === null && 'border-red-600/50 dark:border-red-500/50'
+                  )}
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <div id={labelId} className="min-w-0 flex-1">{row.label}</div>
+                    <div className="flex items-center gap-2 sm:shrink-0">
+                      <select
+                        aria-labelledby={labelId}
+                        value={value}
+                        onChange={(e) => handleMatchChange(index, e.target.value)}
+                        disabled={locked}
+                        className={cn(
+                          'h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm sm:w-auto sm:min-w-40',
+                          lockedLook && 'opacity-70 cursor-not-allowed'
+                        )}
+                      >
+                        <option value="">{blank ? '' : 'Choose…'}</option>
+                        {(matchInfo?.targets ?? []).map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      {rowResult === true && <Check className="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" aria-label="Correct" />}
+                      {rowResult === false && <X className="w-4 h-4 shrink-0 text-red-600 dark:text-red-400" aria-label="Incorrect" />}
+                    </div>
+                  </div>
+                  {/* The key only on full reveal (attempts used up / instant /
+                      review); a partial result just marks the rows. Instant
+                      mode reveals wrong rows only, not the still-blank ones. */}
+                  {revealed && matchRes && (rowResult === false || (rowResult === null && mode !== 'instant')) && (
+                    <div className="mt-2 text-sm">
+                      Correct match: <span className="font-semibold">{row.match}</span>
+                    </div>
+                  )}
+                  {/* Row feedback: once that row was answered and checked, or
+                      on full reveal. */}
+                  {showResult && matchRes && row.feedback && (rowResult != null || revealed) && (
+                    <div className="mt-2 p-2 rounded text-sm bg-muted/50">{row.feedback}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {showResult && matchRes && (
+            <div
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg border p-3 text-sm font-medium',
+                autoCheckOverridden
+                  ? 'border-border bg-muted/40'
+                  : matchRes.ratio >= 1
+                    ? 'border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400'
+                    : matchRes.correct > 0
+                      ? 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                      : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
+              )}
+            >
+              <span>{matchRes.correct} of {matchRes.total} {matchRes.total === 1 ? 'row' : 'rows'} correct</span>
+              <span className="ml-auto tabular-nums text-muted-foreground">
+                {autoCheckOverridden
+                  ? 'Auto-check · overridden by teacher'
+                  : `${scoreFromRatio(matchRes.ratio, maxPoints)} / ${maxPoints} pts`}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Check mode footer: the Check button while the question is open, a
           verdict line once a check happened. Locked questions show nothing —
           the marked answers speak for themselves. */}
@@ -1039,16 +1220,18 @@ function QuestionInner({
             </span>
           )}
           {/* Disabled button alone gave no clue why (QA: students thought it was broken). */}
-          {isEmptyAnswer && !partialReveal && (
+          {checkBlocked && !partialReveal && (
             <span className="text-sm text-muted-foreground">
               {type === 'single' || type === 'multiple'
                 ? 'Select an answer first.'
                 : type === 'text'
                   ? 'Type an answer first.'
-                  : 'Set a value first.'}
+                  : type === 'match'
+                    ? 'Choose a match for every row first.'
+                    : 'Set a value first.'}
             </span>
           )}
-          <Button size="sm" onClick={handleCheck} disabled={isEmptyAnswer}>
+          <Button size="sm" onClick={handleCheck} disabled={checkBlocked}>
             {attemptsUsed === 0
               ? 'Check answer'
               : attemptsMax === Infinity
@@ -1103,7 +1286,7 @@ function extractTextFromChildren(node: ReactNode): string {
 // whitespace text nodes between answers. The rendering UI (the Children.toArray
 // map above) and `handleSelect` share isAnswerElement so stored
 // `selected`, `correctIndices`, and `options[i]` in quiz-progress-bar all align.
-function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | 'text' | 'number' | 'range') {
+function extractOptionsInfo(children: ReactNode, type: QuestionType) {
   const correctIndices: number[] = []
   const optionLabels: string[] = []
 
@@ -1119,6 +1302,11 @@ function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | '
         optionLabels[i] = text || `Option ${i + 1}`
         i++
       }
+    })
+  } else if (type === 'match') {
+    // Row labels (row index = stored matchAnswer key) for the teacher view.
+    extractMatchInfo(children).rows.forEach((r, i) => {
+      optionLabels[i] = r.text || `Row ${i + 1}`
     })
   }
 
@@ -1180,6 +1368,7 @@ function SurveyQuestion({
     if (type === 'text') return qd.textAnswer
     if (type === 'number') return qd.numberAnswer
     if (type === 'range') return qd.rangeAnswer
+    if (type === 'match') return qd.matchAnswer
     return null
   }
 
@@ -1285,6 +1474,10 @@ function SyncedQuestion({
     // Auto-checked text question: only a fully exact answer (ratio 1) counts as
     // correct for green/gate; partial credit does not open a coupled-video gate.
     if (type === 'text') return (qd.textRatio ?? -1) === 1
+    if (type === 'match') {
+      const key = extractMatchInfo(children).rows.map((r) => r.match)
+      return key.length > 0 && matchResult(qd.matchAnswer, key).ratio === 1
+    }
     if (type !== 'single' && type !== 'multiple') return false
     const sel = [...(qd.selected ?? [])].sort((a, b) => a - b)
     const correct = [...correctIndices].sort((a, b) => a - b)
@@ -1312,6 +1505,7 @@ function SyncedQuestion({
   // question's answer key (rendered here = trusted) and persists it as the
   // component's check score (ComponentScore source="check") — the same authoritative store python checks use.
   // The client-stored choiceScore/textScore is never trusted for the grade.
+  // Match questions score points × correct rows / rows.
   // Free text without an `expected` key and number/range yield no auto score
   // (teacher grades them manually via an override). Runs once per (student,
   // component); refreshGrades reloads the totals after.
@@ -1358,6 +1552,13 @@ function SyncedQuestion({
       const target = parseExpectedRange(rest.expected)
       if (target != null && payload.rangeAnswer) {
         earned = scoreFromRatio(rangeRatio(payload.rangeAnswer, target), rest.points ?? 1)
+      }
+    } else if (type === 'match') {
+      // Partial credit: points × correct rows / rows. Key = this question's
+      // rendered <answer match> rows; the client-stored matchScore is not trusted.
+      const key = extractMatchInfo(children).rows.map((r) => r.match)
+      if (key.length > 0) {
+        earned = scoreFromRatio(matchResult(payload.matchAnswer, key).ratio, rest.points ?? 1)
       }
     }
     if (earned == null) return
@@ -1454,7 +1655,7 @@ function SyncedQuestion({
           options={optionLabels}
           minValue={rest.minValue}
           maxValue={rest.maxValue}
-          autoCheck={type === 'text' && rest.expected != null}
+          autoCheck={(type === 'text' && rest.expected != null) || type === 'match'}
         />
       )}
     </>
@@ -1526,6 +1727,29 @@ function StaticQuestion({
           })}
         </ul>
       )}
+      {type === 'match' && (() => {
+        const { rows, targets } = extractMatchInfo(children)
+        const used = new Set(rows.map((r) => r.match))
+        const distractors = targets.filter((t) => !used.has(t))
+        return (
+          <>
+            <ul className="space-y-2">
+              {rows.map((r, i) => (
+                <li key={i} className="flex flex-col gap-1 p-3 border rounded-lg sm:flex-row sm:items-center sm:gap-4">
+                  <span className="flex-1 min-w-0">{r.label}</span>
+                  <span className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
+                    <Check className="w-3.5 h-3.5" />
+                    {r.match}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {distractors.length > 0 && (
+              <div className="text-xs text-muted-foreground">Distractors: {distractors.join(', ')}</div>
+            )}
+          </>
+        )
+      })()}
       {type === 'text' && (
         <div className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
           Text answer{expected ? ' · auto-checked' : ''}

@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils'
  * browser-stable identifier (acts like a cookie for survey deduplication).
  */
 
-export type SurveyAnswerType = 'single' | 'multiple' | 'text' | 'number' | 'range'
+export type SurveyAnswerType = 'single' | 'multiple' | 'text' | 'number' | 'range' | 'match'
 
 export interface SurveyAnswer {
   questionId: string
@@ -136,7 +136,8 @@ export function SurveyProvider({ pageId, children }: { pageId: string; children:
     if (Array.isArray(value)) return value.length > 0
     if (typeof value === 'string') return value.trim().length > 0
     if (typeof value === 'number') return true
-    if (value && typeof value === 'object') return true
+    // range {min,max}; match {rowIndex: target} counts once any row is picked.
+    if (value && typeof value === 'object') return Object.values(value).some((v) => v !== '' && v != null)
     return false
   }
 

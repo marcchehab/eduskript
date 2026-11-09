@@ -96,12 +96,36 @@ Renders as:
   <p>What is the capital of Switzerland?</p>
 </question>
 
+### Matching
+
+```html
+<question id="q-match-demo" type="match" points="3">
+Match each function to its parabola.
+<answer match="Parabola 1">$f(x)=x^2-1$</answer>
+<answer match="Parabola 2">$f(x)=x^2-5$</answer>
+<answer match="Parabola 3" feedback="Shifted up by 3.">$f(x)=x^2+3$</answer>
+<answer match="Parabola 4"></answer>
+</question>
+```
+
+Renders as:
+
+<question id="q-match-demo" type="match" points="3">
+Match each function to its parabola.
+<answer match="Parabola 1">$f(x)=x^2-1$</answer>
+<answer match="Parabola 2">$f(x)=x^2-5$</answer>
+<answer match="Parabola 3" feedback="Shifted up by 3.">$f(x)=x^2+3$</answer>
+<answer match="Parabola 4"></answer>
+</question>
+
+Each `<answer match="…">` with content is one row. The student picks a target for every row from a dropdown that lists all `match` values of the question in natural order ("Parabola 2" before "Parabola 10"), so the order gives nothing away. A target may belong to several rows. An empty `<answer match="…"></answer>` only adds a distractor target. Scoring gives partial credit: `points` × correct rows / rows. After a check, every row is marked, wrong rows show the correct target, and an answer's `feedback` appears under its row.
+
 ### Question attributes
 
 | Attribute | Values | Effect |
 |-----------|--------|--------|
 | `id` | string | Unique ID per page; used to track student responses |
-| `type` | `single` / `multiple` / `text` / `number` / `range` | Question style. Default `multiple`, so set it explicitly |
+| `type` | `single` / `multiple` / `text` / `number` / `range` / `match` | Question style. Default `multiple`, so set it explicitly |
 | `points` | number (default 1) | Score weight |
 | `feedback` | `check` (default) / `instant` / `none` | When correctness is revealed on a non-exam page. `check`: a Check answer button, nothing shown until pressed, locks when finished. `instant`: on every change. `none`: silent, no correctness (polls). Exam pages ignore this and stay silent until the exam is returned |
 | `attempts` | number (default 1) / `unlimited` | Check mode: how many Check presses before the question locks. A wrong non-final check marks only the student's own picks; the correct answer stays hidden. A correct answer always finishes the question |

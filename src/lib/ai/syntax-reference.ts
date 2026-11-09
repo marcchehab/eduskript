@@ -794,7 +794,7 @@ What is 2 + 2?
 
 **question attributes:**
 - \`id="unique-id"\` — Always set it. Without an id, all such questions on a page share one stored answer, and exam grading does not list them. Ids must not change once students have answered
-- \`type="multiple"\` — Multiple choice / checkboxes (the default if \`type\` is omitted). **Always set \`type\` explicitly** — omitting it silently gives checkboxes, not a single-select radio group. Other types: \`single\` (radio, one answer), \`text\` (free-text answer), \`number\` (slider), \`range\` (two-handle slider)
+- \`type="multiple"\` — Multiple choice / checkboxes (the default if \`type\` is omitted). **Always set \`type\` explicitly** — omitting it silently gives checkboxes, not a single-select radio group. Other types: \`single\` (radio, one answer), \`text\` (free-text answer), \`number\` (slider), \`range\` (two-handle slider), \`match\` (matching / Zuordnen, see below)
 - \`feedback="check|instant|none"\` — when correctness is revealed on a NON-exam page. \`check\` (default): a **Check answer** button; nothing is revealed until pressed, and the question locks once it is correct or the attempts are used up. \`instant\`: right/wrong shown on every change (sliders with feedback bands, if dragging is the point). \`none\`: silent, no correctness at all (polls, exit tickets — the teacher still sees the class tally). **Exam pages ignore this attribute**: answers autosave silently, are handed in with the stage/exam, and feedback appears on the returned exam. Teachers always see correctness when grading.
 - \`attempts="3"\` or \`attempts="unlimited"\` — check mode only, default 1. After a wrong check with attempts left, only the student's own picks are marked (the correct answer stays hidden), and they may change the answer and check again. A correct answer always finishes the question.
 - \`showFeedback="true"\` — legacy alias for \`feedback="instant"\` (\`"false"\` = \`feedback="none"\`). Prefer \`feedback\`.
@@ -825,10 +825,23 @@ At which $x$ does $f$ have its maximum?
 - \`<answer from="0.7" feedback="…">\` are feedback bands: the highest threshold the student's ratio reaches wins, a band without \`from\` is the catch-all. Bands only pick the wording — the points come from the ratio × \`points\`.
 - Without \`expected\` a slider stays ungraded and the teacher scores it by hand, as before.
 
+**Matching questions** (\`type="match"\`, "Zuordnen") — each \`<answer match="Target">content</answer>\` is one row: the student sees the content and picks a target from a dropdown. The dropdown lists every distinct \`match\` value of the question in natural order ("Parabel 2" before "Parabel 10"), so it never gives the answer away; a target may belong to several rows. An \`<answer>\` with \`match\` but no content only adds a distractor target. Score: \`points\` × correct rows / rows (partial credit). After a check, every row is marked right/wrong, wrong rows show the correct target, and an answer's \`feedback="…"\` is shown under its row. Same \`feedback\` / \`attempts\` / exam behaviour as the other types; Check is enabled once every row has a target.
+
+\`\`\`markdown
+<question id="zuordnen-parabeln" type="match" points="3">
+Ordnen Sie jeder Funktion die passende Parabel zu.
+<answer match="Parabel 1">$f(x)=x^2-1$</answer>
+<answer match="Parabel 2">$f(x)=x^2-5$</answer>
+<answer match="Parabel 3" feedback="Nach oben verschoben: $+3$.">$f(x)=x^2+3$</answer>
+<answer match="Parabel 4"></answer>
+</question>
+\`\`\`
+
 **answer attributes:**
 - \`correct="true"\` — Marks the correct answer; set it on every correct answer of a \`multiple\` question. Bare \`correct\` means the same, but always write \`correct="true"\`. Choice questions only: \`text\`, \`number\` and \`range\` take their target from \`expected\`
 - \`feedback="..."\` — Shown when this wrong option is selected. Markdown and \`$math$\` are rendered.
 - \`from="0.7"\` — Feedback band threshold for slider questions (see above)
+- \`match="Target"\` — Matching questions: the target this row belongs to (see above)
 
 Spacing is forgiving: a prompt line and blank lines around the \`<answer>\` tags are optional — the question renders correctly either way.
 
@@ -970,6 +983,7 @@ export function getCondensedSyntaxReference(): string {
   - \`feedback="check|instant|none"\` (non-exam pages; default \`check\` = a Check answer button, hidden until pressed, locks when finished; \`instant\` = on every change; \`none\` = silent poll) and \`attempts="3"|"unlimited"\` (check mode, default 1; wrong non-final checks mark only the student's picks). Exam pages ignore both: silent autosave, feedback on the returned exam. \`showFeedback="true"\` is a legacy alias for \`feedback="instant"\`.
   - Put the question text inside the tag before the answers; it renders as the card heading. Markdown and \`$math$\` work in the prompt, in the answers and in \`feedback="…"\`.
   - Sliders auto-grade when given a target: \`<question type="number" expected="-1" tolerance="0.15">\` (or \`type="range" expected="-1..1"\`), with \`<answer from="0.7" feedback="…">\` bands from best to worst.
+  - Matching ("Zuordnen"): \`<question type="match" points="3">\` with one \`<answer match="Target">row content</answer>\` per row; an empty \`<answer match="X"></answer>\` adds a distractor target. Dropdown of all targets (natural order); points × correct rows / rows.
   - Always set \`id\`. Without it, all such questions on a page share one stored answer, and exam grading does not list them
   - Use \`correct="true"\` to mark the correct answer (bare \`correct\` means the same); choice questions only, the other types use \`expected\`
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`

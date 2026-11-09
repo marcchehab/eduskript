@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
 import { useCurrentSite } from '@/contexts/current-site-context'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
+import { formatMatchAnswer } from '@/lib/match-question'
 
 function resolveDisplayName(
   r: { pseudonym: string; displayName: string },
@@ -193,6 +194,9 @@ interface QuizResponseItem {
     isSubmitted: boolean
     textRatio?: number
     textScore?: number
+    matchAnswer?: Record<string, string>
+    matchRatio?: number
+    matchScore?: number
   } | null
   submittedAt: number | null
   isCorrect?: boolean
@@ -204,12 +208,12 @@ interface QuizProgressBarProps {
   className: string // Class name for display
   pageId: string
   componentId: string
-  questionType: 'single' | 'multiple' | 'text' | 'number' | 'range'
+  questionType: 'single' | 'multiple' | 'text' | 'number' | 'range' | 'match'
   correctIndices: number[]
-  options?: string[] // Option labels for displaying what was selected
+  options?: string[] // Option labels (match: row labels) for displaying the answer
   minValue?: number  // For number/range visualization
   maxValue?: number  // For number/range visualization
-  autoCheck?: boolean // Text question has an expected answer → show correctness
+  autoCheck?: boolean // Text question has an expected answer, or a classroom match question → show correctness
 }
 
 export function QuizProgressBar({
@@ -368,7 +372,7 @@ export function QuizProgressBar({
   // Correctness is meaningful for choice questions and for auto-checked text
   // (predict-output). Number/range and free text have no answer key here, so
   // the bar just shows "answered".
-  const showCorrectness = isChoiceQuestion || (questionType === 'text' && autoCheck)
+  const showCorrectness = isChoiceQuestion || ((questionType === 'text' || questionType === 'match') && autoCheck)
 
   // Format answer for display
   const formatAnswer = (response: QuizResponseItem) => {
@@ -393,6 +397,21 @@ export function QuizProgressBar({
 
     if (questionType === 'number') {
       return <span className="font-mono">{response.data.numberAnswer}</span>
+    }
+
+    if (questionType === 'match') {
+      const ratio = response.data.matchRatio
+      return (
+        <span className="text-sm wrap-break-word">
+          {formatMatchAnswer(response.data.matchAnswer, options)}
+          {ratio !== undefined && (
+            <span className="ml-1.5 whitespace-nowrap tabular-nums text-xs text-muted-foreground">
+              ({Math.round(ratio * 100)}%
+              {response.data.matchScore !== undefined && `, ${response.data.matchScore} pts`})
+            </span>
+          )}
+        </span>
+      )
     }
 
     if (questionType === 'range' && response.data.rangeAnswer) {
@@ -424,8 +443,12 @@ export function QuizProgressBar({
     // Auto-checked text question: grade by similarity (exact → green,
     // partial → yellow, none → red). Falls back to the plain submitted check
     // for plain text/number questions with no auto-check score.
-    if (questionType === 'text' && response.data.textRatio !== undefined) {
-      const ratio = response.data.textRatio
+    const autoRatio =
+      questionType === 'text' ? response.data.textRatio
+        : questionType === 'match' ? response.data.matchRatio
+          : undefined
+    if (autoRatio !== undefined) {
+      const ratio = autoRatio
       if (ratio === 1) return <Check className="h-4 w-4 text-green-500" />
       if (ratio > 0) return <Minus className="h-4 w-4 text-yellow-500" />
       return <X className="h-4 w-4 text-red-500" />

@@ -16,6 +16,7 @@ interface QuizData {
   numberAnswer?: number
   isSubmitted: boolean
   textRatio?: number // Auto-check similarity (predict-output), 0–1
+  matchRatio?: number // Match question: correct rows / rows, 0–1 (client-computed)
 }
 
 interface QuizResponseItem {
@@ -191,10 +192,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         } else {
           stats.wrong++
         }
-      } else if (typeof quizData?.textRatio === 'number') {
-        // Auto-checked text answer (predict-output): classify by similarity
-        // ratio, matching the per-student icon and the python-check bar.
-        const ratio = quizData.textRatio
+      } else if (typeof quizData?.textRatio === 'number' || typeof quizData?.matchRatio === 'number') {
+        // Auto-checked text answer (predict-output) or match question:
+        // classify by ratio, matching the per-student icon and the
+        // python-check bar.
+        const ratio = (quizData.textRatio ?? quizData.matchRatio) as number
         if (ratio >= 1) { isCorrect = true; stats.correct++ }
         else if (ratio > 0) { isPartiallyCorrect = true; stats.partial++ }
         else { stats.wrong++ }

@@ -15,6 +15,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canManageSite } from '@/lib/site-access'
 import { getStudentDisplayName } from '@/lib/privacy/pseudonym'
+import { formatMatchAnswer } from '@/lib/match-question'
 
 interface StoredQuizData {
   isSubmitted?: boolean
@@ -22,6 +23,7 @@ interface StoredQuizData {
   textAnswer?: string
   numberAnswer?: number
   rangeAnswer?: { min: number; max: number }
+  matchAnswer?: Record<string, string>
 }
 
 function csvEscape(value: string): string {
@@ -38,6 +40,8 @@ function answerToCell(d: StoredQuizData | null): string {
   if (d.numberAnswer !== undefined) return String(d.numberAnswer)
   if (d.rangeAnswer !== undefined) return `${d.rangeAnswer.min}-${d.rangeAnswer.max}`
   if (d.selected !== undefined) return d.selected.join(';')
+  // Row numbers only (no labels: the CSV has no per-question markdown parse).
+  if (d.matchAnswer !== undefined) return formatMatchAnswer(d.matchAnswer)
   return ''
 }
 

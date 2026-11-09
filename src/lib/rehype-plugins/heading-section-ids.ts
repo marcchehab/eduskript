@@ -64,6 +64,8 @@ export function rehypeHeadingSectionIds() {
     // Collect end-sentinel insertions during visit; apply after the walk so we
     // don't perturb traversal indices. Each entry: { parent, index, sectionId }.
     const inserts: Array<{ parent: Element | Root; index: number; sectionId: string }> = []
+    // Occurrences per src-derived plugin ID (see the plugin branch below).
+    const pluginSeen: Record<string, number> = {}
 
     visit(tree, 'element', (node: Element, index, parent) => {
       node.properties = node.properties || {}
@@ -113,12 +115,23 @@ export function rehypeHeadingSectionIds() {
       }
 
       // Plugin iframes (custom element) - dynamic height due to iframe auto-resize
-      // Uses src attribute for stable IDs (sequential counters break when plugins are added/removed)
+      // ID from the src attribute (sequential counters break when plugins are
+      // added/removed). The same plugin embedded several times gets `-2`, `-3`
+      // … from its second occurrence on: before 2026-11-09 every occurrence
+      // shared one ID, so strokes below a later one were anchored (querySelector
+      // → first match) to the first and shifted when anything in between
+      // changed height. The first keeps the old ID so existing strokes render
+      // where they did.
       if (node.tagName === 'plugin') {
         const src = node.properties?.src as string | undefined
-        const sectionId = src
-          ? `plugin-${src.replace(/[^a-zA-Z0-9-]/g, '-')}`
-          : `plugin-${counters.plugin++}`
+        let sectionId: string
+        if (src) {
+          const base = `plugin-${src.replace(/[^a-zA-Z0-9-]/g, '-')}`
+          const n = (pluginSeen[base] = (pluginSeen[base] ?? 0) + 1)
+          sectionId = n === 1 ? base : `${base}-${n}`
+        } else {
+          sectionId = `plugin-${counters.plugin++}`
+        }
         node.properties['data-section-id'] = sectionId
         node.properties['data-dynamic-height'] = 'true'
         if (parent && typeof index === 'number') {

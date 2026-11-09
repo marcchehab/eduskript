@@ -219,7 +219,7 @@ export const sanitizeSchema = {
     'onlyfor': ['auth', 'anon', 'students', 'prompt', 'class', 'print', 'screen'],
     'question': ['id', 'type', 'showfeedback', 'feedback', 'attempts', 'expected', 'tolerance', 'window', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
     'quiz-option': ['correct', 'is', 'feedback'],
-    'answer': ['correct', 'is', 'feedback', 'from'],
+    'answer': ['correct', 'is', 'feedback', 'from', 'match'],
     'yt': ['time', 'videoid', 'label'],
     'stickme': ['id', 'width'],
     'next-stage': ['label', 'title', 'confirm', 'cancel'],
