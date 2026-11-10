@@ -771,12 +771,13 @@ p:has(> .blank-field) {
     padding-right: 48px !important;
     transform: none !important;
     zoom: 0.685801; /* 180mm / 992px */
-    /* Page margins 15mm top, 18mm bottom in zoomed px (mm × 3.7795 / zoom),
-       repeated on every page; 15mm left as margin. */
+    /* Page margins: 15mm top in zoomed px (mm × 3.7795 / zoom), repeated on
+       every page; 15mm left as margin; 18mm bottom is the @page margin below
+       (holds the page number). */
     margin-left: 82.66px !important;
     margin-right: 0 !important;
     padding-top: 82.66px !important;
-    padding-bottom: 99.2px !important;
+    padding-bottom: 0 !important;
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
     /* Under zoom Chrome rounds glyph advances to whole px of the small print
@@ -831,13 +832,20 @@ p:has(> .blank-field) {
   html.print-layout h3 {
     break-after: auto;
   }
-  /* Margin 0 leaves the browser no room for its own header and footer
-     (title, URL, date). The page margins come from #paper's padding, cloned
-     onto every page fragment. Costs the page number: CSS margin boxes need a
-     page margin. */
+  /* Top margin 0 leaves the browser no room for its own header (title,
+     date). Top and side margins come from #paper (padding cloned onto every
+     page fragment); the 18mm bottom margin holds the page number. Chrome
+     prints margin boxes since 131; with "Headers and footers" ticked in the
+     print dialog its own footer may show instead. */
   @page {
     size: A4;
-    margin: 0;
+    margin: 0 0 18mm 0;
+    @bottom-center {
+      content: counter(page);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 9pt;
+      color: #6b7280;
+    }
   }
 }
 
