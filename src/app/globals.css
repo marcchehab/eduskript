@@ -617,16 +617,18 @@ p:has(> .blank-field) {
  * (1454.93px, geometry.ts) below the paper's top padding: 2rem on screen,
  * 82.66px in print (@media print below, which also widens the paper's clip
  * so the code isn't cut off at the paper edge). Keep in sync with both.
+ * Fixed height instead of translateY(-100%): Firefox lays the box out at its
+ * untranslated top (the page edge) and cuts it off there.
  */
 .print-layout .print-page-qr {
   position: absolute;
-  top: calc(2rem + 1454.93px);
+  height: 6.375rem; /* 102px: 64px code + label + padding */
+  top: calc(2rem + 1454.93px - 6.375rem);
   left: calc(100% - 12rem + 0.5rem);
-  transform: translateY(-100%);
 }
 @media print {
   html.print-layout .print-page-qr {
-    top: calc(82.66px + 1454.93px);
+    top: calc(82.66px + 1454.93px - 6.375rem);
     left: calc(100% - 48px + 0.5rem);
   }
 }
