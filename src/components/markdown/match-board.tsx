@@ -24,6 +24,9 @@
  *     on a row removes its connection.
  *   - The × on a connected row removes the connection.
  *
+ * Client rects are divided by the board's CSS scale (the paper's
+ * --paper-scale transform on narrow screens): the SVG draws in unscaled px.
+ *
  * Known limitation: the lines are measured after layout; content that changes
  * size without resizing the board or its columns (rare) keeps stale lines
  * until the next answer change or resize.
@@ -60,6 +63,11 @@ type Point = { x: number; y: number }
 // Pointer travel (px) that turns a press into a drag instead of a tap.
 const DRAG_THRESHOLD = 6
 
+/** Rendered px per layout px (1 unless an ancestor is CSS-transformed). */
+function boardScale(board: HTMLElement, rect: DOMRect): number {
+  return board.offsetWidth > 0 ? rect.width / board.offsetWidth : 1
+}
+
 export function MatchBoard({ idBase, rows, targets, answer, disabled, onConnect, onDisconnect, labelledBy }: Props) {
   const boardRef = useRef<HTMLDivElement>(null)
   const rowDotRefs = useRef<Array<HTMLSpanElement | null>>([])
@@ -85,10 +93,11 @@ export function MatchBoard({ idBase, rows, targets, answer, disabled, onConnect,
     const board = boardRef.current
     if (!board) return
     const b = board.getBoundingClientRect()
+    const s = boardScale(board, b)
     const center = (el: Element | null): Point => {
       if (!el) return { x: 0, y: 0 }
       const r = el.getBoundingClientRect()
-      return { x: r.left + r.width / 2 - b.left, y: r.top + r.height / 2 - b.top }
+      return { x: (r.left + r.width / 2 - b.left) / s, y: (r.top + r.height / 2 - b.top) / s }
     }
     const same = (a: Point[], c: Point[]) => a.length === c.length && a.every((p, i) => p.x === c[i].x && p.y === c[i].y)
     const nextRows = Array.from({ length: rowCount }, (_, i) => center(rowDotRefs.current[i]))
@@ -117,8 +126,11 @@ export function MatchBoard({ idBase, rows, targets, answer, disabled, onConnect,
   }, [disabled])
 
   const toBoard = (clientX: number, clientY: number): Point => {
-    const b = boardRef.current?.getBoundingClientRect()
-    return { x: clientX - (b?.left ?? 0), y: clientY - (b?.top ?? 0) }
+    const board = boardRef.current
+    if (!board) return { x: clientX, y: clientY }
+    const b = board.getBoundingClientRect()
+    const s = boardScale(board, b)
+    return { x: (clientX - b.left) / s, y: (clientY - b.top) / s }
   }
 
   const targetAt = (clientX: number, clientY: number): number => {
