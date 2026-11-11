@@ -3091,6 +3091,28 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
   }, [stylusModeActive])
 
+  // Document-level touch detection when stylus mode is active. In stylus mode
+  // the canvas covers the paper with pointer-events:auto, so finger taps never
+  // reach plugin iframes (tap-through only finds DOM controls). A finger touch
+  // well after the last pen event means the pen was put down: leave stylus
+  // mode so the next touch hits the page directly. Touches within the pen
+  // cooldown are treated as a resting palm and ignored.
+  useEffect(() => {
+    if (!stylusModeActive) return
+
+    const handleDocumentTouch = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' || fingerDrawModeRef.current) return
+      if (Date.now() - lastPenEventTimeRef.current < 1000) return
+      setStylusModeActive(false)
+      setMode('view')
+    }
+
+    document.addEventListener('pointerdown', handleDocumentTouch, { capture: true })
+    return () => {
+      document.removeEventListener('pointerdown', handleDocumentTouch, { capture: true })
+    }
+  }, [stylusModeActive])
+
   // Handle non-stylus input in stylus mode (switch to view mode and deactivate stylus mode)
   const handleNonStylusInput = useCallback(() => {
     if (stylusModeActive && mode !== 'view') {
