@@ -1365,6 +1365,8 @@ export const CodeEditor = memo(function CodeEditor({
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
+  // Watches for Skulpt's turtle canvas during a run (see runPythonCode).
+  const turtleObserverRef = useRef<MutationObserver | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const outputPanelRef = useRef<HTMLDivElement>(null)
 
@@ -3310,8 +3312,26 @@ export const CodeEditor = memo(function CodeEditor({
           target: canvas,
         }
 
-        // Frame the turtle canvas once Skulpt has created it.
-        setTimeout(() => fitToView(), 100)
+        // Skulpt creates the canvas lazily (after importing turtle — slow on
+        // a cold run), so a fixed-delay fit often found an empty div and
+        // reset to {0,0,1}, leaving the turtle origin (1000,1000) near the
+        // pane's bottom-right. Instead: centre the origin as soon as the
+        // first canvas appears; frame the full drawing when the run ends.
+        const target = canvas
+        const observer = new MutationObserver(() => {
+          if (target.querySelector('canvas')) {
+            observer.disconnect()
+            resetCanvasView()
+          }
+        })
+        observer.observe(target, { childList: true })
+        turtleObserverRef.current?.disconnect()
+        turtleObserverRef.current = observer
+      }
+      const finishTurtle = () => {
+        turtleObserverRef.current?.disconnect()
+        turtleObserverRef.current = null
+        if (canvas?.querySelector('canvas')) fitToView()
       }
 
       const promise = Sk.misceval.asyncToPromise(() => {
@@ -3322,6 +3342,7 @@ export const CodeEditor = memo(function CodeEditor({
         () => {
           setPendingInput(null)
           pendingInputRef.current = null
+          finishTurtle()
           // Show success flash on Run button
           setShowSuccessFlash(true)
           setTimeout(() => setShowSuccessFlash(false), 1500)
@@ -3330,6 +3351,7 @@ export const CodeEditor = memo(function CodeEditor({
         (err: SkulptError | Error) => {
           setPendingInput(null)
           pendingInputRef.current = null
+          finishTurtle()
           const errStr = err.toString()
           if ('tp$name' in err && err.tp$name === 'TimeoutError' && Sk.execLimit === 1) {
             // Already reported by stopCode
