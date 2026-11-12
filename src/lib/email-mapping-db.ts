@@ -221,3 +221,30 @@ export async function getReverseMappingsForClass(
   }
   return reversed
 }
+
+/**
+ * When each address last got a class-invite mail (bulk-import sendInvites).
+ * Kept next to the unmapped list in this browser only: the server stores the
+ * date per pseudonym but can't map it back to an address.
+ */
+export function getInvitedAtForClass(classId: string): Record<string, string> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const stored = localStorage.getItem(`eduskript_invited_at_${classId}`)
+    return stored ? JSON.parse(stored) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function markInvited(classId: string, emails: string[]): void {
+  if (typeof window === 'undefined' || emails.length === 0) return
+  try {
+    const invited = getInvitedAtForClass(classId)
+    const now = new Date().toISOString()
+    for (const email of emails) invited[email.toLowerCase().trim()] = now
+    localStorage.setItem(`eduskript_invited_at_${classId}`, JSON.stringify(invited))
+  } catch (error) {
+    console.error('[EmailMapping] Error saving invite dates:', error)
+  }
+}

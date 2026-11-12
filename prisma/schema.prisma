@@ -53,6 +53,33 @@ model VerificationToken {
   @@map("verificationtokens")
 }
 
+// One-time login codes and class-invite links for the email-code login
+// (src/lib/email-login.ts). Keyed by HMAC(email) (generatePseudonym), never
+// the address itself, so student emails stay out of the DB. Rows are deleted
+// when used or on the next code request after expiry.
+model EmailLoginToken {
+  id        String   @id @default(cuid())
+  pseudonym String // HMAC(email), see src/lib/privacy/pseudonym.ts
+  kind      String // "code" | "invite"
+  tokenHash String   @unique @map("token_hash") // sha256 of the code / link token
+  classId   String?  @map("class_id") // invite only
+  attempts  Int      @default(0) // code only; locked after 5 wrong guesses
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([pseudonym, kind])
+  @@index([expiresAt])
+  @@map("email_login_tokens")
+}
+
+// Recipients who clicked "Don't send me invites" in a class-invite mail.
+model InviteOptOut {
+  pseudonym String   @id
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("invite_opt_outs")
+}
+
 model User {
   id             String    @id @default(cuid())
   name           String?
@@ -715,10 +742,11 @@ model ClassMembership {
 
 // Pre-authorized student pseudonyms (for bulk import)
 model PreAuthorizedStudent {
-  id        String   @id @default(cuid())
-  classId   String   @map("class_id")
+  id        String    @id @default(cuid())
+  classId   String    @map("class_id")
   pseudonym String // Hashed email (before student signs up)
-  addedAt   DateTime @default(now()) @map("added_at")
+  addedAt   DateTime  @default(now()) @map("added_at")
+  invitedAt DateTime? @map("invited_at") // last invite mail sent (bulk-import sendInvites)
 
   // Relations
   class Class @relation(fields: [classId], references: [id], onDelete: Cascade)

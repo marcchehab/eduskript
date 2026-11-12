@@ -27,7 +27,9 @@ import {
   Pencil,
   Archive,
   ArchiveRestore,
+  Mail,
 } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
 import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 import { ClassExams } from '@/components/dashboard/class-exams'
 import { ClassExamRecords } from '@/components/dashboard/class-exam-records'
@@ -46,6 +48,8 @@ import {
   addUnmappedEmails,
   getUnmappedEmailsForClass,
   removeUnmappedEmail,
+  getInvitedAtForClass,
+  markInvited,
   saveEmailMapping,
 } from '@/lib/email-mapping-db'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
@@ -105,6 +109,9 @@ export default function ClassesPage() {
   // Per-class state for bulk import
   const [emailInputs, setEmailInputs] = useState<Record<string, string>>({})
   const [importing, setImporting] = useState<Record<string, boolean>>({})
+  // "Send invite emails" checkbox next to Add Students (default on; per class)
+  const [sendInvitesOnAdd, setSendInvitesOnAdd] = useState<Record<string, boolean>>({})
+  const [sendingInvites, setSendingInvites] = useState<Record<string, boolean>>({})
 
   // Sorting state per class
   const [sortConfig, setSortConfig] = useState<Record<string, { key: string; direction: 'asc' | 'desc' }>>({})
@@ -268,10 +275,11 @@ export default function ClassesPage() {
         return
       }
 
+      const sendInvites = sendInvitesOnAdd[classId] ?? true
       const response = await fetch(`/api/classes/${classId}/bulk-import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emails }),
+        body: JSON.stringify({ emails, sendInvites }),
       })
 
       if (!response.ok) {
@@ -288,6 +296,13 @@ export default function ClassesPage() {
       for (const email of (data.directlyAddedEmails ?? []) as string[]) {
         removeUnmappedEmail(classId, email)
       }
+      markInvited(classId, data.invitedEmails ?? [])
+      if (sendInvites) {
+        setDialogType('success')
+        setDialogTitle('Students added')
+        setDialogMessage(data.message)
+        setDialogOpen(true)
+      }
 
       // Clear the input and reload to show new students/invitations
       setEmailInputs({ ...emailInputs, [classId]: '' })
@@ -303,6 +318,36 @@ export default function ClassesPage() {
       setDialogOpen(true)
     } finally {
       setImporting({ ...importing, [classId]: false })
+    }
+  }
+
+  // Mail a join link to every pending address of this class. The addresses
+  // come from this browser's local list; the server keeps only hashes.
+  const handleSendInvites = async (classId: string) => {
+    const emails = getUnmappedEmailsForClass(classId)
+    if (emails.length === 0) return
+    setSendingInvites((prev) => ({ ...prev, [classId]: true }))
+    try {
+      const response = await fetch(`/api/classes/${classId}/bulk-import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails, sendInvites: true }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Failed to send invites')
+      markInvited(classId, data.invitedEmails ?? [])
+      await loadClassDetails(classId)
+      setDialogType('success')
+      setDialogTitle('Invites sent')
+      setDialogMessage(data.message)
+      setDialogOpen(true)
+    } catch (error) {
+      setDialogType('error')
+      setDialogTitle('Failed to Send Invites')
+      setDialogMessage(error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.')
+      setDialogOpen(true)
+    } finally {
+      setSendingInvites((prev) => ({ ...prev, [classId]: false }))
     }
   }
 
@@ -858,8 +903,8 @@ export default function ClassesPage() {
                             <div className="rounded-md border bg-muted/40 p-3 text-sm flex items-start justify-between gap-3">
                               <p className="text-muted-foreground">
                                 This class requires identity, so there is no invite link. Add your
-                                students&apos; school emails below, then tell them to sign in with
-                                their school account — the class invitation pops up automatically.
+                                students&apos; school emails below and send invite emails, or tell them to
+                                sign in with their school email — the class invitation pops up automatically.
                               </p>
                               <Button
                                 variant="outline"
@@ -893,10 +938,19 @@ export default function ClassesPage() {
                             rows={4}
                             className="font-mono text-sm"
                           />
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-4">
                             <p className="text-xs text-muted-foreground">
-                              Students will receive a class invitation when they sign in. Already enrolled students who have shared their identity will be highlighted below.
+                              Students see the class invitation when they sign in. With invite emails on, each address also gets a one-click join link (the address is not stored on the server). Enrolled students who shared their identity are highlighted below.
                             </p>
+                            <label className="flex items-center gap-2 text-sm shrink-0 cursor-pointer">
+                              <Checkbox
+                                checked={sendInvitesOnAdd[classItem.id] ?? true}
+                                onCheckedChange={(checked) =>
+                                  setSendInvitesOnAdd({ ...sendInvitesOnAdd, [classItem.id]: checked === true })
+                                }
+                              />
+                              Send invite emails
+                            </label>
                             <Button
                               onClick={() => handleAddStudents(classItem.id)}
                               disabled={
@@ -1026,12 +1080,24 @@ export default function ClassesPage() {
                           {(() => {
                             const unmappedEmails = getUnmappedEmailsForClass(classItem.id)
                             if (unmappedEmails.length === 0) return null
+                            const invitedAt = getInvitedAtForClass(classItem.id)
 
                             return (
                               <div className="mt-6 space-y-3">
-                                <Label className="text-base font-semibold">
-                                  Pending Invitations ({unmappedEmails.length})
-                                </Label>
+                                <div className="flex items-center justify-between gap-2">
+                                  <Label className="text-base font-semibold">
+                                    Pending Invitations ({unmappedEmails.length})
+                                  </Label>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleSendInvites(classItem.id)}
+                                    disabled={sendingInvites[classItem.id]}
+                                  >
+                                    <Mail className="w-4 h-4 mr-1" />
+                                    {sendingInvites[classItem.id] ? 'Sending…' : 'Send invite emails'}
+                                  </Button>
+                                </div>
                                 <p className="text-xs text-muted-foreground">
                                   Students who haven&apos;t joined yet or haven&apos;t consented to reveal their identity
                                 </p>
@@ -1041,7 +1107,14 @@ export default function ClassesPage() {
                                       key={email}
                                       className="flex items-center justify-between p-3 bg-muted/30 rounded-md border"
                                     >
-                                      <span className="text-sm font-mono">{email}</span>
+                                      <span className="text-sm font-mono">
+                                        {email}
+                                        {invitedAt[email] && (
+                                          <span className="ml-2 font-sans text-xs text-muted-foreground">
+                                            invited {new Date(invitedAt[email]).toLocaleDateString()}
+                                          </span>
+                                        )}
+                                      </span>
                                       <Button
                                         variant="ghost"
                                         size="sm"

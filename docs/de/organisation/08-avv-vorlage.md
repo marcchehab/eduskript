@@ -41,7 +41,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 ## 3. Datensparsamkeit und Pseudonymisierung
 
-3.1 Schülerinnen und Schüler melden sich über den Identitätsanbieter der Schule (z. B. Microsoft 365) an. Die dabei übermittelte E-Mail-Adresse wird nur verwendet, um ein nicht umkehrbares Pseudonym (HMAC) zu berechnen, und **nicht gespeichert**.
+3.1 Schülerinnen und Schüler melden sich über den Identitätsanbieter der Schule (z. B. Microsoft 365) oder mit einem Code an, den Eduskript an ihre E-Mail-Adresse sendet; Lehrpersonen können ihnen zudem Klasseneinladungen per E-Mail senden. Die E-Mail-Adresse wird nur während der jeweiligen Anfrage verwendet, um ein nicht umkehrbares Pseudonym (HMAC) zu berechnen und die E-Mail zu versenden, und **nicht gespeichert**.
 
 3.2 Eduskript speichert von Schülerinnen und Schülern nur das Pseudonym, einen optional selbst gewählten Spitznamen sowie die Arbeitsdaten gemäss Anhang 1. Die Liste der E-Mail-Adressen, mit der eine Lehrperson ihre Klasse zuordnet, liegt nur im Browser der Lehrperson.
 
@@ -77,7 +77,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 ## 8. Ort der Datenbearbeitung und Bekanntgabe ins Ausland
 
-8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Die KI-Verarbeitung von Lösungen der Schülerinnen und Schüler (Ziffer 9) findet ebenfalls bei Infomaniak in der Schweiz statt. Verschlüsselte Sicherungen von Datenbank und Dateien liegen ebenfalls bei Infomaniak in der Schweiz, in einem anderen Rechenzentrum als der Server. Auch der E-Mail-Versand an Lehrpersonen erfolgt über Infomaniak in der Schweiz.
+8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Die KI-Verarbeitung von Lösungen der Schülerinnen und Schüler (Ziffer 9) findet ebenfalls bei Infomaniak in der Schweiz statt. Verschlüsselte Sicherungen von Datenbank und Dateien liegen ebenfalls bei Infomaniak in der Schweiz, in einem anderen Rechenzentrum als der Server. Auch der E-Mail-Versand an Lehrpersonen sowie von Login-Codes und Klasseneinladungen an Schülerinnen und Schüler erfolgt über Infomaniak in der Schweiz.
 
 8.2 Personendaten von Schülerinnen und Schülern werden nicht in Staaten ohne angemessenen Datenschutz übermittelt. In die USA gehen nur Inhalte von Lehrpersonen: KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten (OpenRouter; gestützt auf die Standardvertragsklauseln der EU im [Auftragsbearbeitungsvertrag von OpenRouter](https://openrouter.ai/data-processing-agreement), Stand 26. August 2026).
 

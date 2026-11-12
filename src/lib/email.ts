@@ -61,7 +61,9 @@ export async function sendEmail({ to, subject, htmlContent, textContent, tag = '
   } catch (error) {
     // SMTP errors carry the server's response code (e.g. 535 auth, 550 quota).
     const code = (error as { responseCode?: number })?.responseCode
-    const detail = (error as Error)?.message ?? String(error)
+    // SMTP replies can quote the recipient ("550 <a@b.ch>: rejected"); student
+    // addresses must never reach the log or callers' logs (/datenschutz).
+    const detail = ((error as Error)?.message ?? String(error)).replace(/[^\s<>"'@]+@[^\s<>"']+/g, '<address>')
     log.error(`send failed (${tag}, smtp ${code ?? 'unknown'}): ${detail}`)
     throw new Error(`Failed to send email: ${code ?? 'error'} ${detail}`)
   }

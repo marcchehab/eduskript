@@ -230,6 +230,43 @@ export const productUpdateSignupAddressRateLimiter = new RateLimiter('product-up
 })
 
 /**
+ * Email-code login (src/lib/email-login.ts). Code REQUESTS send mail, so they
+ * are limited per address (5 / 15 min), per IP (30 / h — generous because a
+ * whole class shares one school IP) and globally per day (keeps us under the
+ * SMTP account's daily cap; EMAIL_CODE_DAILY_LIMIT overrides, default 150 of
+ * Infomaniak Mail Starter's 200 / 24 h). Code CHECKS are limited per IP;
+ * per-code guesses are capped separately in the DB (MAX_CODE_ATTEMPTS).
+ * In-memory per process: exact on the single VPS instance, per-instance if
+ * the app ever scales out.
+ */
+export const emailCodeAddressRateLimiter = new RateLimiter('email-code-address', {
+  interval: 15 * 60 * 1000,
+  maxRequests: 5
+})
+export const emailCodeIpRateLimiter = new RateLimiter('email-code-ip', {
+  interval: 60 * 60 * 1000,
+  maxRequests: 30
+})
+export const emailCodeGlobalRateLimiter = new RateLimiter('email-code-global', {
+  interval: 24 * 60 * 60 * 1000,
+  maxRequests: Number(process.env.EMAIL_CODE_DAILY_LIMIT) || 150
+})
+export const emailCodeVerifyRateLimiter = new RateLimiter('email-code-verify', {
+  interval: 15 * 60 * 1000,
+  maxRequests: 60
+})
+
+/**
+ * Class-invite mails per teacher: 1000 recipients / day. Only meant to stop
+ * runaway abuse (the route is paid-only and the mail template has no free
+ * text); checked once per recipient.
+ */
+export const classInviteRateLimiter = new RateLimiter('class-invite', {
+  interval: 24 * 60 * 60 * 1000,
+  maxRequests: 1000
+})
+
+/**
  * Extracts client identifier from request headers
  * Tries multiple headers to get the real IP address
  * @param request - The incoming request

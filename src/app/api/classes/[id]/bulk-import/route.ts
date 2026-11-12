@@ -4,7 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { generatePseudonym } from '@/lib/privacy/pseudonym'
-import { bulkImportRateLimiter } from '@/lib/rate-limit'
+import { bulkImportRateLimiter, classInviteRateLimiter } from '@/lib/rate-limit'
+import { sendClassInvites } from '@/lib/email-login'
 import { eventBus } from '@/lib/events'
 
 interface RouteParams {
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Verify class exists and user owns it
     const classRecord = await prisma.class.findUnique({
       where: { id: classId },
-      select: { teacherId: true, name: true }
+      select: { teacherId: true, name: true, isActive: true, archivedAt: true, teacher: { select: { name: true } } }
     })
 
     if (!classRecord) {
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json()
-    const { emails } = body
+    const { emails, sendInvites } = body
 
     if (!Array.isArray(emails) || emails.length === 0) {
       return NextResponse.json(
@@ -243,6 +244,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // === Invite mails (email-code login, src/lib/email-login.ts) ===
+    // Everyone still pending gets a one-click join link: new pre-auths and
+    // earlier ones (resend). Consented members and direct-added accounts are
+    // already in the class. Addresses are only used in memory here.
+    let invites: Awaited<ReturnType<typeof sendClassInvites>> | null = null
+    if (sendInvites === true && classRecord.isActive && !classRecord.archivedAt) {
+      const recipients = emailsToPreAuthorize
+        .map(email => ({ email, pseudonym: studentPseudonymByEmail.get(email) ?? generatePseudonym(email) }))
+        .filter(r => !existingPseudonyms.has(r.pseudonym))
+      invites = await sendClassInvites({
+        classId,
+        className: classRecord.name,
+        teacherName: classRecord.teacher?.name ?? null,
+        recipients,
+        allow: () => classInviteRateLimiter.check(session.user.id).allowed,
+      })
+    }
+
     // Build summary message
     const messageParts: string[] = []
     if (usersToDirectAdd.length > 0) {
@@ -250,6 +269,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
     if (pseudonymsToAdd.length > 0) {
       messageParts.push(`${pseudonymsToAdd.length} student${pseudonymsToAdd.length !== 1 ? 's' : ''} will see invitation when they sign in`)
+    }
+    if (invites) {
+      messageParts.push(`${invites.sent.length} invite email${invites.sent.length !== 1 ? 's' : ''} sent`)
+      if (invites.failed > 0) messageParts.push(`${invites.failed} could not be sent`)
+      if (invites.limited > 0) messageParts.push(`${invites.limited} skipped (daily invite limit reached)`)
+      if (invites.optedOut > 0) messageParts.push(`${invites.optedOut} skipped (recipient turned off invites)`)
     }
     const message = messageParts.join(', ') || 'No new members to add'
 
@@ -263,6 +288,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       alreadyMembers: alreadyMemberUserIds.size + existingPseudonyms.size,
       alreadyPreAuthorized: preAuthPseudonyms.size,
       total: normalizedEmails.length,
+      // Addresses that got an invite mail, for the teacher's local "invited" date.
+      invitedEmails: invites?.sent ?? [],
       message
     })
   } catch (error) {

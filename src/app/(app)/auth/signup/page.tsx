@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Check, X } from 'lucide-react'
+import { EmailCodeForm } from '@/components/auth/email-code-form'
 
 const PAGE_LANGUAGES = [
   { value: 'de-CH', label: 'Deutsch (Schweiz)', flag: '/flags/de-ch.png' },
@@ -215,6 +216,17 @@ export default function SignUpPage() {
             </div>
           ) : (
             <>
+              {/* Primary: email code (creates a teacher account) */}
+              <EmailCodeForm context="teacher-signup" placeholder="teacher@school.ch" />
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">{t('or', 'oder')}</span>
+                </div>
+              </div>
+
               {/* OAuth Providers */}
               <div className="space-y-3 mb-6">
                 <Button
@@ -238,7 +250,7 @@ export default function SignUpPage() {
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-card px-2 text-muted-foreground">
-                    {t('Or sign up with email', 'Oder mit E-Mail registrieren')}
+                    {t('Or sign up with a password', 'Oder mit Passwort registrieren')}
                   </span>
                 </div>
               </div>

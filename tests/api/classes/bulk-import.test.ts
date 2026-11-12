@@ -35,6 +35,15 @@ vi.mock('@/lib/rate-limit', () => ({
   bulkImportRateLimiter: {
     check: vi.fn(() => ({ allowed: true, remaining: 5 })),
   },
+  classInviteRateLimiter: {
+    check: vi.fn(() => ({ allowed: true, remaining: 999 })),
+  },
+}))
+
+vi.mock('@/lib/email-login', () => ({
+  sendClassInvites: vi.fn(async ({ recipients }: { recipients: { email: string }[] }) => ({
+    sent: recipients.map((r) => r.email), failed: 0, optedOut: 0, limited: 0,
+  })),
 }))
 
 vi.mock('@/lib/privacy/pseudonym', () => ({
@@ -50,6 +59,7 @@ vi.mock('@/lib/events', () => ({
 import { POST, DELETE } from '@/app/api/classes/[id]/bulk-import/route'
 import { prisma } from '@/lib/prisma'
 import { bulkImportRateLimiter } from '@/lib/rate-limit'
+import { sendClassInvites } from '@/lib/email-login'
 
 function createPostRequest(classId: string, body: object): NextRequest {
   return new NextRequest(`http://localhost:3000/api/classes/${classId}/bulk-import`, {
@@ -499,5 +509,44 @@ describe('Bulk Import API', () => {
         expect(data.error).toBe('Pre-authorization not found')
       })
     })
+  })
+})
+
+describe('Bulk Import API — invite emails', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(bulkImportRateLimiter.check).mockReturnValue({ allowed: true, remaining: 5, resetAt: Date.now() + 3600000 })
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: 'teacher-1', billingPlan: 'pro' } } as never)
+    vi.mocked(prisma.class.findUnique).mockResolvedValue({
+      id: 'class-1', teacherId: 'teacher-1', name: 'Test Class', isActive: true, archivedAt: null, teacher: { name: 'T' },
+    } as never)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([])
+    vi.mocked(prisma.preAuthorizedStudent.findMany).mockResolvedValue([{ pseudonym: 'pseudo-old' }] as never)
+    vi.mocked(prisma.preAuthorizedStudent.createMany).mockResolvedValue({ count: 1 } as never)
+  })
+
+  it('invites new and still-pending addresses, not consented members', async () => {
+    vi.mocked(prisma.classMembership.findMany).mockResolvedValue([
+      { student: { id: 's1', studentPseudonym: 'pseudo-member' } },
+    ] as never)
+
+    const request = createPostRequest('class-1', {
+      emails: ['new@school.ch', 'old@school.ch', 'member@school.ch'],
+      sendInvites: true,
+    })
+    const response = await POST(request, mockParams('class-1'))
+    const data = await response.json()
+
+    expect(response.status).toBe(200)
+    const call = vi.mocked(sendClassInvites).mock.calls[0][0]
+    expect(call.recipients.map((r) => r.email)).toEqual(['new@school.ch', 'old@school.ch'])
+    expect(data.invitedEmails).toEqual(['new@school.ch', 'old@school.ch'])
+  })
+
+  it('sends nothing without sendInvites', async () => {
+    vi.mocked(prisma.classMembership.findMany).mockResolvedValue([])
+    const response = await POST(createPostRequest('class-1', { emails: ['new@school.ch'] }), mockParams('class-1'))
+    expect(response.status).toBe(200)
+    expect(sendClassInvites).not.toHaveBeenCalled()
   })
 })

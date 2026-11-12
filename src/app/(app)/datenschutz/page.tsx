@@ -37,7 +37,7 @@ export const metadata: Metadata = {
 // training; copy in pr-audit/vertraege). AI providers must match DEFAULTS /
 // STUDENT_DATA in src/lib/ai/provider.ts.
 const SUBPROCESSORS: { name: string; purpose: string; location: string; studentData: string }[] = [
-  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, E-Mail-Versand an Lehrpersonen (SMTP), Dateispeicher (hochgeladene Dateien, Bilder, Videos), verschlüsselte Sicherungen von Datenbank und Dateien (getrennter Standort), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen), automatische Untertitel für Videos von Lehrpersonen (Whisper)', location: 'Schweiz', studentData: 'ja' },
+  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank, E-Mail-Versand (SMTP) an Lehrpersonen sowie Login-Codes und Klasseneinladungen an Schülerinnen und Schüler, Dateispeicher (hochgeladene Dateien, Bilder, Videos), verschlüsselte Sicherungen von Datenbank und Dateien (getrennter Standort), KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (offene Modelle, z. B. Qwen), automatische Untertitel für Videos von Lehrpersonen (Whisper)', location: 'Schweiz', studentData: 'ja' },
   { name: 'CloudMailin (Dynamic Edge Software Ltd, Grossbritannien)', purpose: 'Empfang weitergeleiteter E-Mails von Lehrpersonen (Mail-Hooks, z. B. Login-Codes) und von Entwürfen für Produkt-Updates', location: 'USA/EU', studentData: 'nein' },
   { name: 'Payrexx AG (Schweiz)', purpose: 'Zahlungsabwicklung', location: 'Schweiz', studentData: 'nein' },
   { name: 'OpenRouter, Inc. (USA)', purpose: 'Vermittlung der KI-Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten', location: 'USA', studentData: 'nein' },
@@ -51,6 +51,7 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'Oktober 2026', change: 'Videos werden auf unseren Servern in der Schweiz aufbereitet und gespeichert, Untertitel von der KI bei Infomaniak erstellt. Mux (USA) entfernt.' },
   { date: 'Oktober 2026', change: 'Abschnitt «Technische Daten»: IP-Hash beim Import von Dokumenten ohne Konto ergänzt.' },
   { date: 'Oktober 2026', change: 'Sicherungen genauer beschrieben: Dateien werden neu jede Nacht verschlüsselt in Winterthur gesichert, gelöschte Dateien bleiben dort höchstens 30 Tage. Aufbewahrung der Datenbank-Sicherungen präzisiert (auf dem Server rund 14 Tage, verschlüsselt in Winterthur höchstens 6 Monate).' },
+  { date: 'November 2026', change: 'Anmeldung per E-Mail-Code und Klasseneinladungen per E-Mail ergänzt. Dafür gehen E-Mails auch an Schülerinnen und Schüler (SMTP über Infomaniak); ihre Adresse wird weiterhin nicht gespeichert, nur das Pseudonym.' },
   { date: 'Oktober 2026', change: 'Brevo entfernt. E-Mails an Lehrpersonen gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates für neue Lehrpersonen nur mit Einwilligung; bestehende können sich jederzeit abmelden. Besucherinnen und Besucher ohne Konto können Produkt-Updates mit ihrer E-Mail-Adresse abonnieren (mit Bestätigung per Mail).' },
 ]
 
@@ -161,11 +162,12 @@ export default function DatenschutzPage() {
             <ul className="list-disc pl-6 space-y-1">
               <li>
                 Ein Pseudonym: ein nicht umkehrbarer HMAC-Wert, berechnet aus
-                der E-Mail-Adresse, die der Anmeldedienst der Schule übermittelt.
+                der E-Mail-Adresse, die der Anmeldedienst der Schule übermittelt
+                oder die du bei der Anmeldung per E-Mail-Code eingibst.
                 Die E-Mail-Adresse selbst wird <strong>nicht gespeichert</strong>.
               </li>
               <li>Ein zufällig erzeugter oder selbst gewählter Spitzname</li>
-              <li>Die Kennung des Anmeldedienstes, um wiederkehrende Anmeldungen zu erkennen</li>
+              <li>Bei Anmeldung über einen Anmeldedienst (z.B. Microsoft): dessen Kennung, um wiederkehrende Anmeldungen zu erkennen</li>
               <li>Klassenzugehörigkeit</li>
               <li>
                 Arbeitsdaten: Antworten, Code, Quiz-Ergebnisse, Fortschritt,
@@ -181,6 +183,16 @@ export default function DatenschutzPage() {
               der Server. Schülerinnen und
               Schüler können einer Klasse ausserdem freiwillig erlauben, dass
               die Lehrperson sie identifiziert.
+            </p>
+            <p className="mt-2">
+              Für die Anmeldung per E-Mail-Code und für Klasseneinladungen
+              senden wir eine E-Mail an die eingegebene Adresse. Die Adresse
+              verwenden wir dafür nur während dieser Anfrage im
+              Arbeitsspeicher; gespeichert werden nur das Pseudonym und der
+              Code bzw. Einladungslink (als Hash), die nach Gebrauch oder
+              spätestens nach 10 Minuten (Code) bzw. 14 Tagen (Einladung)
+              gelöscht werden. Wer in einer Einladung «Keine Einladungen mehr»
+              wählt, wird mit dem Pseudonym auf eine Sperrliste gesetzt.
             </p>
 
             <h3 className={h3}>Technische Daten</h3>

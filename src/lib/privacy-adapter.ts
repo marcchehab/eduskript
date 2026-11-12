@@ -57,9 +57,10 @@
  *    changes (e.g., new Microsoft account), they lose access to their Eduskript
  *    student account. There's no email-based recovery possible by design.
  *
- * 3. **No email verification for students**: Since we don't store student emails,
- *    we can't verify that they actually control the email. This is acceptable
- *    because student accounts have limited capabilities.
+ * 3. **Email verification only at login time**: OAuth students are verified by
+ *    their provider; email-code students (src/lib/email-login.ts) by the code.
+ *    Since no student email is stored, there is no later re-verification or
+ *    email-based recovery.
  *
  * 4. **Pre-authorization doesn't auto-enroll**: Students must manually accept
  *    class invitations even if pre-authorized. This is intentional for consent
@@ -274,8 +275,44 @@ async function autoJoinOrgBySignupContext(
 }
 
 /**
+ * Create a student account: pseudonym + stable nickname, no email (/datenschutz).
+ * Shared by OAuth signup (createUser below) and the email-code login
+ * (src/lib/email-login.ts), which has only the pseudonym for invite links.
+ */
+export async function createStudentUser(
+  prisma: PrismaClient,
+  pseudonym: string | null,
+  signupContext: SignupContext
+) {
+  // Deterministic from the pseudonym so the nickname is stable across
+  // sessions/devices. The 4-char hex tail comes from chars 8-12 of
+  // the same pseudonym — collisions need both the adj/phil pair AND
+  // the tail to match, ~26M combinations.
+  const anonymousName = pseudonym ? getStableStudentNickname(pseudonym) : null
+  let createdUser
+  try {
+    createdUser = await prisma.user.create({
+      data: {
+        name: anonymousName,
+        accountType: 'student',
+        studentPseudonym: pseudonym,
+        lastSeenAt: new Date(),
+      },
+    })
+    log.info(`Student account created: id=${createdUser.id}, name="${anonymousName}"`)
+  } catch (error: any) {
+    log.error(`Failed to create student account: ${error.message}`)
+    throw error
+  }
+
+  // Auto-join orgs based on signup context (e.g., teacher's orgs)
+  await autoJoinOrgBySignupContext(prisma, createdUser.id, signupContext)
+  return createdUser
+}
+
+/**
  * Creates a privacy-preserving adapter that wraps PrismaAdapter
- * Students: OAuth-only, NO email storage
+ * Students: OAuth or email code (src/lib/email-login.ts), NO email storage
  * Teachers: Normal email storage
  */
 export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
@@ -335,32 +372,8 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
       })
 
       if (signupContext.isStudent) {
-        let createdUser
-        try {
-          const emailPseudonym = user.email ? generatePseudonym(user.email) : null
-          // Deterministic from the pseudonym so the nickname is stable across
-          // sessions/devices. The 4-char hex tail comes from chars 8-12 of
-          // the same pseudonym — collisions need both the adj/phil pair AND
-          // the tail to match, ~26M combinations.
-          const anonymousName = emailPseudonym ? getStableStudentNickname(emailPseudonym) : null
-
-          createdUser = await prisma.user.create({
-            data: {
-              name: anonymousName,
-              accountType: 'student',
-              studentPseudonym: emailPseudonym,
-              lastSeenAt: new Date(),
-            },
-          })
-
-          log.info(`Student account created: id=${createdUser.id}, name="${anonymousName}"`)
-        } catch (error: any) {
-          log.error(`Failed to create student account: ${error.message}`)
-          throw error
-        }
-
-        // Auto-join orgs based on signup context (e.g., teacher's orgs)
-        await autoJoinOrgBySignupContext(prisma, createdUser.id, signupContext)
+        const emailPseudonym = user.email ? generatePseudonym(user.email) : null
+        const createdUser = await createStudentUser(prisma, emailPseudonym, signupContext)
 
         return {
           id: createdUser.id,

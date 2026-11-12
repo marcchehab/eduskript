@@ -6,8 +6,9 @@
  * ## Teacher Authentication
  *
  * Teachers can sign up/sign in via:
- * 1. **Email/Password** (credentials) - from main site (/auth/login, /auth/register)
- * 2. **OAuth** (GitHub, Azure AD) - from main site
+ * 1. **Email code** ('email-code' provider, src/lib/email-login.ts) - primary
+ * 2. **Email/Password** (credentials) - from main site (/auth/login, /auth/register)
+ * 3. **OAuth** (GitHub, Azure AD) - from main site
  *
  * Teacher accounts:
  * - Store real email addresses
@@ -17,8 +18,9 @@
  *
  * ## Student Authentication
  *
- * Students sign in ONLY via OAuth, from a teacher's page (e.g., /teacher-slug).
- * We detect student signups by checking the callback URL:
+ * Students sign in via an email code or a class-invite link ('email-code'
+ * provider; only HMAC(email) is stored) or via OAuth. Account type for NEW
+ * accounts comes from the signup context (src/lib/signup-context.ts):
  *
  * ```
  * OAuth initiated from:
@@ -60,11 +62,11 @@ import { prisma, prismaBase } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { generatePseudonym, isStudentEmail } from '@/lib/privacy/pseudonym'
 import { PrivacyAdapter, type SignupContext } from '@/lib/privacy-adapter'
+import { parseSignupContext } from '@/lib/signup-context'
 import { cookies } from 'next/headers'
-import { createLogger } from '@/lib/logger'
+import { loginWithCode, loginWithInvite, normalizeEmail } from '@/lib/email-login'
+import { emailCodeVerifyRateLimiter } from '@/lib/rate-limit'
 import { expireSubscriptionIfNeeded } from '@/lib/trial'
-
-const log = createLogger('auth:student-detect')
 
 export const authOptions: NextAuthOptions = {
   // Note: PrismaAdapter is incompatible with CredentialsProvider
@@ -74,90 +76,11 @@ export const authOptions: NextAuthOptions = {
   adapter: (process.env.GITHUB_CLIENT_ID || process.env.AZURE_AD_CLIENT_ID)
     ? PrivacyAdapter({
         prisma: prismaBase,
-        isStudentSignup: async (email: string, context?: any): Promise<SignupContext> => {
-          // Parse structured signup cookie set before OAuth redirect.
-          // Cookie values and their meanings:
-          //   "student:<slug>"     → Student account (from teacher page)
-          //   "student-org:<slug>" → Student account (from org page)
-          //   "teacher-org:<slug>" → Teacher account (from org page "For Teachers" column)
-          //   "teacher-signup"     → Teacher account (from /auth/signup OAuth)
-          //   "teacher:<slug>"     → Student account (legacy compat — teacher page)
-          //   "org:<slug>"         → Teacher account (legacy compat — org page)
-          //   (no cookie)          → Student account (safety default)
-          try {
-            const cookieStore = await cookies()
-            const signupContextCookie = cookieStore.get('eduskript-signup-context')
-            const rawValue = signupContextCookie?.value ? decodeURIComponent(signupContextCookie.value) : ''
-
-            log.info('Signup detection started', {
-              email: email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-              cookieValue: rawValue || '(none)',
-            })
-
-            if (!rawValue) {
-              // Safety default: no cookie → student account.
-              // This prevents accidental teacher account creation.
-              log.info('No signup context cookie — defaulting to STUDENT account (safety default)')
-              return { isStudent: true }
-            }
-
-            // Explicit student context from teacher page
-            if (rawValue.startsWith('student:')) {
-              const teacherSlug = rawValue.substring(8)
-              log.info(`Student signup from teacher page: teacherSlug="${teacherSlug}"`)
-              return { isStudent: true, teacherSlug }
-            }
-
-            // Explicit student context from org page
-            if (rawValue.startsWith('student-org:')) {
-              const orgSlug = rawValue.substring(12)
-              log.info(`Student signup from org page: orgSlug="${orgSlug}"`)
-              return { isStudent: true, orgSlug }
-            }
-
-            // Explicit teacher context from org page
-            if (rawValue.startsWith('teacher-org:')) {
-              const orgSlug = rawValue.substring(12)
-              log.info(`Teacher signup from org page: orgSlug="${orgSlug}"`)
-              return { isStudent: false, orgSlug }
-            }
-
-            // Explicit teacher context from /auth/signup page
-            if (rawValue === 'teacher-signup') {
-              log.info('Teacher signup from /auth/signup page')
-              return { isStudent: false }
-            }
-
-            // Legacy: "org:<slug>" → teacher account (old org page format)
-            if (rawValue.startsWith('org:')) {
-              const orgSlug = rawValue.substring(4)
-              log.info(`Legacy org page signup: orgSlug="${orgSlug}" → TEACHER account`)
-              return { isStudent: false, orgSlug }
-            }
-
-            // Legacy: "teacher:<slug>" or plain slug → student account (old teacher page format)
-            const teacherSlug = rawValue.startsWith('teacher:') ? rawValue.substring(8) : rawValue
-
-            // Verify this slug belongs to an existing teacher (URL slugs live
-            // on Site now; find the User behind that Site).
-            const slugSite = await prisma.site.findUnique({
-              where: { slug: teacherSlug },
-              select: { user: { select: { id: true, accountType: true } } },
-            })
-            const teacher = slugSite?.user ?? null
-
-            const isStudent = teacher !== null && teacher.accountType === 'teacher'
-            log.info(`Legacy teacher lookup for "${teacherSlug}": ${teacher ? `found (accountType=${teacher.accountType})` : 'not found'} → signing up as ${isStudent ? 'STUDENT' : 'TEACHER'}`)
-
-            return {
-              isStudent,
-              teacherSlug: isStudent ? teacherSlug : undefined,
-            }
-          } catch (error) {
-            // Safety default: errors → student account (prevents accidental teacher creation)
-            log.error('Signup detection failed, defaulting to STUDENT (safety default)', { error })
-            return { isStudent: true }
-          }
+        isStudentSignup: async (): Promise<SignupContext> => {
+          const cookieStore = await cookies()
+          const signupContextCookie = cookieStore.get('eduskript-signup-context')
+          const rawValue = signupContextCookie?.value ? decodeURIComponent(signupContextCookie.value) : ''
+          return parseSignupContext(rawValue)
         },
       })
     : undefined,
@@ -202,6 +125,35 @@ export const authOptions: NextAuthOptions = {
           image: user.image,
         }
       }
+    }),
+    // Email-code login + class-invite links (src/lib/email-login.ts).
+    // { email, code, context } → account by teacher email / student pseudonym,
+    // created on first login. { inviteToken } → student by invite pseudonym.
+    CredentialsProvider({
+      id: 'email-code',
+      name: 'email-code',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        code: { label: 'Code', type: 'text' },
+        context: { label: 'Context', type: 'text' },
+        inviteToken: { label: 'Invite', type: 'text' },
+      },
+      async authorize(credentials, req) {
+        const forwarded = req?.headers?.['x-forwarded-for']
+        const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0].trim()
+          || (req?.headers?.['x-real-ip'] as string | undefined) || 'unknown'
+        if (!emailCodeVerifyRateLimiter.check(ip).allowed) throw new Error('EMAIL_CODE_RATE_LIMITED')
+
+        if (credentials?.inviteToken) {
+          const user = await loginWithInvite(credentials.inviteToken)
+          return { id: user.id, email: user.email, name: user.name, image: user.image }
+        }
+        const email = normalizeEmail(credentials?.email)
+        const code = credentials?.code?.trim()
+        if (!email || !code || !/^\d{6}$/.test(code)) throw new Error('EMAIL_CODE_INVALID')
+        const user = await loginWithCode(email, code, credentials?.context)
+        return { id: user.id, email: user.email, name: user.name, image: user.image }
+      },
     }),
     ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
       ? [

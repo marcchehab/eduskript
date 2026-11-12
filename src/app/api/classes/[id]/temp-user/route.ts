@@ -8,8 +8,9 @@
  * Afterwards the teacher transfers its answers to the student's real account
  * (POST /api/teacher/temp-users/[sourceId]/transfer).
  *
- * POST /api/classes/[id]/temp-user   body: { email?, password? }
- *   Teacher-only, must own the class. email/password are generated when omitted.
+ * POST /api/classes/[id]/temp-user   body: { password? }
+ *   Teacher-only, must own the class. The email is always generated
+ *   (examtmp-…@temp.eduskript.org); the password when omitted.
  *   Returns { userId, email, password, displayName } — password is returned ONCE
  *   (plaintext) so the teacher can copy it; only the bcrypt hash is stored.
  */
@@ -42,9 +43,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'You do not own this class' }, { status: 403 })
     }
 
-    const body = (await request.json().catch(() => ({}))) as { email?: string; password?: string }
-    // Short, copy-friendly generated credentials when not supplied.
-    const email = (body.email?.trim() || `examtmp-${randomBytes(4).toString('hex')}@temp.eduskript.org`).toLowerCase()
+    const body = (await request.json().catch(() => ({}))) as { password?: string }
+    // Always a generated address: a teacher-typed one could be a student's
+    // real email, which must never be stored (/datenschutz).
+    const email = `examtmp-${randomBytes(4).toString('hex')}@temp.eduskript.org`
     const password = body.password?.trim() || randomBytes(6).toString('base64url').slice(0, 8)
 
     if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {

@@ -44,6 +44,12 @@ export async function POST() {
         studentPseudonym: pseudonym,
         name: anonymousName,
         needsProfileCompletion: false,
+        // Students never keep an address or password (/datenschutz). They log
+        // in again via email code (matched by pseudonym) or OAuth.
+        email: null,
+        emailVerified: null,
+        hashedPassword: null,
+        image: null,
       },
     })
     // Page-display fields (pageName, pageDescription, …) all live on Site,

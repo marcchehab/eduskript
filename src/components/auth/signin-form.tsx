@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mail, NotebookPen, ShieldCheck } from 'lucide-react'
+import { EmailCodeForm } from '@/components/auth/email-code-form'
 
 interface SignInFormProps {
   context: {
@@ -29,6 +30,19 @@ function MicrosoftIcon() {
       <path d="M0 12.13h10.87V23H0z" fill="#7fba00"/>
       <path d="M12.13 12.13H23V23H12.13z" fill="#ffb900"/>
     </svg>
+  )
+}
+
+function OrDivider({ label = 'or' }: { label?: string }) {
+  return (
+    <div className="relative my-4">
+      <div className="absolute inset-0 flex items-center">
+        <span className="w-full border-t" />
+      </div>
+      <div className="relative flex justify-center text-xs uppercase">
+        <span className="bg-card px-2 text-muted-foreground">{label}</span>
+      </div>
+    </div>
   )
 }
 
@@ -204,7 +218,10 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Primary: Student OAuth sign-in */}
+            {/* Primary: email code (creates a student account if new) */}
+            <EmailCodeForm context={`student:${context.slug}`} callbackUrl={callbackUrl} />
+            <OrDivider />
+
             <div className="space-y-3 mb-6">
               <Button
                 variant="outline"
@@ -231,7 +248,7 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
                 onClick={() => setShowCredentialsForm(true)}
               >
                 <Mail className="w-5 h-5 mr-2" />
-                Sign in with email (page editors)
+                Sign in with password (page editors)
               </Button>
             ) : (
               <>
@@ -241,7 +258,7 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
                     <span className="bg-card px-2 text-muted-foreground">
-                      Email sign in (page editors)
+                      Password sign in (page editors)
                     </span>
                   </div>
                 </div>
@@ -289,6 +306,8 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <EmailCodeForm context={`teacher-org:${context.slug}`} callbackUrl={callbackUrl} idPrefix="teacher-email-code" placeholder="teacher@school.ch" />
+              <OrDivider />
               <Button
                 variant="outline"
                 className="w-full"
@@ -307,7 +326,7 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
                   onClick={() => setShowCredentialsForm(true)}
                 >
                   <Mail className="w-5 h-5 mr-2" />
-                  Sign in with email
+                  Sign in with password
                 </Button>
               ) : (
                 <>
@@ -316,7 +335,7 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
                       <span className="w-full border-t" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">Or with email</span>
+                      <span className="bg-card px-2 text-muted-foreground">Or with password</span>
                     </div>
                   </div>
                   <CredentialsForm callbackUrl={callbackUrl} />
@@ -341,6 +360,8 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <EmailCodeForm context={`student-org:${context.slug}`} callbackUrl={callbackUrl} idPrefix="student-email-code" />
+              <OrDivider />
               <Button
                 variant="outline"
                 className="w-full"
