@@ -2272,8 +2272,9 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 /* Compact callouts in the print view (html.print-layout — on screen in the
    preview and in actual print, so the paginator measures what prints): no
    grey body, a lighter and lower title bar, no paragraph margin at the
-   content edges. Annotations follow their section anchors; a note written
-   into empty space inside a callout moves closer to the text. */
+   content edges. Strokes move with the content: the height changes are
+   measured when the print view opens (measureCssShifts, src/lib/print/
+   stroke-shift.ts). */
 .print-layout .prose-theme blockquote.callout {
   margin: 12px 0;
   background: transparent;

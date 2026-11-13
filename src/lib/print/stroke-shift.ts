@@ -13,8 +13,12 @@
  * inside blocks too tall to move (print-view.tsx) are registered as
  * CutMarkers below, since their elements may not carry attributes.
  *
+ * Print CSS that changes heights without React (compact callouts,
+ * globals.css .print-layout blockquote.callout) is measured once when the
+ * print view opens: measureCssShifts, below.
+ *
  * O(sections × markers); markers are few (about one per page, plus
- * print-only elements).
+ * print-only elements, plus a few per callout).
  */
 
 export interface PrintShift {
@@ -74,5 +78,73 @@ export function collectPrintMarkers(root: Element): CutMarker[] {
     list.push({ el, shift: el.offsetHeight - online, atOffset: online })
   }
   for (const c of cutMarkers) if (c.el.isConnected) list.push(c)
+  for (const c of cssMarkers) if (c.el.isConnected) list.push(c)
   return list.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+}
+
+let cssMarkers: CutMarker[] = []
+
+const docOrder = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
+
+/**
+ * Run `apply` (switches the page to the print CSS, print-mode.ts) and register
+ * a marker for every vertical move it causes in and around callouts, which
+ * print compactly. Tracked per top-level callout: its previous sibling (or
+ * parent), the callout, its title, the direct children of its content, its
+ * next sibling. Each tracked element whose distance to the tracked element
+ * before it changed gets a marker: content from its online top on moves by
+ * that change.
+ *
+ * Measured synchronously around the class switch, before React re-renders
+ * for print, so only CSS effects are seen (print-only content and the
+ * paginator bring their own markers). Limitations: opened directly with
+ * ?print the page was never laid out online, so nothing is measured; inside a
+ * paragraph (different line breaks) and inside nested callouts only the
+ * total at the next tracked element is right. O(callouts × children) reads.
+ */
+export function measureCssShifts(apply: () => void) {
+  cssMarkers = []
+  const callouts = [...document.querySelectorAll<HTMLElement>('blockquote.callout')]
+    .filter((c) => !c.parentElement?.closest('blockquote.callout'))
+  if (callouts.length === 0) {
+    apply()
+    return
+  }
+  const tracked = new Set<HTMLElement>()
+  for (const c of callouts) {
+    const prev = (c.previousElementSibling ?? c.parentElement) as HTMLElement | null
+    if (prev) tracked.add(prev)
+    tracked.add(c)
+    const title = c.querySelector<HTMLElement>(':scope > .callout-title')
+    if (title) tracked.add(title)
+    const content = c.querySelector<HTMLElement>('.callout-content')
+    if (content) for (const child of content.children) tracked.add(child as HTMLElement)
+    const next = c.nextElementSibling as HTMLElement | null
+    if (next) tracked.add(next)
+  }
+  const list = [...tracked].sort(docOrder)
+  // Layout px, page coordinates; null = not rendered.
+  const tops = () => {
+    const ref = callouts[0]
+    const scale = ref.offsetHeight ? ref.getBoundingClientRect().height / ref.offsetHeight : 1
+    return list.map((el) => (el.getClientRects().length ? (el.getBoundingClientRect().top + window.scrollY) / (scale || 1) : null))
+  }
+  const before = tops()
+  apply()
+  const after = tops()
+
+  let pred = -1
+  for (let i = 0; i < list.length; i++) {
+    const b = before[i], a = after[i]
+    if (b == null || a == null) continue
+    if (pred >= 0) {
+      const shift = (a - after[pred]!) - (b - before[pred]!)
+      if (Math.abs(shift) >= 0.5) cssMarkers.push({ el: list[i], shift, atOffset: -shift })
+    }
+    pred = i
+  }
+}
+
+export function clearCssShifts() {
+  cssMarkers = []
 }

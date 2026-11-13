@@ -16,6 +16,7 @@
  */
 
 import { useSyncExternalStore } from 'react'
+import { clearCssShifts, measureCssShifts } from './stroke-shift'
 
 /**
  * Which solutions the print view appends. 'online': exactly those a viewer
@@ -46,8 +47,17 @@ function emit() {
 }
 
 export function setPrintState(next: Partial<PrintState>) {
+  const wasActive = state.active
   state = { ...state, ...next }
-  if (typeof document !== 'undefined') document.documentElement.classList.toggle('print-layout', state.active)
+  if (typeof document !== 'undefined') {
+    const apply = () => { document.documentElement.classList.toggle('print-layout', state.active) }
+    // Strokes follow what the print CSS moves (stroke-shift.ts).
+    if (state.active && !wasActive) measureCssShifts(apply)
+    else {
+      if (!state.active) clearCssShifts()
+      apply()
+    }
+  }
   emit()
 }
 
