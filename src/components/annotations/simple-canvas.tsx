@@ -1285,6 +1285,15 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     }, [mode, strokeColor, strokeWidth, highlighter, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange, clearHoldTimer, cancelPointErasePreview, onPointErasePreview])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+      // A cancelled pen stroke (the browser/OS took the pointer, e.g. iPadOS
+      // when fingers land) is real ink: commit it like a pointer-up. It used
+      // to stay painted on this canvas without being saved, so undo removed
+      // the stroke before it and the "last" one looked stuck.
+      if (isDrawingRef.current && e.pointerType === 'pen' && currentModeRef.current === 'draw') {
+        stopDrawing(e)
+        return
+      }
+
       // Clean up when pointer is cancelled
       activePointersRef.current.delete(e.pointerId)
       activeTouchPointersRef.current.delete(e.pointerId)
@@ -1303,6 +1312,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         isDrawingRef.current = false
         currentPathRef.current = []
         snapshotCanvasRef.current = null
+        // Wipe the in-progress ink; nothing of it is saved.
+        redrawCanvas()
       }
       lassoFiredRef.current = false
 
@@ -1318,7 +1329,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         hideEraserCursor()
         redrawCanvas()
       }
-    }, [cancelPointErasePreview, onPointErasePreview, hideEraserCursor, redrawCanvas])
+    }, [cancelPointErasePreview, onPointErasePreview, hideEraserCursor, redrawCanvas, stopDrawing])
 
     // Expose methods
     useImperativeHandle(ref, () => {

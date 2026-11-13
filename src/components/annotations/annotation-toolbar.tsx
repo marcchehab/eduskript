@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Circle, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon, Plus } from 'lucide-react'
+import { Pen, Eraser, Circle, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon, Plus, Undo2, Redo2 } from 'lucide-react'
 import { type PenConfig, type PenType, hueToColor, colorToHue, TRACK_MIN, MIN_PENS, MAX_PENS, penSizeRange } from '@/lib/annotations/pens'
 import type { SpacerPattern } from '@/types/spacer'
 import type { EraserVariant } from '@/lib/annotations/eraser'
@@ -127,6 +127,11 @@ interface AnnotationToolbarProps {
   mode: AnnotationMode
   onModeChange: (mode: AnnotationMode) => void
   onClear: () => void
+  /** Undo/redo the last stroke edit (also two-/three-finger tap, Ctrl+Z). */
+  onUndo?: () => void
+  onRedo?: () => void
+  canUndo?: boolean
+  canRedo?: boolean
   hasAnnotations: boolean
   pens: PenConfig[]
   activePenId: string
@@ -201,6 +206,10 @@ export function AnnotationToolbar({
   mode,
   onModeChange,
   onClear,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   hasAnnotations,
   pens,
   activePenId,
@@ -1099,6 +1108,24 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
             {showMoreTools && (
               <div className="absolute bottom-full mb-2 left-0 z-50">
                 <div className="bg-popover text-popover-foreground text-sm rounded-md shadow-lg border border-border p-2 w-64 space-y-2">
+                  {/* Undo / redo of strokes */}
+                  {([
+                    { label: 'Undo', hint: 'Tap with two fingers', icon: Undo2, onClick: onUndo, enabled: canUndo },
+                    { label: 'Redo', hint: 'Tap with three fingers', icon: Redo2, onClick: onRedo, enabled: canRedo },
+                  ] as const).map(({ label, hint, icon: Icon, onClick, enabled }) => (
+                    <button
+                      key={label}
+                      onClick={onClick}
+                      disabled={!enabled}
+                      className="w-full flex items-start gap-2.5 px-1 py-1 rounded text-left hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent"
+                    >
+                      <Icon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                      <span>
+                        <span className="text-foreground font-medium">{label}</span>
+                        <span className="block text-xs text-muted-foreground mt-0.5">{hint}</span>
+                      </span>
+                    </button>
+                  ))}
                   {/* Snap explanation */}
                   <div className="flex items-start gap-2.5 px-1 py-1">
                     <Camera className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />

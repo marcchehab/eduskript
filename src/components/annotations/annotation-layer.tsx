@@ -65,8 +65,10 @@
  *    element for correct stacking. This works but makes the component tree
  *    harder to reason about.
  *
- * 7. **No undo/redo**: The canvas supports clear-all but not undo. Adding
- *    undo would require storing stroke history, which we don't currently do.
+ * 7. **Undo/redo covers strokes only**: a stack of stroke-JSON states
+ *    (lib/annotations/tap-gesture.ts), fed by handleCanvasUpdate. Spacers,
+ *    snaps and sticky notes are not in it. It is emptied when the layer or
+ *    page changes, on clear-all and when strokes are re-anchored by code.
  *
  * ## Performance Notes
  *
@@ -123,9 +125,21 @@ import { LayerBadges } from './layer-badges'
 import { SpacersDisplay } from './spacers-display'
 import { createLogger } from '@/lib/logger'
 import { safeRandomUUID } from '@/lib/uuid'
+import { TAP_MAX_MOVE, recordEdit, stepHistory, tapTouchEnd, tapTouchMove, tapTouchStart, type StrokeHistory, type TapAction, type TapGesture, type TouchPoint } from '@/lib/annotations/tap-gesture'
 import { DEFAULT_PENS, loadPens, savePens, addPen, removePen, reorderPens, setPenColor, setPenSize, type PenConfig, type PenType } from '@/lib/annotations/pens'
 
 const log = createLogger('annotations:layer')
+
+/** Finger touches as points; Apple Pencil touches (touchType 'stylus') left out. */
+function fingerPoints(list: TouchList): TouchPoint[] {
+  const out: TouchPoint[] = []
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i] as Touch & { touchType?: string }
+    if (t.touchType === 'stylus') continue
+    out.push({ id: t.identifier, x: t.clientX, y: t.clientY })
+  }
+  return out
+}
 
 import type { PublicAnnotation, PublicSnap } from '@/components/public/annotation-wrapper'
 
@@ -1200,6 +1214,22 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
   // Refs to track latest values for use in callbacks (avoids stale closure issues)
   const canvasDataRef = useRef<string>('')
+
+  // Undo/redo of strokes (header note 7). Counts drive the toolbar buttons.
+  const historyRef = useRef<StrokeHistory>({ undo: [], redo: [] })
+  const applyingHistoryRef = useRef(false)
+  const [historyCounts, setHistoryCounts] = useState({ undo: 0, redo: 0 })
+  const syncHistoryCounts = useCallback(() => {
+    const h = historyRef.current
+    setHistoryCounts(prev => (prev.undo === h.undo.length && prev.redo === h.redo.length ? prev : { undo: h.undo.length, redo: h.redo.length }))
+  }, [])
+  const resetHistory = useCallback(() => {
+    historyRef.current = { undo: [], redo: [] }
+    syncHistoryCounts()
+  }, [syncHistoryCounts])
+  const [historyFlash, setHistoryFlash] = useState<string | null>(null)
+  const historyFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const applyHistoryRef = useRef<((action: TapAction) => boolean) | null>(null)
   const pageVersionRef = useRef<string>('')
   const headingPositionsRef = useRef<HeadingPosition[]>([])
   const currentPaddingLeftRef = useRef<number>(0)
@@ -1237,6 +1267,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const rafIdRef = useRef<number | null>(null)
   const touchesRef = useRef<Map<number, { x: number; y: number }>>(new Map())
   const initialPinchDistanceRef = useRef<number | null>(null)
+  // Zoom starts only once the fingers moved more than TAP_MAX_MOVE, so a
+  // two-finger tap (undo) does not zoom; until then this is false.
+  const pinchEngagedRef = useRef(false)
   const initialZoomRef = useRef(1.0)
   const initialPinchCenterRef = useRef<{ x: number; y: number } | null>(null)
   // Store the content point under the initial pinch center (in unscaled content coordinates)
@@ -1478,6 +1511,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
   // Pen priority: pen always wins, ignore other inputs for 200ms after last pen event
   const lastPenEventTimeRef = useRef<number>(0)
+  // Last time the pen touched the screen (not hover): a multi-finger tap
+  // during writing is a resting palm, not undo/redo.
+  const lastPenContactRef = useRef<number>(0)
+  const stylusModeActiveRef = useRef(false)
+  // Multi-finger tap in progress (stylus mode), and when a gesture last had
+  // two or more fingers down (keeps stylus mode on, see handleDocumentTouch).
+  const tapRef = useRef<TapGesture | null>(null)
+  const lastMultiTouchAtRef = useRef(0)
 
   // Canvas width matches paper width exactly including padding
   // Paper element for portal (canvas renders directly into #paper)
@@ -1518,6 +1559,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const isAnnotatingRef = useRef(false)
   useEffect(() => {
     isAnnotatingRef.current = mode !== 'view' || stylusModeActive
+    stylusModeActiveRef.current = stylusModeActive
     // Finger draw mode: user explicitly activated draw/erase without a stylus
     // In this mode, ALL touch input should draw, not scroll
     fingerDrawModeRef.current = mode !== 'view' && !stylusModeActive
@@ -1559,6 +1601,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       // Update pen timestamp when pen is used
       if (e.pointerType === 'pen') {
         lastPenEventTimeRef.current = Date.now()
+        if (e.type === 'pointerdown' || e.buttons) lastPenContactRef.current = Date.now()
       }
 
       // In finger draw mode, block ALL pointer events on paper (touch draws, not scrolls)
@@ -1652,7 +1695,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   useEffect(() => {
      
     canvasDataRef.current = canvasData
-  }, [canvasData])
+    // '' = cleared, another layer or page loading: the history belonged to
+    // the previous content.
+    if (canvasData === '') resetHistory()
+  }, [canvasData, resetHistory])
 
   useEffect(() => {
     headingPositionsRef.current = headingPositions
@@ -2166,6 +2212,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         }
         if (changed) {
           const newData = JSON.stringify(next)
+          resetHistory()
           setCanvasData(newData)
           setHasAnnotations(next.length > 0)
           const currentOffsets = Object.fromEntries(
@@ -2250,7 +2297,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     // this the user has to manually toggle off; the click that deleted is
     // also a clear "I'm done with this spacer" signal.
     setMode('view')
-  }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData, snapsData, updateSnapsData])
+  }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData, snapsData, updateSnapsData, resetHistory])
 
   // Re-anchor items below a newly added spacer to the spacer's end-sentinel.
   // Without this, items stay tied to the parent section's heading (which
@@ -2308,7 +2355,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
             avgY: stroke.avgY !== undefined ? stroke.avgY + H : stroke.avgY,
           }
         })
-        if (changed) setCanvasData(JSON.stringify(next))
+        if (changed) {
+          resetHistory()
+          setCanvasData(JSON.stringify(next))
+        }
       } catch { /* ignore */ }
     }
 
@@ -2335,7 +2385,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         detail: { spacerId: pending.id, spacerTop: NT, spacerEndY: NE, height: H },
       }))
     }
-  }, [headingPositions, canvasData, snapsData, updateSnapsData])
+  }, [headingPositions, canvasData, snapsData, updateSnapsData, resetHistory])
 
   // Compute all gap Y positions between block children (for preview lines)
   // Returns array of { index, y } for each gap
@@ -2583,6 +2633,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
   // Handle canvas annotation update with debounced save
   const handleCanvasUpdate = useCallback((data: string) => {
+    // Every local edit (stroke, eraser, selection, line edit) passes here;
+    // undo/redo itself does not record.
+    if (!applyingHistoryRef.current && !isClearingRef.current) {
+      recordEdit(historyRef.current, canvasDataRef.current || '[]', data)
+      syncHistoryCounts()
+    }
+    canvasDataRef.current = data
     log('handleCanvasUpdate called', {
       viewMode,
       selectedClassId: selectedClass?.id,
@@ -2650,7 +2707,45 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     saveTimeoutRef.current = setTimeout(() => {
       performSave()
     }, 2000)
-  }, [performSave, ensureActiveLayerVisible, isTeacher, viewMode, selectedClass, selectedStudent])
+  }, [performSave, ensureActiveLayerVisible, isTeacher, viewMode, selectedClass, selectedStudent, syncHistoryCounts])
+
+  /** Undo or redo one stroke edit. False = nothing to undo/redo. */
+  const applyHistory = useCallback((action: TapAction): boolean => {
+    const data = stepHistory(historyRef.current, action, canvasDataRef.current || '[]')
+    if (data === null) return false
+    clearSelection()
+    applyingHistoryRef.current = true
+    try {
+      handleCanvasUpdate(data)
+    } finally {
+      applyingHistoryRef.current = false
+    }
+    syncHistoryCounts()
+    setHistoryFlash(action === 'undo' ? 'Undone' : 'Redone')
+    if (historyFlashTimerRef.current) clearTimeout(historyFlashTimerRef.current)
+    historyFlashTimerRef.current = setTimeout(() => setHistoryFlash(null), 900)
+    return true
+  }, [handleCanvasUpdate, clearSelection, syncHistoryCounts])
+  useEffect(() => {
+    applyHistoryRef.current = applyHistory
+  }, [applyHistory])
+
+  // Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y while annotating; not in inputs or
+  // code editors, which have their own undo.
+  useEffect(() => {
+    if (mode === 'view' && !stylusModeActive) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+      const key = e.key.toLowerCase()
+      const action: TapAction | null = key === 'z' ? (e.shiftKey ? 'redo' : 'undo') : key === 'y' && !e.shiftKey ? 'redo' : null
+      if (!action) return
+      const target = e.target as HTMLElement | null
+      if (target && (target.isContentEditable || target.closest?.('input, textarea, select, .cm-editor'))) return
+      if (applyHistory(action)) e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode, stylusModeActive, applyHistory])
 
   /**
    * Commit a dragged straight line. Runs through the same handleCanvasUpdate
@@ -2857,6 +2952,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       const filtered = strokes.filter(stroke => !stroke.sectionId.endsWith('-ORPHANED'))
 
       const newData = JSON.stringify(filtered)
+      resetHistory()
       setCanvasData(newData)
       setOrphanedStrokesCount(0)
 
@@ -2873,7 +2969,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     } catch {
       // Ignore orphan removal errors
     }
-  }, [canvasData, performSave])
+  }, [canvasData, performSave, resetHistory])
 
   const handlePenSelect = useCallback((id: string) => {
     setActivePenId(id)
@@ -3100,15 +3196,24 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   useEffect(() => {
     if (!stylusModeActive) return
 
+    // Decided 150 ms later: a two/three-finger tap (undo/redo) keeps stylus
+    // mode, so wait for the other fingers to land.
+    let exitTimer: ReturnType<typeof setTimeout> | null = null
     const handleDocumentTouch = (e: PointerEvent) => {
       if (e.pointerType !== 'touch' || fingerDrawModeRef.current) return
       if (Date.now() - lastPenEventTimeRef.current < 1000) return
-      setStylusModeActive(false)
-      setMode('view')
+      if (exitTimer) return
+      exitTimer = setTimeout(() => {
+        exitTimer = null
+        if (Date.now() - lastMultiTouchAtRef.current < 500) return
+        setStylusModeActive(false)
+        setMode('view')
+      }, 150)
     }
 
     document.addEventListener('pointerdown', handleDocumentTouch, { capture: true })
     return () => {
+      if (exitTimer) clearTimeout(exitTimer)
       document.removeEventListener('pointerdown', handleDocumentTouch, { capture: true })
     }
   }, [stylusModeActive])
@@ -3240,7 +3345,37 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   }, [applyZoom, updateZoomSpacer])
 
   // Custom pinch-zoom handling (native scroll handles single-finger pan)
+  /** Start (or re-base) a pinch at the fingers' current position. */
+  const setPinchOrigin = useCallback((container: HTMLElement, touch1: Touch, touch2: Touch) => {
+    const containerRect = container.getBoundingClientRect()
+    const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
+    const centerX = (touch1.clientX + touch2.clientX) / 2
+    const centerY = (touch1.clientY + touch2.clientY) / 2
+
+    // Convert pinch center to container-relative coordinates
+    const relativeX = centerX - containerRect.left
+    const relativeY = centerY - containerRect.top
+
+    // Calculate the content point under the initial pinch center (in unscaled coordinates)
+    // This point should stay under the fingers throughout the gesture
+    const contentX = (relativeX + container.scrollLeft) / zoomRef.current
+    const contentY = (relativeY + container.scrollTop) / zoomRef.current
+
+    initialPinchDistanceRef.current = distance
+    initialPinchCenterRef.current = { x: centerX, y: centerY }
+    initialContentPointRef.current = { x: contentX, y: contentY }
+    initialZoomRef.current = zoomRef.current
+  }, [])
+
   const handleTouchStart = useCallback((e: TouchEvent) => {
+    // Multi-finger tap = undo/redo (stylus mode, on the paper).
+    if (stylusModeActiveRef.current && !fingerDrawModeRef.current) {
+      const fingers = fingerPoints(e.touches)
+      if (fingers.length >= 2) lastMultiTouchAtRef.current = Date.now()
+      const onPaper = (e.target as Element | null)?.closest?.('#paper')
+      if (tapRef.current || onPaper) tapRef.current = tapTouchStart(tapRef.current, fingers, Date.now())
+    }
+
     // Track all touches
     for (let i = 0; i < e.touches.length; i++) {
       const touch = e.touches[i]
@@ -3254,30 +3389,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       const container = scrollContainerRef.current
       if (!container) return
 
-      const containerRect = container.getBoundingClientRect()
-      const touch1 = e.touches[0]
-      const touch2 = e.touches[1]
-      const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
-      const centerX = (touch1.clientX + touch2.clientX) / 2
-      const centerY = (touch1.clientY + touch2.clientY) / 2
-
-      // Convert pinch center to container-relative coordinates
-      const relativeX = centerX - containerRect.left
-      const relativeY = centerY - containerRect.top
-
-      // Calculate the content point under the initial pinch center (in unscaled coordinates)
-      // This point should stay under the fingers throughout the gesture
-      const contentX = (relativeX + container.scrollLeft) / zoomRef.current
-      const contentY = (relativeY + container.scrollTop) / zoomRef.current
-
-      initialPinchDistanceRef.current = distance
-      initialPinchCenterRef.current = { x: centerX, y: centerY }
-      initialContentPointRef.current = { x: contentX, y: contentY }
-      initialZoomRef.current = zoomRef.current
+      pinchEngagedRef.current = false
+      setPinchOrigin(container, e.touches[0], e.touches[1])
     }
-  }, [])
+  }, [setPinchOrigin])
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
+    tapTouchMove(tapRef.current, fingerPoints(e.touches))
+
     // Update touch positions
     for (let i = 0; i < e.touches.length; i++) {
       const touch = e.touches[i]
@@ -3291,12 +3410,26 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       const container = scrollContainerRef.current
       if (!container) return
 
-      const containerRect = container.getBoundingClientRect()
       const touch1 = e.touches[0]
       const touch2 = e.touches[1]
       const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
       const currentCenterX = (touch1.clientX + touch2.clientX) / 2
       const currentCenterY = (touch1.clientY + touch2.clientY) / 2
+
+      if (!pinchEngagedRef.current) {
+        const center = initialPinchCenterRef.current
+        const movedBy = Math.max(
+          Math.abs(currentDistance - initialPinchDistanceRef.current),
+          center ? Math.hypot(currentCenterX - center.x, currentCenterY - center.y) : 0,
+        )
+        if (movedBy <= TAP_MAX_MOVE) return
+        // Re-base at the current position: zooming starts from here, no jump.
+        pinchEngagedRef.current = true
+        setPinchOrigin(container, touch1, touch2)
+        return
+      }
+
+      const containerRect = container.getBoundingClientRect()
 
       // Calculate zoom factor relative to initial state
       const zoomFactor = currentDistance / initialPinchDistanceRef.current
@@ -3321,9 +3454,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       container.scrollLeft = Math.max(0, newScrollX)
       container.scrollTop = Math.max(0, newScrollY)
     }
-  }, [updateZoomSpacer])
+  }, [updateZoomSpacer, setPinchOrigin])
 
   const handleTouchEnd = useCallback((e: TouchEvent) => {
+    if (tapRef.current) {
+      if (e.type === 'touchcancel') tapRef.current.moved = true
+      const { gesture, action } = tapTouchEnd(tapRef.current, fingerPoints(e.touches).length, Date.now(), lastPenContactRef.current)
+      tapRef.current = gesture
+      if (action) applyHistoryRef.current?.(action)
+    }
+
     // Remove ended touches
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
@@ -3337,6 +3477,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         setZoom(zoomRef.current)
       }
       initialPinchDistanceRef.current = null
+      pinchEngagedRef.current = false
       initialPinchCenterRef.current = null
       initialContentPointRef.current = null
     }
@@ -3440,6 +3581,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           style={{ zIndex: 99999 }}
         >
           zoom {(zoom * 100).toFixed(1)}%
+        </div>,
+        document.body
+      )}
+      {mounted && historyFlash && createPortal(
+        <div
+          className="print-hide print:hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-foreground/85 text-background text-sm px-3 py-1 rounded-full pointer-events-none"
+          style={{ zIndex: 99999 }}
+          role="status"
+        >
+          {historyFlash}
         </div>,
         document.body
       )}
@@ -3801,6 +3952,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         mode={mode}
         onModeChange={setMode}
         onClear={handleClearAll}
+        onUndo={() => applyHistory('undo')}
+        onRedo={() => applyHistory('redo')}
+        canUndo={historyCounts.undo > 0}
+        canRedo={historyCounts.redo > 0}
         hasAnnotations={hasAnnotations || (spacersData?.spacers?.length ?? 0) > 0 || (snapsData?.snaps?.length ?? 0) > 0 || stickyNoteCount > 0}
         pens={pens}
         activePenId={activePenId}
