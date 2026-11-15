@@ -878,54 +878,63 @@ export default function ClassesPage() {
                               <Upload className="w-4 h-4" />
                               Add Students
                             </Label>
-                            {/* Invite links only make sense for anonymous classes. In
-                                identity-required classes, added students get the
-                                invitation automatically on sign-in (ClassInvitationModal). */}
-                            {classItem.allowAnonymous && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  copyInviteLink(classItem.inviteCode)
-                                }}
-                                title="Copy invite link"
-                              >
-                                {copiedCode === classItem.inviteCode ? (
-                                  <Check className="w-4 h-4 text-green-600" />
-                                ) : (
-                                  <LinkIcon className="w-4 h-4" />
-                                )}
-                              </Button>
-                            )}
                           </div>
-                          {!classItem.allowAnonymous && (
-                            <div className="rounded-md border bg-muted/40 p-3 text-sm flex items-start justify-between gap-3">
+                          {/* Join settings. The question sits above the text that
+                              depends on it, and both texts take two lines, so
+                              switching moves nothing (the switch used to sit at the
+                              card bottom and jump under the cursor). No = only
+                              students whose email the teacher added can join (join
+                              route, pre-authorization); they get the invitation on
+                              sign-in (ClassInvitationModal). */}
+                          <div className="rounded-md border bg-muted/40 text-sm">
+                            <div className="flex items-center justify-between gap-4 px-3 py-2 border-b">
+                              <label htmlFor={`anonymous-${classItem.id}`}>
+                                Can students join this class anonymously?
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium w-7 text-right">
+                                  {classItem.allowAnonymous ? 'Yes' : 'No'}
+                                </span>
+                                <Switch
+                                  id={`anonymous-${classItem.id}`}
+                                  checked={classItem.allowAnonymous}
+                                  onCheckedChange={(checked) => handleToggleAnonymous(classItem.id, checked)}
+                                  disabled={updatingAnonymous[classItem.id]}
+                                />
+                              </div>
+                            </div>
+                            <div className="p-3 flex items-center justify-between gap-3 min-h-[4.5rem]">
                               <p className="text-muted-foreground">
-                                This class requires identity, so there is no invite link. Add your
-                                students&apos; school emails below and send invite emails, or tell them to
-                                sign in with their school email — the class invitation pops up automatically.
+                                {classItem.allowAnonymous ? (
+                                  <>Share the invite link, or add school emails below. Students not on your list join with a pseudonym.</>
+                                ) : (
+                                  <>Only students you add below can join. They see the invitation when they sign in.</>
+                                )}
                               </p>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="shrink-0"
+                                className="shrink-0 w-40"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  navigator.clipboard.writeText(`${window.location.origin}/auth/signin`)
-                                  setCopiedCode(`signin-${classItem.id}`)
-                                  setTimeout(() => setCopiedCode(null), 2000)
+                                  if (classItem.allowAnonymous) {
+                                    copyInviteLink(classItem.inviteCode)
+                                  } else {
+                                    navigator.clipboard.writeText(`${window.location.origin}/auth/signin`)
+                                    setCopiedCode(`signin-${classItem.id}`)
+                                    setTimeout(() => setCopiedCode(null), 2000)
+                                  }
                                 }}
                               >
-                                {copiedCode === `signin-${classItem.id}` ? (
+                                {copiedCode === (classItem.allowAnonymous ? classItem.inviteCode : `signin-${classItem.id}`) ? (
                                   <Check className="w-4 h-4 mr-1 text-green-600" />
                                 ) : (
                                   <LinkIcon className="w-4 h-4 mr-1" />
                                 )}
-                                Copy sign-in link
+                                {classItem.allowAnonymous ? 'Copy invite link' : 'Copy sign-in link'}
                               </Button>
                             </div>
-                          )}
+                          </div>
                           <Textarea
                             value={emailInputs[classItem.id] || ''}
                             onChange={(e) =>
@@ -1131,28 +1140,9 @@ export default function ClassesPage() {
                           })()}
                         </div>
 
-                        {/* Class Settings - subtle at bottom */}
+                        {/* Class actions - subtle at bottom */}
                         <div className="pt-4 border-t">
-                          {/* Fixed question + Yes/No, so the label never describes
-                              only the current state. No = only students whose
-                              email the teacher added (join route, pre-authorization). */}
-                          <div className="flex items-center justify-between gap-4">
-                            <label htmlFor={`anonymous-${classItem.id}`} className="text-sm text-muted-foreground">
-                              Can students join this class anonymously?
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium w-7 text-right">
-                                {classItem.allowAnonymous ? 'Yes' : 'No'}
-                              </span>
-                              <Switch
-                                id={`anonymous-${classItem.id}`}
-                                checked={classItem.allowAnonymous}
-                                onCheckedChange={(checked) => handleToggleAnonymous(classItem.id, checked)}
-                                disabled={updatingAnonymous[classItem.id]}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex justify-end mt-3">
+                          <div className="flex justify-end">
                             <Button
                               variant="outline"
                               size="sm"
