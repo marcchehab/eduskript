@@ -144,6 +144,7 @@ export interface AIFeedbackData {
   image: string | null   // JPEG data URL of what was sent, max 1200 px (null if thumbnailing failed)
   marks?: FeedbackMark[] // Located marks on `image` (absent in feedback saved before 2026-10-21)
   savedAt: number        // Unix ms
+  collapsed?: boolean    // Student folded the feedback box; absent = open
 }
 
 /**

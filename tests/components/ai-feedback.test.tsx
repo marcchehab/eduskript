@@ -77,6 +77,28 @@ describe('<ai-feedback>', () => {
     expect(await screen.findByText(/Gut gemacht/)).toBeInTheDocument()
   })
 
+  it('collapses received feedback and stays collapsed after a reload', async () => {
+    renderPng.mockReturnValue({ dataUrl: 'data:image/png;base64,AAAA' })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(sseResponse('Gut gemacht.'))
+
+    const first = renderOnPaper()
+    fireEvent.click(screen.getByRole('button', { name: /get ai feedback/i }))
+    await screen.findByText(/Gut gemacht/)
+    await waitFor(() => expect(store.size).toBe(1))
+
+    fireEvent.click(screen.getByRole('button', { name: /^ai feedback$/i }))
+    expect(screen.queryByText(/Gut gemacht/)).not.toBeInTheDocument()
+    first.unmount()
+
+    renderOnPaper()
+    const header = await screen.findByRole('button', { name: /^ai feedback$/i })
+    expect(header).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/Gut gemacht/)).not.toBeInTheDocument()
+
+    fireEvent.click(header)
+    expect(screen.getByText(/Gut gemacht/)).toBeInTheDocument()
+  })
+
   it('clears the "nothing written" error once the student draws', async () => {
     renderPng.mockReturnValue(null)
     renderOnPaper()

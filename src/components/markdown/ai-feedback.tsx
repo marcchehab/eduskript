@@ -25,6 +25,10 @@
  * completed answer is saved; an aborted/failed request keeps the previous one.
  * Index-keyed records drift if the teacher inserts another <ai-feedback> above.
  *
+ * Collapse: the header of a received feedback toggles its body. The state is
+ * stored in the same record (`collapsed`), so it survives a reload; a new
+ * request opens the box again.
+ *
  * Print: nothing; every printout carries a QR code to the page on its
  * first page (print-page-qr.tsx). A link with `?fb=<id or index>` still scrolls to
  * this tag and highlights the "take a picture" button (the camera itself
@@ -44,7 +48,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import { Sparkles, Loader2, AlertCircle, ClipboardPaste, Camera } from 'lucide-react'
+import { Sparkles, Loader2, AlertCircle, ClipboardPaste, Camera, ChevronRight } from 'lucide-react'
 import { PrintFallback } from '@/components/print/print-fallback'
 import { userDataService, useSyncedUserData } from '@/lib/userdata'
 import type { AIFeedbackData, AnnotationData } from '@/lib/userdata/types'
@@ -143,6 +147,8 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   const [sentImage, setSentImage] = useState<string | null>(null)
   const [liveMarks, setLiveMarks] = useState<FeedbackMark[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // null = follow the saved record; set by a header click or a new request.
+  const [collapsedOverride, setCollapsedOverride] = useState<boolean | null>(null)
 
   // Storage key: the author's id, else this tag's DOM index (resolved after
   // mount, when all sibling tags exist). Until then the hook stays dormant
@@ -198,6 +204,18 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   // separate event about 1 s after it.
   const shownText = feedbackText(shownFeedback, status !== 'streaming')
   const marks = (showLive ? liveMarks : saved?.marks) ?? []
+  const collapsed = !busy && (collapsedOverride ?? saved?.collapsed ?? false)
+
+  const toggleCollapsed = () => {
+    const next = !collapsed
+    setCollapsedOverride(next)
+    // Persist only onto an existing record; a failed write keeps the local state.
+    if (saved) {
+      saveFeedback({ ...saved, collapsed: next }).catch((err) =>
+        console.warn('[ai-feedback] could not save collapsed state:', err)
+      )
+    }
+  }
 
   const sendImage = async (image: string) => {
     if (!pageId) {
@@ -208,6 +226,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     setFeedback('')
     setContinuing(false)
     setLiveMarks(null)
+    setCollapsedOverride(false)
     setSentImage(image)
     setStatus('streaming')
 
@@ -576,23 +595,34 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
 
       {(shownFeedback || status === 'streaming') && (
         <div className="mt-3 rounded-md border border-border bg-muted/30 p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            disabled={busy}
+            aria-expanded={!collapsed}
+            className="flex w-full items-center gap-2 text-left text-sm font-medium text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground"
+          >
+            <ChevronRight className={`h-4 w-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} />
             <Sparkles className="h-4 w-4" />
             AI feedback
             {status === 'streaming' && <Loader2 className="h-3 w-3 animate-spin" />}
-          </div>
-          {/* What was actually sent, so misreadings are visible, with the
-              AI's marks on top */}
-          {shownImage && <AIFeedbackMarks image={shownImage} marks={marks} />}
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {shownText}
-            </ReactMarkdown>
-          </div>
-          {continuing && (
-            <p className="mt-2 text-sm italic text-muted-foreground">
-              Phew, overheated a little… grabbing more grey matter! (We AIs call it &ldquo;tokens&rdquo;.)
-            </p>
+          </button>
+          {!collapsed && (
+            <div className="mt-2">
+              {/* What was actually sent, so misreadings are visible, with the
+                  AI's marks on top */}
+              {shownImage && <AIFeedbackMarks image={shownImage} marks={marks} />}
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  {shownText}
+                </ReactMarkdown>
+              </div>
+              {continuing && (
+                <p className="mt-2 text-sm italic text-muted-foreground">
+                  Phew, overheated a little… grabbing more grey matter! (We AIs call it &ldquo;tokens&rdquo;.)
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
