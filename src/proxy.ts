@@ -164,6 +164,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/oauth/') ||
     pathname.startsWith('/org/') ||
     pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/classes/') || // class invite links (/classes/join/<code>)
     pathname.startsWith('/embed/') ||
     pathname.startsWith('/exam/') ||
     pathname.startsWith('/exam-complete') ||
