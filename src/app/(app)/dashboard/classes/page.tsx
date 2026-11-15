@@ -794,7 +794,7 @@ export default function ClassesPage() {
                         </div>
                         <div
                           className="text-muted-foreground"
-                          title={classItem.allowAnonymous ? 'Anonymous joins allowed' : 'Identity required to join'}
+                          title={classItem.allowAnonymous ? 'Students can join anonymously' : 'Only students you added can join'}
                         >
                           {classItem.allowAnonymous ? (
                             <ShieldOff className="w-4 h-4" />
@@ -1133,25 +1133,24 @@ export default function ClassesPage() {
 
                         {/* Class Settings - subtle at bottom */}
                         <div className="pt-4 border-t">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              {classItem.allowAnonymous ? (
-                                <ShieldOff className="w-4 h-4" />
-                              ) : (
-                                <ShieldUser className="w-4 h-4" />
-                              )}
-                              <span>
-                                {classItem.allowAnonymous
-                                  ? 'Anonymous joins allowed'
-                                  : 'Identity required to join'}
+                          {/* Fixed question + Yes/No, so the label never describes
+                              only the current state. No = only students whose
+                              email the teacher added (join route, pre-authorization). */}
+                          <div className="flex items-center justify-between gap-4">
+                            <label htmlFor={`anonymous-${classItem.id}`} className="text-sm text-muted-foreground">
+                              Can students join this class anonymously?
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium w-7 text-right">
+                                {classItem.allowAnonymous ? 'Yes' : 'No'}
                               </span>
+                              <Switch
+                                id={`anonymous-${classItem.id}`}
+                                checked={classItem.allowAnonymous}
+                                onCheckedChange={(checked) => handleToggleAnonymous(classItem.id, checked)}
+                                disabled={updatingAnonymous[classItem.id]}
+                              />
                             </div>
-                            <Switch
-                              id={`anonymous-${classItem.id}`}
-                              checked={classItem.allowAnonymous}
-                              onCheckedChange={(checked) => handleToggleAnonymous(classItem.id, checked)}
-                              disabled={updatingAnonymous[classItem.id]}
-                            />
                           </div>
                           <div className="flex justify-end mt-3">
                             <Button
