@@ -13,6 +13,7 @@
  *   await plugin.publish({ score: 120 }, payload)   // payload: small JSON for the class, optional
  *   await plugin.getResults({ value: 'score', limit: 10, payload: true })
  *   await plugin.setShared(value)          // site owner only: one state for the whole class
+ *   plugin.capturePointer(true)            // drawing surface: pen strokes over the plugin go to it, not to the page annotations
  *   plugin.onResultsChanged(({ shared }) => { ... }) // someone published (shared: false) or the shared state changed
  */
 export const PLUGIN_SDK_SOURCE = `
@@ -24,6 +25,8 @@ export const PLUGIN_SDK_SOURCE = `
   var _dataChangedCallback = null;
   var _fullscreenCallback = null;
   var _resultsChangedCallback = null;
+  var _pointerTarget = null;
+  var _pointerDown = { x: 0, y: 0, t: 0 };
   var _pendingRequests = {};
   var _requestId = 0;
   var _readySent = false;
@@ -93,6 +96,34 @@ export const PLUGIN_SDK_SOURCE = `
         }
         break;
 
+      // A gesture the annotation canvas caught over this iframe, replayed as
+      // synthetic pointer events on the element under the first point.
+      case 'host:pointer': {
+        var names = { down: 'pointerdown', move: 'pointermove', up: 'pointerup' };
+        if (!names[msg.phase]) break;
+        if (msg.phase === 'down') {
+          _pointerTarget = document.elementFromPoint(msg.x, msg.y);
+          _pointerDown = { x: msg.x, y: msg.y, t: Date.now() };
+        }
+        if (!_pointerTarget) break;
+        _pointerTarget.dispatchEvent(new PointerEvent(names[msg.phase], {
+          bubbles: true, cancelable: true, composed: true,
+          clientX: msg.x, clientY: msg.y, pointerId: msg.pointerId, pointerType: msg.pointerType,
+          pressure: msg.pressure, isPrimary: true, button: 0, buttons: msg.phase === 'up' ? 0 : 1
+        }));
+        if (msg.phase === 'up') {
+          // Synthetic pointer events produce no click. A short gesture that
+          // stays within 6 px is a tap: click (and focus) what was hit.
+          var tapped = _pointerTarget;
+          _pointerTarget = null;
+          if (Math.abs(msg.x - _pointerDown.x) < 6 && Math.abs(msg.y - _pointerDown.y) < 6 && Date.now() - _pointerDown.t < 600) {
+            if (tapped.focus) tapped.focus();
+            if (tapped.click) tapped.click();
+          }
+        }
+        break;
+      }
+
       case 'host:resultsChanged':
         if (_resultsChangedCallback) {
           _resultsChangedCallback({ shared: !!msg.shared });
@@ -137,6 +168,10 @@ export const PLUGIN_SDK_SOURCE = `
 
         onResultsChanged: function(cb) {
           _resultsChangedCallback = cb;
+        },
+
+        capturePointer: function(on) {
+          sendMessage({ type: 'plugin:capturePointer', value: !!on });
         },
 
         getResults: function(options) {

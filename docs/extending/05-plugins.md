@@ -189,6 +189,12 @@ plugin.onResultsChanged(function(info) {
 
 The state is per embedding, not per class: every class of the site sees it. The realtime event can be missed (connection drop), so a plugin that depends on the state should also poll `getResults` every few seconds while it waits.
 
+### `plugin.capturePointer(on)`
+
+For plugins that are a drawing surface. While a visitor has a pen selected, or uses a stylus, the page's annotation layer covers the whole page and a stroke over the plugin would annotate the page. After `plugin.capturePointer(true)` such strokes go to the plugin instead; `capturePointer(false)` gives the area back to the annotations. This covers pen and mouse; a short tap is also delivered as a `click`, so buttons in the plugin work with the pen. While it is on, visitors cannot annotate over the plugin.
+
+The plugin receives the strokes as ordinary `pointerdown` / `pointermove` / `pointerup` events on the element under the first point. They are synthetic: `setPointerCapture` throws on them (wrap it in `try`), and `getCoalescedEvents()` returns nothing.
+
 ### `plugin.onThemeChange(callback)`
 
 Called when the user toggles light/dark mode.

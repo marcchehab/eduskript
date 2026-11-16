@@ -9,6 +9,7 @@ import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
 import { ShareListOptions } from './share-list-options'
 import { PLUGIN_SHARE_UPDATED, reportScore, type ShareEntry, type ShareResults } from '@/lib/plugin-share'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { PLUGIN_POINTER_ATTR } from '@/lib/plugin-pointer-forward'
 
 interface PluginContainerProps {
   /** Plugin reference: "ownerPageSlug/pluginSlug" */
@@ -337,6 +338,13 @@ export function PluginContainer({
               now: r?.now ?? null,
               shared: r?.shared ?? null,
             }))
+          break
+        }
+
+        // The plugin is (or stops being) a drawing surface: the annotation
+        // canvas forwards gestures over a marked iframe, see plugin-pointer-forward.ts.
+        case 'plugin:capturePointer': {
+          iframeRef.current.setAttribute(PLUGIN_POINTER_ATTR, msg.value ? 'true' : 'false')
           break
         }
 

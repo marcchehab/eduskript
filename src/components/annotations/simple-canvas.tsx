@@ -72,6 +72,7 @@
 
 'use client'
 
+import { forwardPointer, pointerInputFrameAt } from '@/lib/plugin-pointer-forward'
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useState } from 'react'
 import { determineSectionFromY, liveSectionYShift, measureSectionOffsetY, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
 import { HIGHLIGHTER_OPACITY_LIGHT, strokeOutline } from '@/lib/annotations/svg-path'
@@ -637,7 +638,38 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
     }, [])
 
+    // A gesture that started over a plugin asking for pointer input belongs to
+    // the plugin until pointer-up; see src/lib/plugin-pointer-forward.ts.
+    const forwardedRef = useRef<{ id: number; iframe: HTMLIFrameElement } | null>(null)
+    const endForwarded = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+      const fwd = forwardedRef.current
+      if (!fwd || fwd.id !== e.pointerId) return false
+      forwardedRef.current = null
+      forwardPointer(fwd.iframe, 'up', e)
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      } catch {
+        // not captured
+      }
+      return true
+    }, [])
+
     const startDrawing = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+      // Pen and mouse only: touch keeps its own rules (palm rejection, pinch,
+      // multi-finger undo, leaving stylus mode).
+      const pluginFrame = forwardedRef.current || e.pointerType === 'touch' ? null : pointerInputFrameAt(e.clientX, e.clientY)
+      if (pluginFrame) {
+        forwardedRef.current = { id: e.pointerId, iframe: pluginFrame }
+        e.preventDefault()
+        try {
+          // Keep the moves coming when the pointer leaves the canvas mid-stroke.
+          e.currentTarget.setPointerCapture(e.pointerId)
+        } catch {
+          // capture is an optimisation here
+        }
+        forwardPointer(pluginFrame, 'down', e)
+        return
+      }
       // Record every pointer-down as a potential tap-through click. While a
       // pen is selected (or stylus mode is active) this canvas sits over the
       // whole paper with pointer-events:auto, so buttons/links underneath are
@@ -829,6 +861,12 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     }, [strokeColor, strokeWidth, highlighter])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+      const fwd = forwardedRef.current
+      if (fwd && fwd.id === e.pointerId) {
+        e.preventDefault()
+        forwardPointer(fwd.iframe, 'move', e)
+        return
+      }
       // Don't draw if multiple touch/mouse pointers are active (pinch gesture)
       // But always allow stylus to proceed regardless of touch count
       const isStylusInput = e.pointerType === 'pen'
@@ -1032,6 +1070,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     }, [mode, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, redrawInProgressStroke, clearHoldTimer, svgHandlesDisplay, pointEraseAt])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
+      if (e && endForwarded(e)) return
       // Remove pointer from tracking
       if (e) {
         activePointersRef.current.delete(e.pointerId)
@@ -1282,9 +1321,10 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const data = JSON.stringify(pathsRef.current)
         onUpdate?.(data)
       }
-    }, [mode, strokeColor, strokeWidth, highlighter, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange, clearHoldTimer, cancelPointErasePreview, onPointErasePreview])
+    }, [mode, strokeColor, strokeWidth, highlighter, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange, clearHoldTimer, cancelPointErasePreview, onPointErasePreview, endForwarded])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (endForwarded(e)) return
       // A cancelled pen stroke (the browser/OS took the pointer, e.g. iPadOS
       // when fingers land) is real ink: commit it like a pointer-up. It used
       // to stay painted on this canvas without being saved, so undo removed
@@ -1329,7 +1369,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         hideEraserCursor()
         redrawCanvas()
       }
-    }, [cancelPointErasePreview, onPointErasePreview, hideEraserCursor, redrawCanvas, stopDrawing])
+    }, [cancelPointErasePreview, onPointErasePreview, hideEraserCursor, redrawCanvas, stopDrawing, endForwarded])
 
     // Expose methods
     useImperativeHandle(ref, () => {
