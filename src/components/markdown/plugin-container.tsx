@@ -8,6 +8,7 @@ import { useCurrentSite } from '@/contexts/current-site-context'
 import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
 import { ShareListOptions } from './share-list-options'
 import { PLUGIN_SHARE_UPDATED, reportScore, type ShareEntry, type ShareResults } from '@/lib/plugin-share'
+import { useRealtimeEvents } from '@/hooks/use-realtime-events'
 
 interface PluginContainerProps {
   /** Plugin reference: "ownerPageSlug/pluginSlug" */
@@ -34,7 +35,10 @@ interface PluginMessage {
   height?: number
   requestId?: number
   values?: unknown
-  options?: { value?: string; limit?: number }
+  /** publish: small JSON for the class. setShared: `value`. */
+  payload?: unknown
+  value?: unknown
+  options?: { value?: string; limit?: number; classId?: string; payload?: boolean }
 }
 
 const MAX_DATA_SIZE = 1_000_000 // 1MB
@@ -266,7 +270,7 @@ export function PluginContainer({
           fetch('/api/plugin-share', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ siteId, pageId, componentId, share, keep, values: msg.values }),
+            body: JSON.stringify({ siteId, pageId, componentId, share, keep, values: msg.values, payload: msg.payload }),
           })
             .then((res) => (res.ok ? res.json() : { stored: false }))
             .catch(() => ({ stored: false }))
@@ -279,23 +283,59 @@ export function PluginContainer({
           break
         }
 
+        // The site owner's state for this embedding, read by the class through
+        // getResults. The route rejects everyone else.
+        case 'plugin:setShared': {
+          const respond = (data: unknown) => sendToPlugin({ type: 'host:data', requestId: msg.requestId, data })
+          if (!share || !pageId || !siteId) {
+            respond({ stored: false })
+            break
+          }
+          fetch('/api/plugin-share', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ siteId, pageId, componentId, share, shared: msg.value ?? null }),
+          })
+            .then((res) => (res.ok ? res.json() : { stored: false }))
+            .catch(() => ({ stored: false }))
+            .then(respond)
+          break
+        }
+
         case 'plugin:getResults': {
           const respond = (data: unknown) => sendToPlugin({ type: 'host:data', requestId: msg.requestId, data })
           if (!share || !siteId) {
-            respond({ entries: [], self: null })
+            respond({ entries: [], self: null, failed: true })
             break
           }
           const params = new URLSearchParams({ siteId, source: share, value: String(msg.options?.value ?? 'score') })
           if (msg.options?.limit) params.set('limit', String(msg.options.limit))
-          // Plugin code is third-party: it gets nicknames and values only,
+          if (typeof msg.options?.classId === 'string') params.set('classId', msg.options.classId)
+          if (pageId) {
+            params.set('pageId', pageId)
+            params.set('componentId', componentId)
+            if (msg.options?.payload) params.set('payload', '1')
+          }
+          // Plugin code is third-party: it gets nicknames, values and payloads,
           // never the student ids and names the site owner's response carries.
-          const forPlugin = (e: ShareEntry) => ({ rank: e.rank, nickname: e.nickname, value: e.value, isSelf: e.isSelf })
+          const forPlugin = (e: ShareEntry) => ({
+            rank: e.rank, nickname: e.nickname, value: e.value, isSelf: e.isSelf,
+            ...(e.payload !== undefined ? { payload: e.payload } : {}),
+          })
           fetch(`/api/plugin-share?${params}`)
             .then((res) => (res.ok ? res.json() : null))
             .catch(() => null)
             .then((r: ShareResults | null) => respond({
               entries: (r?.entries ?? []).map(forPlugin),
               self: r?.self ? forPlugin(r.self) : null,
+              // `failed` lets a plugin tell "no entries" from "request failed".
+              failed: !r,
+              member: !!r?.member,
+              isOwner: !!r?.isOwner,
+              classes: r?.classes ?? [],
+              classId: r?.classId ?? null,
+              now: r?.now ?? null,
+              shared: r?.shared ?? null,
             }))
           break
         }
@@ -337,6 +377,13 @@ export function PluginContainer({
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }
   }, [config, userData, resolvedTheme, sendToPlugin, src, pageId, updateData, share, keep, siteId, componentId])
+
+  // Someone published into this embedding's list or the owner changed the
+  // shared state: tell the plugin, it decides whether to call getResults.
+  useRealtimeEvents(['leaderboard-update'], (event) => {
+    if ((event.siteId && event.siteId !== siteId) || (event.list && event.list !== share)) return
+    sendToPlugin({ type: 'host:resultsChanged', shared: !!event.shared })
+  }, { enabled: !!share && status === 'ready' })
 
   // Push theme changes to plugin
   useEffect(() => {

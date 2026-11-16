@@ -10,6 +10,16 @@
  * `pageId:componentId`. A student in two classes has one row and appears in
  * both class lists.
  *
+ * Next to the numbers a row can carry two reserved keys, never summed:
+ * - `_payload`: one small JSON value per student and embedding, sent with
+ *   `plugin.publish(values, payload)` and returned to the class with
+ *   `getResults({ payload: true })`, e.g. a drawing to show after a round.
+ * - `_shared` + `_at`: only in the site owner's row. `plugin.setShared(value)`
+ *   writes it, every class member reads it: one state per embedding (not per
+ *   class) that the teacher controls, e.g. the running round of a class game.
+ *   `_at` is the server time of the write; GET returns the server's `now`, so
+ *   clients can time from it without trusting their own clocks.
+ *
  * Limitations:
  * - Values come from the browser, so a student can forge them, up to MAX_VALUE
  *   per value and MAX_LIST_ROWS rows per list. componentId is not checked
@@ -49,6 +59,8 @@ export interface ShareEntry {
   nickname: string
   value: number
   isSelf: boolean
+  /** The student's payload of the asked embedding; only with payload=1. */
+  payload?: unknown
   /** Only for the site owner, and `email` only with the student's identity consent. */
   studentId?: string
   email?: string | null
@@ -65,6 +77,12 @@ export interface ShareResults {
   member: boolean
   /** The viewer's own nickname (User.name), null when they have no membership. */
   nickname: string | null
+  /** True for the site owner, who alone may write the shared state. */
+  isOwner?: boolean
+  /** Server time in ms, to time from `shared.at`. */
+  now?: number
+  /** Only when pageId and componentId are asked: the owner's state for that embedding. */
+  shared?: { value: unknown; at: number } | null
 }
 
 const MAX_VALUE_KEYS = 10
@@ -72,6 +90,23 @@ const MAX_VALUE_KEYS = 10
 export const MAX_VALUE = 1_000_000
 /** Rows per student and list; a course collecting across pages stays far below. */
 export const MAX_LIST_ROWS = 200
+
+/** Reserved keys in a row's data, see the header. */
+export const PAYLOAD_KEY = '_payload'
+export const SHARED_KEY = '_shared'
+export const SHARED_AT_KEY = '_at'
+/** Serialized size limit of a payload or shared state. */
+export const MAX_PAYLOAD_CHARS = 8000
+
+/** True for a JSON value that serializes to at most MAX_PAYLOAD_CHARS. */
+export function fitsPayload(value: unknown): boolean {
+  try {
+    const json = JSON.stringify(value)
+    return typeof json === 'string' && json.length <= MAX_PAYLOAD_CHARS
+  } catch {
+    return false
+  }
+}
 
 export function isValidListName(name: unknown): name is string {
   return typeof name === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(name)
@@ -81,13 +116,16 @@ export function parseKeep(keep: unknown): KeepMode {
   return keep === 'last' ? 'last' : 'best'
 }
 
-/** Numbers from 0 to MAX_VALUE under short keys; null when nothing valid remains. */
+/**
+ * Numbers from 0 to MAX_VALUE under short keys; null when nothing valid remains.
+ * Keys starting with "_" are reserved (payload, shared state) and dropped.
+ */
 export function sanitizeValues(values: unknown): ShareValues | null {
   if (!values || typeof values !== 'object' || Array.isArray(values)) return null
   const out: ShareValues = {}
   for (const [k, v] of Object.entries(values)) {
     if (Object.keys(out).length >= MAX_VALUE_KEYS) break
-    if (/^[a-zA-Z0-9_-]{1,32}$/.test(k) && typeof v === 'number' && v >= 0 && v <= MAX_VALUE) out[k] = v
+    if (/^[a-zA-Z0-9-][a-zA-Z0-9_-]{0,31}$/.test(k) && typeof v === 'number' && v >= 0 && v <= MAX_VALUE) out[k] = v
   }
   return Object.keys(out).length > 0 ? out : null
 }

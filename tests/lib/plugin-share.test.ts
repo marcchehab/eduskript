@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   isValidListName, mergeValues, parseKeep,
-  rankTotals, sanitizeValues, sumByUser,
+  rankTotals, sanitizeValues, sumByUser, fitsPayload, MAX_PAYLOAD_CHARS,
 } from '@/lib/plugin-share'
 
 describe('plugin-share helpers', () => {
@@ -21,7 +21,17 @@ describe('plugin-share helpers', () => {
     expect(sanitizeValues({ score: 1e308 })).toBeNull()
     expect(sanitizeValues({ score: 1_000_000 })).toEqual({ score: 1_000_000 })
     expect(sanitizeValues(null)).toBeNull()
+    expect(sanitizeValues({ _payload: 1, _at: 2, a_b: 3 })).toEqual({ a_b: 3 })
     expect(Object.keys(sanitizeValues(Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`k${i}`, i])))!)).toHaveLength(10)
+  })
+
+  it('a payload must serialize to at most MAX_PAYLOAD_CHARS', () => {
+    expect(fitsPayload({ a: [1, 2] })).toBe(true)
+    expect(fitsPayload('x'.repeat(MAX_PAYLOAD_CHARS - 2))).toBe(true)
+    expect(fitsPayload('x'.repeat(MAX_PAYLOAD_CHARS))).toBe(false)
+    expect(fitsPayload(undefined)).toBe(false)
+    const loop: Record<string, unknown> = {}; loop.self = loop
+    expect(fitsPayload(loop)).toBe(false)
   })
 
   it('best keeps the higher value, last the newest, other keys stay', () => {

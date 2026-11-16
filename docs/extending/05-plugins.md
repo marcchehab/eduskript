@@ -157,6 +157,38 @@ plugin.getResults({ value: 'score', limit: 10 }).then(function(r) {
 });
 ```
 
+Pass `payload: true` to also get each student's payload (see below). The result then also carries what a class game needs: `isOwner` (the viewer owns the site), `member`, `classes` and `classId` (pass `classId` in the options to read another class as the owner), `shared` and `now`.
+
+### `plugin.publish(values, payload)`
+
+The optional second argument is one small JSON value per student and embedding, at most 8000 characters serialized, for example a drawing to show to the class after a round. A new payload replaces the old one; publishing without one keeps it. Class members read it with `getResults({ payload: true })` as `entry.payload`.
+
+```javascript
+plugin.publish({ score: 87 }, { round: 2, strokes: [[10, 20, 30, 40]] });
+```
+
+The payload is readable by the class from the moment it is published. A plugin that should reveal it later has to hold it back in its own UI; a student with dev tools can still read it early.
+
+### `plugin.setShared(value)` and `plugin.onResultsChanged(callback)`
+
+One state per embedding that the site owner writes and the whole class reads, for example the running round of a class game. Only the site owner can write it; for everyone else `stored` is false. Needs `share` on the tag.
+
+```javascript
+plugin.setShared({ round: 2 }).then(function(result) { /* result.stored, result.at */ });
+
+plugin.getResults({}).then(function(r) {
+  // r.shared: { value: { round: 2 }, at: 1763000000000 } or null
+  // r.now: server time in ms. Time from r.shared.at with r.now, not with the device clock.
+});
+
+plugin.onResultsChanged(function(info) {
+  // info.shared is true when the owner changed the state, false when someone published.
+  // Call getResults to read the new state.
+});
+```
+
+The state is per embedding, not per class: every class of the site sees it. The realtime event can be missed (connection drop), so a plugin that depends on the state should also poll `getResults` every few seconds while it waits.
+
 ### `plugin.onThemeChange(callback)`
 
 Called when the user toggles light/dark mode.

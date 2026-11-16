@@ -10,7 +10,10 @@
  *   await plugin.getData()
  *   await plugin.setData(data)
  *   await plugin.publish({ score: 120 })   // needs share="…" on the <plugin> tag
- *   await plugin.getResults({ value: 'score', limit: 10 })
+ *   await plugin.publish({ score: 120 }, payload)   // payload: small JSON for the class, optional
+ *   await plugin.getResults({ value: 'score', limit: 10, payload: true })
+ *   await plugin.setShared(value)          // site owner only: one state for the whole class
+ *   plugin.onResultsChanged(({ shared }) => { ... }) // someone published (shared: false) or the shared state changed
  */
 export const PLUGIN_SDK_SOURCE = `
 (function() {
@@ -20,6 +23,7 @@ export const PLUGIN_SDK_SOURCE = `
   var _themeCallback = null;
   var _dataChangedCallback = null;
   var _fullscreenCallback = null;
+  var _resultsChangedCallback = null;
   var _pendingRequests = {};
   var _requestId = 0;
   var _readySent = false;
@@ -88,6 +92,12 @@ export const PLUGIN_SDK_SOURCE = `
           _fullscreenCallback(!!msg.isFullscreen);
         }
         break;
+
+      case 'host:resultsChanged':
+        if (_resultsChangedCallback) {
+          _resultsChangedCallback({ shared: !!msg.shared });
+        }
+        break;
     }
   });
 
@@ -117,8 +127,16 @@ export const PLUGIN_SDK_SOURCE = `
           sendMessage({ type: 'plugin:setData', data: data });
         },
 
-        publish: function(values) {
-          return request('plugin:publish', { values: values });
+        publish: function(values, payload) {
+          return request('plugin:publish', { values: values, payload: payload });
+        },
+
+        setShared: function(value) {
+          return request('plugin:setShared', { value: value });
+        },
+
+        onResultsChanged: function(cb) {
+          _resultsChangedCallback = cb;
         },
 
         getResults: function(options) {

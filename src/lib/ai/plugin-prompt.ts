@@ -41,6 +41,13 @@ if (typeof window.eduskript !== 'undefined') {
   plugin.publish({ score: 120 }).then(function(r) { /* r.stored */ });
   plugin.getResults({ value: 'score', limit: 10 }).then(function(r) { /* r.entries: { rank, nickname, value, isSelf } */ });
 
+  // Class games only. publish takes a small JSON payload (max 8000 chars) as second argument;
+  // getResults({ payload: true }) returns it as entry.payload, plus r.isOwner, r.shared and r.now.
+  // The site owner (teacher) writes one state for the whole class; everyone reads it as
+  // r.shared = { value, at } and times from it with r.now (server ms), never the device clock.
+  plugin.setShared({ round: 2 });
+  plugin.onResultsChanged(function(info) { /* info.shared: the state changed; call getResults */ });
+
   // React to theme changes
   plugin.onThemeChange(function(theme) { /* "light" or "dark" */ });
 

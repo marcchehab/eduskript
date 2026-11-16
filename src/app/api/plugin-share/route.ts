@@ -1,8 +1,12 @@
 /**
  * Shared plugin lists, see src/lib/plugin-share.ts.
  *
- * POST  publish the caller's values from an embedding with share="…"
- * GET   ?siteId&source&value&limit[&classId] read a list
+ * POST  publish the caller's values (and an optional payload) from an embedding
+ *       with share="…"; with `shared` the site owner writes the embedding's
+ *       shared state instead
+ * GET   ?siteId&source&value&limit[&classId][&pageId&componentId[&payload=1]]
+ *       read a list; with pageId and componentId also the shared state of that
+ *       embedding and, with payload=1, each student's payload
  * PATCH the site owner renames a student (User.name is the nickname; students
  *       change their own through /api/user/nickname)
  *
@@ -23,8 +27,12 @@ import { notifyNicknameChange } from '@/lib/plugin-share.server'
 import {
   CLASS_LIST,
   MAX_LIST_ROWS,
+  PAYLOAD_KEY,
   PLUGIN_SHARE_ADAPTER,
   PLUGIN_SHARE_TARGET,
+  SHARED_AT_KEY,
+  SHARED_KEY,
+  fitsPayload,
   isValidListName,
   mergeValues,
   parseKeep,
@@ -84,14 +92,40 @@ export async function POST(request: NextRequest) {
   if (!publishLimiter.check(userId).allowed) return error('Too many requests', 429)
 
   const body = await request.json().catch(() => null)
-  const { siteId, pageId, componentId, share, keep, values } = body ?? {}
+  const { siteId, pageId, componentId, share, keep, values, payload, shared } = body ?? {}
   const clean = sanitizeValues(values)
+  const writesShared = shared !== undefined
   if (typeof siteId !== 'string' || !siteId || typeof pageId !== 'string' || !pageId) return error('Invalid request', 400)
   if (typeof componentId !== 'string' || !componentId || componentId.length > 200) return error('Invalid request', 400)
-  if (!isValidListName(share) || !clean) return error('Invalid request', 400)
+  if (!isValidListName(share) || (!clean && !writesShared)) return error('Invalid request', 400)
+  if ((payload !== undefined && !fitsPayload(payload)) || (writesShared && !fitsPayload(shared))) return error('Payload too large', 413)
 
   const owner = await siteOwnerId(siteId)
   if (!owner) return error('Not found', 404)
+
+  // The site owner's shared state for this embedding. Stored in the owner's own
+  // row: the owner is no class member, so the row never shows up in a list.
+  if (writesShared) {
+    if (owner !== userId) return error('Forbidden', 403)
+    if (!(await pageSharesInto(pageId, siteId, share))) return error('This page does not share into that list', 403)
+    const at = Date.now()
+    const ownerKey = {
+      userId, siteId, adapter: PLUGIN_SHARE_ADAPTER, itemId: share,
+      targetType: PLUGIN_SHARE_TARGET, targetId: `${pageId}:${componentId}`,
+    }
+    const state = { [SHARED_KEY]: shared, [SHARED_AT_KEY]: at }
+    await prisma.userData.upsert({
+      where: { userId_siteId_adapter_itemId_targetType_targetId: ownerKey },
+      create: { ...ownerKey, data: state },
+      update: { data: state, version: { increment: 1 } },
+    })
+    // The state is per embedding, not per class: every class of the site hears it.
+    const all = await prisma.class.findMany({ where: { teacherId: owner, isImplicit: false }, select: { id: true } })
+    await Promise.all(all.map((c) =>
+      eventBus.publish(`class:${c.id}`, { type: 'leaderboard-update', siteId, list: share, shared: true })))
+    return NextResponse.json({ stored: true, at })
+  }
+  if (!clean) return error('Invalid request', 400)
   // Only class members land in a list; for anyone else this is a no-op, so a
   // teacher trying the page or an anonymous-like account gets no error.
   const isMember = await prisma.classMembership.count({
@@ -114,11 +148,13 @@ export async function POST(request: NextRequest) {
     })
     if (rows >= MAX_LIST_ROWS) return error('Too many entries in this list', 403)
   }
-  const data = mergeValues(existing?.data as ShareValues | null ?? null, clean, parseKeep(keep))
+  // mergeValues keeps the keys not sent again, so an earlier payload stays; a new one replaces it.
+  const data: Record<string, unknown> = mergeValues(existing?.data as ShareValues | null ?? null, clean, parseKeep(keep))
+  if (payload !== undefined) data[PAYLOAD_KEY] = payload
   await prisma.userData.upsert({
     where: { userId_siteId_adapter_itemId_targetType_targetId: key },
-    create: { ...key, data },
-    update: { data, version: { increment: 1 } },
+    create: { ...key, data: data as object },
+    update: { data: data as object, version: { increment: 1 } },
   })
 
   // Tell open leaderboards: a class list reaches the student's classes, a
@@ -146,6 +182,10 @@ export async function GET(request: NextRequest) {
   const valueKey = params.get('value') || 'score'
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(params.get('limit')) || DEFAULT_LIMIT))
   if (!siteId || !isValidListName(source)) return error('Invalid request', 400)
+  const pageId = params.get('pageId')
+  const componentId = params.get('componentId')
+  const target = pageId && componentId ? `${pageId}:${componentId}` : null
+  const withPayload = !!target && params.get('payload') === '1'
 
   const empty: ShareResults = { entries: [], self: null, classes: [], classId: null, member: false, nickname: null }
   const [owner, access] = await Promise.all([siteOwnerId(siteId), getSiteAccess(userId, siteId)])
@@ -178,8 +218,27 @@ export async function GET(request: NextRequest) {
 
   const rows = await prisma.userData.findMany({
     where: { siteId, adapter: PLUGIN_SHARE_ADAPTER, itemId: source, targetType: PLUGIN_SHARE_TARGET, userId: { in: [...visible] } },
-    select: { userId: true, data: true },
+    select: { userId: true, data: true, targetId: true },
   })
+  const payloads = new Map<string, unknown>()
+  if (withPayload) {
+    for (const row of rows) {
+      const p = (row.data as Record<string, unknown> | null)?.[PAYLOAD_KEY]
+      if (row.targetId === target && p !== undefined) payloads.set(row.userId, p)
+    }
+  }
+  let shared: ShareResults['shared'] = undefined
+  if (target) {
+    const ownerRow = await prisma.userData.findUnique({
+      where: { userId_siteId_adapter_itemId_targetType_targetId: {
+        userId: owner, siteId, adapter: PLUGIN_SHARE_ADAPTER, itemId: source, targetType: PLUGIN_SHARE_TARGET, targetId: target,
+      } },
+      select: { data: true },
+    })
+    const state = ownerRow?.data as Record<string, unknown> | null | undefined
+    const at = state?.[SHARED_AT_KEY]
+    shared = state && typeof at === 'number' ? { value: state[SHARED_KEY], at } : null
+  }
   // A class list only uses consent given in that class; a named list any.
   const consented = new Map(memberships
     .filter((m) => m.identityConsent && (!classId || m.classId === classId))
@@ -189,6 +248,7 @@ export async function GET(request: NextRequest) {
     nickname: nameOf(r.userId),
     value: r.value,
     isSelf: r.userId === userId,
+    ...(payloads.has(r.userId) ? { payload: payloads.get(r.userId) } : {}),
     ...(isOwner ? { studentId: r.userId, email: consented.get(r.userId) ?? null } : {}),
   })
   const ranked = rankTotals(sumByUser(rows, valueKey))
@@ -200,6 +260,9 @@ export async function GET(request: NextRequest) {
     classId,
     member: true,
     nickname: own.length > 0 ? nameOf(userId) : null,
+    isOwner,
+    now: Date.now(),
+    ...(target ? { shared } : {}),
   }
   return NextResponse.json(results)
 }

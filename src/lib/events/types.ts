@@ -198,6 +198,8 @@ export interface LeaderboardUpdateEvent {
   /** Without siteId and list: every list (a nickname changed). */
   siteId?: string
   list?: string
+  /** True when the site owner changed an embedding's shared state (plugin.setShared), not a result. */
+  shared?: boolean
 }
 
 /**

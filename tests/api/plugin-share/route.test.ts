@@ -141,6 +141,43 @@ describe('POST /api/plugin-share', () => {
   it('rejects values without a number', async () => {
     expect((await POST(req('POST', { ...publish, values: { a: 'x' } }))).status).toBe(400)
   })
+
+  it('stores a payload next to the values and keeps it when not sent again', async () => {
+    await POST(req('POST', { ...publish, payload: { strokes: [[1, 2]] } }))
+    expect(mocks.upsert.mock.calls[0][0].create.data).toEqual({ score: 5, _payload: { strokes: [[1, 2]] } })
+    mocks.dataFindUnique.mockResolvedValue({ data: { score: 5, _payload: 'old' } })
+    await POST(req('POST', publish))
+    expect(mocks.upsert.mock.calls[1][0].update.data).toEqual({ score: 5, _payload: 'old' })
+  })
+
+  it('rejects a payload over the size limit and reserved keys as values', async () => {
+    expect((await POST(req('POST', { ...publish, payload: 'x'.repeat(8001) }))).status).toBe(413)
+    expect((await POST(req('POST', { ...publish, values: { _payload: 1 } }))).status).toBe(400)
+    expect(mocks.upsert).not.toHaveBeenCalled()
+  })
+
+  it('lets only the site owner write the shared state', async () => {
+    const body = { siteId: 's', pageId: 'p', componentId: 'plugin-x', share: 'class', shared: { round: 2 } }
+    expect((await POST(req('POST', body))).status).toBe(403)
+    expect(mocks.upsert).not.toHaveBeenCalled()
+
+    mocks.session.mockResolvedValue({ user: { id: 'teacher' } })
+    mocks.classes.mockResolvedValue([{ id: 'c1' }, { id: 'c2' }])
+    const res = await (await POST(req('POST', body))).json()
+    expect(res.stored).toBe(true)
+    const arg = mocks.upsert.mock.calls[0][0]
+    expect(arg.create).toMatchObject({ userId: 'teacher', itemId: 'class', targetId: 'p:plugin-x' })
+    expect(arg.create.data).toEqual({ _shared: { round: 2 }, _at: res.at })
+    expect(mocks.publish.mock.calls.map((c) => c[0])).toEqual(['class:c1', 'class:c2'])
+    expect(mocks.publish.mock.calls[0][1]).toEqual({ type: 'leaderboard-update', siteId: 's', list: 'class', shared: true })
+  })
+
+  it('the shared state needs share on the page too', async () => {
+    mocks.session.mockResolvedValue({ user: { id: 'teacher' } })
+    mocks.pageFindUnique.mockResolvedValue({ content: 'no plugin', skriptId: 'sk' })
+    const body = { siteId: 's', pageId: 'p', componentId: 'plugin-x', share: 'class', shared: 1 }
+    expect((await POST(req('POST', body))).status).toBe(403)
+  })
 })
 
 describe('GET /api/plugin-share', () => {
@@ -163,6 +200,37 @@ describe('GET /api/plugin-share', () => {
     ])
     expect(body.nickname).toBe('Nick stu1')
     expect(JSON.stringify(body)).not.toContain('real.test')
+  })
+
+  it('returns payloads of the asked embedding only, and only on request', async () => {
+    mocks.memberships.mockResolvedValue([member('c1', 'stu1'), member('c1', 'stu2')])
+    mocks.dataFindMany.mockResolvedValue([
+      { userId: 'stu1', targetId: 'p:plugin-x', data: { score: 5, _payload: 'mine' } },
+      { userId: 'stu2', targetId: 'p:other', data: { score: 8, _payload: 'elsewhere' } },
+    ])
+    const q = '?siteId=s&source=class&pageId=p&componentId=plugin-x'
+    const without = await (await GET(req('GET', undefined, q))).json()
+    expect(JSON.stringify(without)).not.toContain('mine')
+    const body = await (await GET(req('GET', undefined, `${q}&payload=1`))).json()
+    expect(body.entries).toEqual([
+      { rank: 1, nickname: 'Nick stu2', value: 8, isSelf: false },
+      { rank: 2, nickname: 'Nick stu1', value: 5, isSelf: true, payload: 'mine' },
+    ])
+  })
+
+  it('returns the owner\'s shared state with the server time', async () => {
+    mocks.memberships.mockResolvedValue([member('c1', 'stu1')])
+    const q = '?siteId=s&source=class&pageId=p&componentId=plugin-x'
+    expect((await (await GET(req('GET', undefined, q))).json()).shared).toBeNull()
+    expect(await (await GET(req('GET', undefined, '?siteId=s&source=class'))).json()).not.toHaveProperty('shared')
+
+    mocks.dataFindUnique.mockResolvedValue({ data: { _shared: { round: 2 }, _at: 1000 } })
+    const body = await (await GET(req('GET', undefined, q))).json()
+    expect(body.shared).toEqual({ value: { round: 2 }, at: 1000 })
+    expect(body.isOwner).toBe(false)
+    expect(typeof body.now).toBe('number')
+    expect(mocks.dataFindUnique.mock.calls.at(-1)![0].where.userId_siteId_adapter_itemId_targetType_targetId)
+      .toMatchObject({ userId: 'teacher', targetId: 'p:plugin-x' })
   })
 
   it('gives the site owner the email only with identity consent', async () => {
