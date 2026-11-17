@@ -8,8 +8,8 @@
 #   pyodide self-hosted Python runtime + wheels (scripts/fetch-pyodide.mjs)
 #   excalidraw-assets  self-hosted Excalidraw fonts (scripts/copy-excalidraw-assets.mjs)
 # The runtime image carries both the standalone server (with its own traced
-# node_modules) and the prod node_modules — ~1 GB, but the node_modules layer
-# only changes with pnpm-lock.yaml, so most deploys push just the app layer.
+# node_modules) and the prod node_modules — ~1 GB, but both node_modules layers
+# only change with the dependencies, so most deploys push just the app layer.
 
 ARG NODE_VERSION=22
 
@@ -74,8 +74,16 @@ COPY . .
 # and run time or every server action from a cached page breaks after deploy.
 # src/lib/prisma.ts throws at import without DATABASE_URL; route config
 # collection imports it. A dummy is enough — the build never connects.
+# The cache mount keeps Turbopack's build cache on the build machine between
+# image builds (only the turbopack subdirectory: .next/cache/fetch-cache would
+# feed stale fetch results into prerendering). SKIP_BUILD_TYPECHECK: see
+# next.config.ts.
+# The traced node_modules move out of the standalone tree so the runtime stage
+# can copy them as their own layer.
 RUN --mount=type=secret,id=NEXT_SERVER_ACTIONS_ENCRYPTION_KEY,env=NEXT_SERVER_ACTIONS_ENCRYPTION_KEY \
-    DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy pnpm build
+    --mount=type=cache,id=next-turbopack,target=/app/.next/cache/turbopack \
+    DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy SKIP_BUILD_TYPECHECK=1 pnpm build \
+ && mv .next/standalone/node_modules /standalone-node_modules
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 # Script import (src/lib/script-import/): native pandoc (the .deb from the
@@ -110,6 +118,9 @@ COPY --chown=node:node demo-content ./demo-content
 # COPY below merges into the same directory and leaves public/pyodide alone.
 COPY --from=pyodide --chown=node:node /pyodide ./.next/standalone/public/pyodide
 COPY --from=excalidraw-assets --chown=node:node /excalidraw ./.next/standalone/public/excalidraw
+# The traced node_modules (~190 MB) as their own layer: it stays the same until
+# the dependencies change, so a normal deploy pushes only the app layer below.
+COPY --from=build --chown=node:node /standalone-node_modules ./.next/standalone/node_modules
 COPY --from=build --chown=node:node /app/.next/standalone ./.next/standalone
 USER node
 EXPOSE 3000
