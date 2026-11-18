@@ -46,10 +46,10 @@ import {
   OutputEntry,
   PythonFile,
   SkulptError,
-  SkulptConfig,
-  SqlResultSet
+  SkulptConfig
 } from './types'
 import { SqlProgressBar } from './sql-progress-bar'
+import { compareResultSets, hasTopLevelOrderBy } from './sql-compare'
 import { appendOutputCapped } from './output-cap'
 import { PythonProgressBar } from './python-progress-bar'
 import { PythonTestResults } from './python-test-results'
@@ -303,25 +303,6 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
-}
-
-/**
- * Compare two SQL result sets for equality.
- * Row-order sensitive, string-coerced values.
- */
-function compareResultSets(a: SqlResultSet[], b: SqlResultSet[]): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    if (a[i].columns.length !== b[i].columns.length) return false
-    if (a[i].values.length !== b[i].values.length) return false
-    for (let j = 0; j < a[i].values.length; j++) {
-      const aRow = a[i].values[j].map(String)
-      const bRow = b[i].values[j].map(String)
-      if (aRow.length !== bRow.length) return false
-      if (aRow.some((v, k) => v !== bRow[k])) return false
-    }
-  }
-  return true
 }
 
 export const CodeEditor = memo(function CodeEditor({
@@ -3190,7 +3171,11 @@ export const CodeEditor = memo(function CodeEditor({
           const isCorrect =
             studentFull.success &&
             solutionFull.success &&
-            compareResultSets(studentFull.results ?? [], solutionFull.results ?? [])
+            // Row order only counts when the solution asks for one: without
+            // ORDER BY, SQL leaves it undefined and correct queries may differ.
+            compareResultSets(studentFull.results ?? [], solutionFull.results ?? [], {
+              ordered: hasTopLevelOrderBy(solution),
+            })
           setVerificationResult({ isCorrect, showSolution: false })
           // Persist so teacher can see class progress
           if (pageId) {
