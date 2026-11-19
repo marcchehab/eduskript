@@ -355,6 +355,7 @@ export function getMimeType(extension: string): string {
     'excalidraw': 'application/json',
     'db': 'application/x-sqlite3',
     'sqlite': 'application/x-sqlite3',
+    'tex': 'text/x-tex',
   }
   return mimeTypes[extension] || 'application/octet-stream'
 }

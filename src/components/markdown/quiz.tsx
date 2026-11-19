@@ -1,5 +1,6 @@
 "use client"
 
+import { mathText } from '@/components/markdown/math-html'
 import { useState, useEffect, useRef, useId, ReactNode, ReactElement, Children, isValidElement } from 'react'
 import { useSyncedUserData } from '@/lib/userdata'
 import type { QuizData } from '@/lib/userdata/types'
@@ -1277,6 +1278,8 @@ function extractTextFromChildren(node: ReactNode): string {
   if (typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(extractTextFromChildren).join('')
   if (typeof node === 'object' && 'props' in node) {
+    const tex = mathText(node.props)
+    if (tex !== undefined) return tex
     return extractTextFromChildren((node as ReactElement<{ children?: ReactNode }>).props.children)
   }
   return ''

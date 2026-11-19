@@ -329,6 +329,8 @@ export const PLUGIN_CSP = [
   "style-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com",
   "font-src https://fonts.gstatic.com https://cdn.jsdelivr.net",
   "img-src data: blob: https:",
+  // Audio/video by URL, e.g. a sound file uploaded to a skript. Same reach as img-src.
+  "media-src data: blob: https:",
   "connect-src https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
   "worker-src blob:",
 ].join('; ');

@@ -26,7 +26,7 @@
  */
 
 /** Extensions saveFile accepts by default, and `ALLOWED_FILE_TYPES`' fallback. */
-export const ALLOWED_EXTENSIONS_DEFAULT = 'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,odt,txt,md,zip,mp4,mp3,wav,ogg,webm,csv,json,xml,html,css,js,ts,py,java,cpp,c,h,hpp,rs,go,php,rb,sh,yml,yaml,excalidraw,db,sqlite,ig'
+export const ALLOWED_EXTENSIONS_DEFAULT = 'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,odt,txt,md,zip,mp4,mp3,wav,ogg,webm,csv,json,xml,html,css,js,ts,py,java,cpp,c,h,hpp,rs,go,php,rb,sh,yml,yaml,excalidraw,db,sqlite,ig,tex'
 
 /** Every extension a stored file can have, with the video pipeline's and avif. */
 export const UPLOADABLE_EXTENSIONS = [...ALLOWED_EXTENSIONS_DEFAULT.split(','), 'mov', 'avif']

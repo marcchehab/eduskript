@@ -4,6 +4,7 @@
  */
 
 import { calloutTypes } from '@/lib/remark-plugins/callouts'
+import { TIKZ_PACKAGES } from '@/lib/tikz/document'
 
 /**
  * pageSlug of the user that owns the built-in plugins (mod-calc, cipher-lab, etc.).
@@ -662,6 +663,30 @@ graph LR
 
 Supports all mermaid diagram types: flowcharts, sequence diagrams, class diagrams, state, ER, gantt, etc.`)
 
+  // TikZ diagrams
+  sections.push(`## TikZ Diagrams
+
+Use a \`\`\`tikz\`\`\` code fence for a TikZ picture (state diagrams, tapes, trees, geometry). TeX runs on the server; the result is a static SVG image (light + dark), so it works in callouts, lists and \`<flex-item>\`, students can draw on it, and an \`<ai-feedback>\` tag in the same h2 section picks it up.
+
+\`\`\`tikz
+% alt: Automaton with two states
+\\begin{tikzpicture}[auto, node distance=2.6cm]
+  \\node[state, initial] (q0) {$q_0$};
+  \\node[state, accepting, right=of q0] (q1) {$q_1$};
+  \\path[->] (q0) edge[bend left] node {a} (q1)
+              (q1) edge[bend left] node {b} (q0);
+\\end{tikzpicture}
+\`\`\`
+
+- Libraries \`automata\`, \`positioning\`, \`arrows.meta\`, \`calc\` are always loaded. Others: a \`\\usetikzlibrary{shapes.geometric}\` line anywhere in the block. \`patterns\` (hatched fills) is not supported: the area stays empty.
+- Packages via \`\\usepackage{…}\` in the block: ${TIKZ_PACKAGES.join(', ')} only. No other packages, no \`\\input\`.
+- A block without \`\\begin{tikzpicture}\` is wrapped in one.
+- \`% alt: …\` and \`% caption: …\` comment lines set the alt text and a caption.
+- **Skript preamble:** a file named \`tikz-preamble.tex\` in the skript's files is put in front of every block of that skript — the place for \`\\definecolor\`, \`\\tikzset\` styles and \`\\newcommand\` macros shared by all diagrams. A block that starts with a macro defined there (e.g. \`\\zd{…}\`) is not wrapped.
+- Text is set in Computer Modern; umlauts can be typed directly. In dark mode black becomes light, white becomes the page colour and pale fills are dimmed; other colours stay.
+- A TeX error is shown in place of the picture (first error and the line it happened at).
+`)
+
   // Function plots
   sections.push(`## Function Plots
 
@@ -1036,6 +1061,8 @@ export function getCondensedSyntaxReference(): string {
 **Mermaid:** \`\`\`mermaid fenced code block — renders natively, theme-aware.
 
 **Structural formulas:** \`<molecule smiles="CC(=O)Oc1ccccc1C(=O)O" [name="Aspirin"] [width="420"] [height="300"] />\` — chemistry structural formula from SMILES (\`CCO\` ethanol, \`O\` water), server-rendered as an \`<img>\`, so pens and \`<ai-feedback>\` work on it.
+
+**TikZ:** \`\`\`tikz fenced block with a TikZ picture, rendered on the server to a static light/dark SVG (works in callouts). Libraries automata, positioning, arrows.meta, calc are preloaded; more via \`\\usetikzlibrary{…}\` in the block. A skript file \`tikz-preamble.tex\` (colours, styles, macros) is prepended to every block of the skript. \`% alt: …\` / \`% caption: …\` comments set alt text and caption.
 
 **Function plots:** \`\`\`plot fenced code block, one entry per line: \`f(x) = 1/3x^3 - x\` (curve, implicit multiplication allowed), \`x: -4..4\` / \`y: -3..3\` (window, y optional), \`A = (2, 1)\` (point), \`vline x=-1\` / \`hline y=2\`, flags \`grid\`/\`nogrid\`/\`aspect: equal\`/\`size: 640x400\`/\`caption: …\`, per-entry options after a comma (colour word, \`label="…"\`, \`dashed\`, \`thick\`). \`ln\` natural, \`log\` base 10. Renders as a static SVG \`<img>\`, so \`<ai-feedback>\` below it in the same h2 section captures the graph — the way to build "draw the tangent" tasks.
 

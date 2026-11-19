@@ -46,7 +46,7 @@ set once with a Keystone token — not via the S3 API. The old Scaleway bucket
 
 | Task | Command |
 |---|---|
-| Deploy (checks first) | `bin/deploy` (`--quick` skips tests) |
+| Deploy (checks first, pushes after) | `bin/deploy` (`--quick` skips tests) |
 | Deploy without checks | `bin/kamal deploy` |
 | Roll back | `bin/kamal app containers` → `bin/kamal rollback <version>` |
 | App logs | `bin/kamal app logs -f` |

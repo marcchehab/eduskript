@@ -74,6 +74,16 @@ interface ContentImageProps {
   printWidth?: string
 }
 
+/** "200px", "200" or 200 → 200; percentages and everything else → undefined. */
+export function parsePixelWidth(width: unknown): number | undefined {
+  if (typeof width === 'number') return width > 0 ? width : undefined
+  if (typeof width !== 'string') return undefined
+  const match = /^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/.exec(width)
+  if (!match) return undefined
+  const px = parseFloat(match[1])
+  return px > 0 ? px : undefined
+}
+
 export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, nozoom = false, files, sourceLineStart, sourceLineEnd, printWidth: printWidthProp }: ContentImageProps) {
   // Pending undo shows the previous print width at once (print-edit-state.ts).
   const printWidth = usePrintOverride(`width:${sourceLineStart}`, printWidthProp)
@@ -117,6 +127,11 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
     ? parseFloat(style.width)
     : 100
 
+  // A pixel width (style="width: 200px") caps the image at that width. The
+  // wrapper only knows percentages, so it rides on its natural-size cap, which
+  // also keeps the image inside a narrow pane. It used to be ignored (full width).
+  const pixelWidth = parsePixelWidth(style?.width)
+
   // Rebuild the <img> tag from current attributes, with overrides for
   // whichever gizmo just changed (layout from the wrapper, invert from the
   // invert button). Uses style for width, data-* for custom attributes.
@@ -129,7 +144,11 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
     const nextAlign = overrides.align ?? align
     const nextWrap = overrides.wrap ?? wrap
     const nextInvert = 'invert' in overrides ? overrides.invert : currentInvert
-    let attrs = `src="${filename}" alt="${alt}" style="width: ${Math.round(overrides.width ?? initialWidth)}%"`
+    // Until the author drags the handle (which reports a width below 100%), a
+    // pixel width stays a pixel width.
+    const width = overrides.width ?? initialWidth
+    const widthCss = pixelWidth !== undefined && width === 100 ? `${pixelWidth}px` : `${Math.round(width)}%`
+    let attrs = `src="${filename}" alt="${alt}" style="width: ${widthCss}"`
     if (nextAlign !== 'center') {
       attrs += ` data-align="${nextAlign}"`
     }
@@ -150,7 +169,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
       attrs += ` data-print-width="${printWidth}"`
     }
     return `<img ${attrs} />`
-  }, [alt, filename, align, wrap, currentInvert, initialWidth, saturate, nozoom, printWidth])
+  }, [alt, filename, align, wrap, currentInvert, initialWidth, pixelWidth, saturate, nozoom, printWidth])
 
   // Handle layout changes from the wrapper
   const handleLayoutChange = useCallback((layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => {
@@ -230,7 +249,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
         ? (canPrintEdit ? (layout) => setPrintWidth(normalizePrintWidth(layout.width)) : undefined)
         : onWidthChange ? handleLayoutChange : undefined}
       dataAttributes={dataAttributes}
-      naturalMaxWidth={imgWidth}
+      naturalMaxWidth={pixelWidth ?? imgWidth}
       widthOnly={printing}
       markOnlineHeight={!!printWidth}
       extraControls={printing ? (

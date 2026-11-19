@@ -39,6 +39,8 @@ import { rehypeMarkdownChildren, rehypeCaptureRawRanges, rehypeMarkRawText } fro
 import { rehypeQuizFeedback } from './rehype-plugins/quiz-feedback'
 import { rehypeAllowPluginAttrs } from './rehype-plugins/plugin-attrs'
 import { rehypeColorClasses } from './rehype-plugins/color-classes'
+import { rehypeMathHtml } from './rehype-plugins/math-html'
+import { MathHtml } from '@/components/markdown/math-html'
 import { rehypeExternalLinks } from './rehype-plugins/external-links'
 import { rehypeStablePageLinks } from './rehype-plugins/stable-page-links'
 import { rehypeAlignTags } from './rehype-plugins/align-tags'
@@ -102,6 +104,7 @@ export const sanitizeSchema = {
     'survey', // <Survey> region marker — wraps <Question>s for anonymous-submission flow
     'mermaid-diagram',
     'function-plot', // ```plot fence; body rides in data-spec
+    'tikz-figure', // ```tikz fence; body rides in data-source
     'molecule', // SMILES structural formula, rendered by /api/render/molecule.svg
     'audio', // <audio controls src="clip.mp3">; src resolved by filename in markdown-components AudioComponent
     'source', // <source src="clip.mp3"> inside <audio>; src resolved the same way
@@ -169,6 +172,7 @@ export const sanitizeSchema = {
     'flag-icon': ['dataCode', 'data-code'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'function-plot': ['dataSpec', 'data-spec'],
+    'tikz-figure': ['dataSource', 'data-source'],
     'molecule': ['smiles', 'name', 'width', 'height', 'display-width', 'displayWidth', 'align', 'wrap'],
     // autoplay/loop are known HTML media properties, so property-information
     // hands them over camelCased (autoPlay) and as booleans — allow both
@@ -604,9 +608,11 @@ export async function compileMarkdown(
     // Source-line attributes, with the lineMap so preview line numbers match
     // the editor's original lines (preprocessing shifted them).
     .use(rehypeSourceLine, lineMap)
+    // Last: one element per formula instead of KaTeX's span tree (see math-html.ts).
+    .use(rehypeMathHtml)
     .use(rehypeReact, {
       ...production,
-      components,
+      components: { 'math-html': MathHtml, ...components },
     } as Parameters<typeof rehypeReact>[0])
 
   const result = await processor.process(processed)

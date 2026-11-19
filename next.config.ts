@@ -191,33 +191,11 @@ const nextConfig: NextConfig = {
     'mailauth', // DKIM check for product-update drafts (src/lib/product-updates/inbound.ts); Node-only
     'mailparser', // inbound mail parsing (webhooks/mail); Node-only
   ],
-  // Empty turbopack config to silence warnings about webpack config in Next.js 16
-  turbopack: {},
-  webpack(config, { isServer }) {
-    // sql.js shouldn't be bundled on the server
-    if (isServer) {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        'sql.js': false,
-      };
-    } else {
-      // Client-side: disable Node.js modules that sql.js tries to use
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        path: false,
-        crypto: false,
-      };
-    }
-
-    // Prevent webpack from trying to parse sql.js internals
-    config.module = config.module || {};
-    config.module.noParse = config.module.noParse || [];
-    if (Array.isArray(config.module.noParse)) {
-      config.module.noParse.push(/sql\.js/);
-    }
-
-    return config;
+  // The Dockerfile sets SKIP_BUILD_TYPECHECK=1: bin/deploy runs `tsc --noEmit`
+  // right before the image build, so the second pass inside `next build`
+  // (~1 min) only repeats it. A bare `kamal deploy` therefore builds unchecked.
+  typescript: {
+    ignoreBuildErrors: process.env.SKIP_BUILD_TYPECHECK === '1',
   },
 }
 

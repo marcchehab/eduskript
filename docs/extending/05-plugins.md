@@ -255,6 +255,7 @@ Plugins run in sandboxed iframes with a strict Content-Security-Policy:
 
 - **No network access** — `connect-src` blocks `fetch()`, `XMLHttpRequest`, and `WebSocket`
 - **CDN scripts only** — `script-src` allows inline scripts + jsdelivr, unpkg, cdnjs
+- **Images, audio and video by URL** — `img-src` and `media-src` allow any `https:` URL (plus `data:` and `blob:`), e.g. a file uploaded to a skript
 - **No host access** — plugin cannot read the host page's DOM, cookies, or storage
 - **Data is mediated** — all persistence goes through the host via `postMessage`, validated and rate-limited
 

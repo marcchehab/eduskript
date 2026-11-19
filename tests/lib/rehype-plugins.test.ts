@@ -349,13 +349,10 @@ describe('Rehype Plugins', () => {
       // KaTeX emits <span style="color: cyan"> inside its rendered output;
       // rehypeColorClasses runs after rehypeKatex and rewrites it.
       const result = await compileMarkdown('$\\textcolor{cyan}{x}$')
-      // result is a React tree; walk it for the expected className.
+      // The formula is one element carrying KaTeX's markup as HTML
+      // (rehypeMathHtml), so the class is in that string.
       const found = findInReact(result, (el: any) =>
-        typeof el?.props?.className === 'string'
-          ? el.props.className.split(/\s+/).includes('es-color-cyan')
-          : Array.isArray(el?.props?.className)
-            ? el.props.className.includes('es-color-cyan')
-            : false,
+        typeof el?.props?.html === 'string' && /class="[^"]*\bes-color-cyan\b/.test(el.props.html),
       )
       expect(found).toBe(true)
     })

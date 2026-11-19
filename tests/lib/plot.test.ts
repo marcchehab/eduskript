@@ -110,6 +110,19 @@ describe('plot rendering', () => {
     expect(result.plot.alt).toContain('x^2')
   })
 
+  it('aspect: equal draws a square grid (same step on both axes)', () => {
+    const result = renderPlot('x: -4..6\ny: -4..5\ngrid\naspect: equal\nf(x) = x')
+    expect('plot' in result).toBe(true)
+    if (!('plot' in result)) return
+    const svg = decodeURIComponent(result.plot.light.slice('data:image/svg+xml,'.length))
+    const grid = svg.match(/<path d="((?:M[\d.-]+ [\d.-]+[VH][\d.-]+)+)"/)![1]
+    const xs = [...grid.matchAll(/M([\d.-]+) 0V/g)].map((m) => Number(m[1]))
+    const ys = [...grid.matchAll(/M0 ([\d.-]+)H/g)].map((m) => Number(m[1]))
+    expect(xs.length).toBeGreaterThanOrEqual(11) // -4..6, every integer
+    expect(ys.length).toBe(10) // -4..5, every integer
+    expect(Math.abs(xs[1] - xs[0])).toBeCloseTo(Math.abs(ys[1] - ys[0]), 0)
+  })
+
   it('alt text: explicit alt, else caption, else the terms', () => {
     const alt = (src: string) => {
       const r = renderPlot(src)
@@ -138,7 +151,7 @@ describe('plot in the markdown pipeline', () => {
     expect(out).not.toContain('<code')
   })
 
-  it('works inside a callout, where mermaid still fails', async () => {
+  it('works inside a callout', async () => {
     const out = await html('> [!note] Title\n> ```plot\n> f(x) = x\n> ```')
     expect(out).toContain('data:image/svg+xml,')
   })

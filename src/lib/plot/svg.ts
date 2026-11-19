@@ -29,7 +29,6 @@ export function renderPlotSvg(spec: PlotSpec, theme: PlotTheme): string {
   const plotWidth = spec.width - MARGIN.left - MARGIN.right
   const plotHeight = spec.height - MARGIN.top - MARGIN.bottom
 
-  const x = scaleLinear().domain(spec.xRange).range([0, plotWidth])
 
   // The y-window may depend on the samples, and the samples need a y-scale for
   // the pole test — so when the author left `y:` out, probe once with the pole
@@ -42,12 +41,28 @@ export function renderPlotSvg(spec: PlotSpec, theme: PlotTheme): string {
         sampleCurve(curve.fn, spec.xRange[0], spec.xRange[1], plotWidth, provisional, Infinity)
       )
     )
-  if (spec.equalAspect) yDomain = matchAspect(spec.xRange, yDomain, plotWidth, plotHeight)
+  // Equal aspect widens whichever axis has pixels to spare — x when the given
+  // y-window is the tighter one — so a unit is the same length on both axes.
+  let xRange = spec.xRange
+  if (spec.equalAspect) {
+    yDomain = matchAspect(xRange, yDomain, plotWidth, plotHeight)
+    xRange = matchAspect(yDomain, xRange, plotHeight, plotWidth)
+  }
 
+  const x = scaleLinear().domain(xRange).range([0, plotWidth])
   const y = scaleLinear().domain(yDomain).range([plotHeight, 0])
 
-  const xTicks = x.ticks(tickCount(plotWidth))
-  const yTicks = y.ticks(tickCount(plotHeight))
+  // Equal-aspect plots are read like squared paper, so they get a denser grid.
+  const density = spec.equalAspect ? 35 : 60
+  let xTicks = x.ticks(tickCount(plotWidth, density))
+  let yTicks = y.ticks(tickCount(plotHeight, density))
+  // The two axes pick their step independently; with equal aspect that gave a
+  // grid of rectangles (e.g. every 1 on x, every 2 on y). Use the finer step on both.
+  if (spec.equalAspect && xTicks.length > 1 && yTicks.length > 1) {
+    const step = Math.min(xTicks[1] - xTicks[0], yTicks[1] - yTicks[0])
+    xTicks = ticksWithStep(xRange, step)
+    yTicks = ticksWithStep(yDomain, step)
+  }
   const format = tickFormatter([...xTicks, ...yTicks])
 
   const parts: string[] = []
@@ -90,8 +105,8 @@ export function renderPlotSvg(spec: PlotSpec, theme: PlotTheme): string {
 
     const runs = sampleCurve(
       curve.fn,
-      spec.xRange[0],
-      spec.xRange[1],
+      xRange[0],
+      xRange[1],
       plotWidth,
       y,
       plotHeight,
@@ -209,7 +224,7 @@ function renderLegend(spec: PlotSpec, palette: PlotPalette): string {
 
 // --- helpers ----------------------------------------------------------------
 
-/** Grow the shorter axis so one x-unit covers the same pixels as one y-unit. */
+/** Widen `yRange` (never shrink it) until one of its units covers as many pixels as one unit of `xRange`. */
 function matchAspect(
   xRange: [number, number],
   yRange: [number, number],
@@ -224,8 +239,18 @@ function matchAspect(
   return [centre - wantedSpan / 2, centre + wantedSpan / 2]
 }
 
-function tickCount(pixels: number): number {
-  return clamp(Math.round(pixels / 60), 4, 12)
+/** All multiples of `step` inside the domain (d3 steps are 1, 2 or 5 times a power of ten). */
+function ticksWithStep(domain: [number, number], step: number): number[] {
+  const eps = step * 1e-9
+  const ticks: number[] = []
+  for (let i = Math.ceil((domain[0] - eps) / step); i * step <= domain[1] + eps; i++) {
+    ticks.push(Number((i * step).toPrecision(12)))
+  }
+  return ticks
+}
+
+function tickCount(pixels: number, pixelsPerTick: number): number {
+  return clamp(Math.round(pixels / pixelsPerTick), 4, pixelsPerTick < 60 ? 20 : 12)
 }
 
 /** One formatter for both axes: enough decimals for the smallest step, no more. */

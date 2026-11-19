@@ -15,6 +15,9 @@ interface ParentNode extends Node {
  * Remark plugin to convert ```mermaid code blocks into <mermaid-diagram>
  * custom elements. Rendering happens in the React markdown tree via the
  * MermaidDiagram component (see src/components/markdown/mermaid-diagram.tsx).
+ * Walks every container, so a diagram inside a callout, a list item, a
+ * <solution> or a <flex-item> is transformed too (it used to handle top-level
+ * fences only, which left those as plain code blocks).
  *
  * Example markdown:
  * ```mermaid
@@ -24,14 +27,18 @@ interface ParentNode extends Node {
  */
 export function remarkMermaid() {
   return (tree: Node) => {
-    const parent = tree as ParentNode
-    if (!parent.children) return
+    walk(tree)
+  }
+}
 
-    for (let i = 0; i < parent.children.length; i++) {
-      const node = parent.children[i] as CodeNode
-      if (node.type !== 'code' || node.lang !== 'mermaid') continue
+function walk(node: Node): void {
+  const parent = node as ParentNode
+  if (!Array.isArray(parent.children)) return
 
-      const definition = (node.value || '').trim()
+  for (let i = 0; i < parent.children.length; i++) {
+    const child = parent.children[i] as CodeNode
+    if (child.type === 'code' && child.lang === 'mermaid') {
+      const definition = (child.value || '').trim()
       if (!definition) continue
 
       // Encode definition for safe inclusion in the data attribute
@@ -45,6 +52,8 @@ export function remarkMermaid() {
         type: 'html',
         value: `<mermaid-diagram data-definition="${encoded}"></mermaid-diagram>`,
       } as Node
+      continue
     }
+    walk(child)
   }
 }
