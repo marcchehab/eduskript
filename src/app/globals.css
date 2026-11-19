@@ -280,6 +280,11 @@
     /* Remove auto margin - paper fills viewport width when scaled */
     margin-left: 0;
     margin-right: 0;
+    /* The scaled paper's layout box keeps its unscaled height; pull what
+       follows up by −(1 − scale) × height so the page does not end in blank
+       scroll. --paper-scale-margin is set by AnnotationLayer (annotation-
+       layer.tsx, paper-tail effect); without it the margin is plain 8rem. */
+    margin-bottom: calc(8rem + var(--paper-scale-margin, 0px));
   }
 
   main:has(.paper-responsive) {
@@ -1922,18 +1927,18 @@ body.stickme-pinned .floating-page-controls {
   transform: scale(1.1);
 }
 
-/* Hide matplotlib interactive dialogs (we use Agg backend for static plots) */
+/* Hide matplotlib interactive dialogs (we use Agg backend for static plots).
+   Pyodide/matplotlib run in a Web Worker (lib/pyodide-worker.client.ts), which
+   cannot create DOM, so these are a fallback only. No [style*=…] attribute
+   selectors here: with one in a non-rightmost compound, every inline-style
+   write (the zoom transform, #zoom-spacer, canvas geometry) invalidated the
+   style of all [style] descendants — most of a pinch's main-thread time on
+   KaTeX-heavy pages (QA finding pinch-zoom-style-recalc-style-attr-selectors). */
 .ui-dialog-titlebar,
 .mpl-toolbar,
 .mpl-message,
 .mpl-canvas,
-div>.ui-dialog-titlebar,
-div[style*="resize: both"]>canvas.mpl-canvas {
-  display: none !important;
-}
-
-/* Hide any matplotlib figure containers that escape to body */
-body>div[style*="display: inline-block"]>div[style*="resize: both"] {
+div>.ui-dialog-titlebar {
   display: none !important;
 }
 

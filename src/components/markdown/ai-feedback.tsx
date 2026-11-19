@@ -62,6 +62,7 @@ import type { ChatStreamEvent } from '@/lib/ai/types'
 import { feedbackText, type FeedbackMark } from '@/lib/ai/feedback-marks'
 import { AIFeedbackMarks } from './ai-feedback-marks'
 import { reportScore } from '@/lib/plugin-share'
+import { findSectionElement, readLegacySectionIds } from '@/lib/annotations/reposition-strokes'
 
 interface AIFeedbackProps {
   pageId?: string
@@ -359,10 +360,12 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       const strokes = parseStrokes(record?.data?.canvasData)
 
       const included: RenderableStroke[] = []
+      const legacySectionIds = readLegacySectionIds(paperEl)
       for (const stroke of strokes) {
         if (stroke.mode !== 'draw' || stroke.points.length < 2) continue
+        // Current or legacy (pre-2026-11-19) section id.
         const sectionEl = stroke.sectionId
-          ? paperEl.querySelector(`[data-section-id="${CSS.escape(stroke.sectionId)}"]`)
+          ? findSectionElement(stroke.sectionId, paperEl, legacySectionIds)
           : null
         // Orphaned sections render at stored coords (annotation-svg-layer
         // fallback), so shift 0 matches what the student sees.

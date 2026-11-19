@@ -85,6 +85,17 @@ export async function readAnnotationState(page: Page): Promise<AnnotationState> 
 export async function patchPageContent(page: Page, pageId: string, content: string) {
   const res = await page.request.patch(`/api/pages/${pageId}`, { data: { content } })
   if (!res.ok()) throw new Error(`PATCH page content failed: ${res.status()} ${await res.text()}`)
+  // The public render is stale-while-revalidate: the first GET after the PATCH
+  // still serves the old HTML and starts the re-render. Wait until a GET of the
+  // current page returns different HTML (length as signature) or 5 s pass, so
+  // a reload right after this sees the new content.
+  const url = page.url()
+  const stale = (await (await page.request.get(url)).text()).length
+  const until = Date.now() + 5000
+  while (Date.now() < until) {
+    await page.waitForTimeout(300)
+    if ((await (await page.request.get(url)).text()).length !== stale) break
+  }
 }
 
 /** Top of a section relative to #paper (scroll-invariant), measured atomically. */
@@ -144,9 +155,17 @@ async function attrValues(page: Page, attr: string): Promise<string[]> {
 
 /** Viewport box of a sticky note / snap card by its id. */
 export async function elementBox(page: Page, attr: 'data-sticky-note-id' | 'data-snap-id', id: string) {
-  const box = await page.locator(`[${attr}="${id}"]`).first().boundingBox()
-  if (!box) throw new Error(`no box for [${attr}="${id}"]`)
-  return box
+  // The card first renders in the paper-absolute fallback and is re-portaled
+  // into its section one effect later (sticky-notes-layer / snaps-display
+  // sectionTargets); during that remount it briefly has no box. Poll.
+  const loc = page.locator(`[${attr}="${id}"]`).first()
+  const until = Date.now() + 3000
+  for (;;) {
+    const box = await loc.boundingBox()
+    if (box) return box
+    if (Date.now() > until) throw new Error(`no box for [${attr}="${id}"]`)
+    await page.waitForTimeout(50)
+  }
 }
 
 /**
@@ -440,6 +459,11 @@ export async function addSnapInSection(page: Page, sectionId: string): Promise<s
     { id, top, img: TINY_PNG },
   )
   await expect.poll(() => page.locator(`[data-snap-id="${id}"]`).count(), { timeout: 3000 }).toBe(1)
+  // Rendered first in the paper fallback, then re-portaled into its section
+  // one effect later (snaps-display sectionTargets): wait for that.
+  await expect
+    .poll(() => page.locator(`[data-snap-id="${id}"]`).evaluate((el) => !!el.parentElement?.hasAttribute('data-section-id')), { timeout: 3000 })
+    .toBe(true)
   return id
 }
 

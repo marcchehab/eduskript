@@ -79,3 +79,37 @@ These can't be reproduced headless and stay manual:
   to hit the variable-pressure code path, not real curves);
 - the physical **hardware eraser button** electronics;
 - iOS-Safari **coalesced-event** duplication (a WebKit/real-device behaviour).
+
+## Annotation/zoom fix specs (`e2e/annotation-fixes/`)
+
+Specs for individual annotation/zoom bug fixes, each on its own scratch page.
+Helpers in `e2e/annotation-fixes/helpers.ts`; `harness.spec.ts` is a smoke test
+of the helpers themselves.
+
+```bash
+# against an already-running dev server on :3050, chromium + iPad WebKit
+PORT=3050 PW_WEBKIT_WS=ws://127.0.0.1:3999/ pnpm test:e2e:fixes
+```
+
+- `PORT` sets baseURL and the webServer port (default 3000; a running server
+  is reused).
+- `PW_WEBKIT_WS` enables the `webkit-ipad` project (`devices['iPad Pro 11']`,
+  only `e2e/annotation-fixes/`). WebKit runs in a Playwright server of the SAME
+  version as `@playwright/test`, e.g.
+  `docker run -d --name pw-webkit --network host mcr.microsoft.com/playwright:v1.63.0-noble npx -y playwright@1.63.0 run-server --port 3999 --host 127.0.0.1`
+  (`--network host` so it reaches `localhost:<PORT>`).
+- Needs the e2e teacher/skript (`node scripts/seed-e2e.mjs`) and a student
+  account (default `student1@eduskript.test` / `student123`, override with
+  `E2E_STUDENT_EMAIL` / `E2E_STUDENT_PASSWORD`). DB access uses
+  `DATABASE_URL` (from `.env.local`/`.env`), localhost only.
+
+Gotchas:
+- Remote WebKit has no CDP: touch gestures there are synthetic `TouchEvent`s
+  (untrusted — no native scroll/zoom, only the app's listeners react).
+  `new Touch()` is an illegal constructor in that WebKit and `TouchEvent` init
+  needs a `TouchList`; the helper uses `document.createTouch`/`createTouchList`.
+- Change page content via `updateScratchPage` (PATCH API, revalidates).
+  Direct DB updates are hidden by the page render cache.
+- The student "Choose your nickname" dialog mounts late (>3s in WebKit);
+  `openPage`/`selectPen` dismiss it.
+- On the iPad viewport the page opens fit-to-width (zoom about 0.65, not 1).

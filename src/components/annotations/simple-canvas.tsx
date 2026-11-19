@@ -108,6 +108,73 @@ export interface CanvasStroke {
 // Telemetry sampling rate - collect every Nth stroke
 const TELEMETRY_SAMPLE_RATE = 10
 
+/**
+ * Picks the anchor element for a stroke starting at screen y `clientY`: the
+ * live `[data-section-id]` element in `root` with the greatest top <= clientY
+ * (ties → the later one in document order, like determineSectionFromY).
+ *
+ * If the point lies below that element's border box (in its bottom margin)
+ * and the DOM has a `${id}-end` sentinel for it, the sentinel is returned
+ * instead, so ink just under a plugin/callout/editor follows the content
+ * below it when the element resizes. The sentinel sits after the margin, so
+ * such strokes are stored with a small negative offset from their anchor.
+ * The `-end` suffix is the convention of heading-section-ids.ts and
+ * measureHeadingPositions; any other id is taken as-is from the DOM.
+ *
+ * Reads one getBoundingClientRect per section element: O(n), called once per
+ * pointerdown (not per move).
+ */
+export function pickAnchorElement(clientY: number, root: ParentNode): HTMLElement | null {
+  let best: HTMLElement | null = null
+  let bestTop = -Infinity
+  let bestBottom = -Infinity
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-section-id]'))) {
+    const r = el.getBoundingClientRect()
+    if (r.top <= clientY && r.top >= bestTop) {
+      best = el
+      bestTop = r.top
+      bestBottom = r.bottom
+    }
+  }
+  if (!best) return null
+  if (bestBottom > bestTop && clientY >= bestBottom) {
+    const id = best.getAttribute('data-section-id')
+    const end = id ? root.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(`${id}-end`)}"]`) : null
+    if (end) return end
+  }
+  return best
+}
+
+/**
+ * Re-expresses a stroke's points in the layout at commit time.
+ *
+ * Points are captured in paper coords from the canvas rect cached at
+ * pointerdown. If the anchor moved on screen during the stroke (content above
+ * it grew, e.g. a plugin iframe loading; or the page scrolled), points
+ * captured after that move are off by the move. `shifts[i]` is the anchor's
+ * on-screen move (in paper units) when point i was captured; subtracting it
+ * gives the point in the pointerdown layout, relative to the anchor as the
+ * user saw it. `delta` (anchor paper-top at commit − at pointerdown) then
+ * moves the whole stroke into the commit layout, matching the sectionOffsetY
+ * measured at commit.
+ *
+ * With no move during the stroke (every shift 0, delta 0) the input array is
+ * returned unchanged — identical stored coords to before this correction.
+ * When `shifts` does not line up with `points` (a straightened/snapped
+ * stroke replaced the raw path), `fallbackShift` (the latest shift) is used
+ * for every point.
+ */
+export function rebaseStrokePoints<P extends { y: number }>(
+  points: P[],
+  shifts: number[] | null,
+  fallbackShift: number,
+  delta: number,
+): P[] {
+  const aligned = shifts !== null && shifts.length === points.length
+  if (delta === 0 && (aligned ? shifts.every(s => s === 0) : fallbackShift === 0)) return points
+  return points.map((p, i) => ({ ...p, y: p.y - (aligned ? shifts[i] : fallbackShift) + delta }))
+}
+
 // Convert perfect-freehand outline points to a Path2D using quadratic curves for smoothness.
 // Same approach as the perfect-freehand README / Excalidraw.
 function getPathFromStroke(outlinePoints: number[][]): Path2D {
@@ -266,6 +333,19 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     // Lasso: set when the hold turned the current stroke into a selection.
     // The rest of the gesture is ignored and nothing is committed.
     const lassoFiredRef = useRef(false)
+    // Section anchor of the in-progress draw stroke, picked at pointerdown
+    // from live element positions (not the 300 ms-debounced headingPositions).
+    // `shifts` runs parallel to the raw currentPathRef (one entry per pushed
+    // point): the anchor's on-screen move since pointerdown, in paper units.
+    // See rebaseStrokePoints.
+    const strokeAnchorRef = useRef<{
+      el: HTMLElement | null
+      sectionId: string
+      screenTop: number
+      paperTop: number | null
+      shifts: number[]
+      lastShift: number
+    } | null>(null)
     const onLassoSelectRef = useRef(onLassoSelect)
     onLassoSelectRef.current = onLassoSelect
 
@@ -357,8 +437,14 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const ctx = canvas.getContext('2d')
       if (!ctx) return
 
-      // Clear canvas
+      // Clear the whole backing store. Done under the identity transform: the
+      // paper→pixel transform can scale below 1 (zoomed out at dpr 1), and a
+      // clearRect(0, 0, width, height) in paper units would then miss the
+      // right/bottom part of the store.
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.restore()
 
       // When SVG layer handles display, only clear — don't redraw committed strokes.
       // Canvas still tracks pathsRef for eraser collision and data export.
@@ -528,21 +614,30 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           canvas.style.height = `${vpH}px`
           canvas.style.right = 'auto'
 
-          // Internal resolution: visible screen pixels × dpr (always crisp, constant budget)
-          const screenW = visRight - visLeft
-          const screenH = visBottom - visTop
-          const newW = Math.round(screenW * dpr)
-          const newH = Math.round(screenH * dpr)
-
-          if (canvas.width !== newW || canvas.height !== newH) {
-            canvas.width = newW
-            canvas.height = newH
+          // Internal resolution: about screen pixels × dpr of the padded
+          // container (or of the paper, if smaller), NOT of the clamped
+          // visible rect — that one changes on every scroll frame near the
+          // paper's top/bottom edge and on every pinch frame, and each
+          // canvas.width/height assignment reallocates and clears the
+          // backing store. The store is kept while it is between 1× and 1.5×
+          // the needed size per axis; the transform below maps the paper-space
+          // viewport onto the whole store and CSS scales it to the vpW×vpH box,
+          // so a larger-than-needed store only means extra (sharper) pixels
+          // and a slightly different x/y density.
+          const needW = Math.max(1, Math.round(Math.min(paperRect.width, containerRect.width + 2 * pad) * dpr))
+          const needH = Math.max(1, Math.round(Math.min(paperRect.height, containerRect.height + 2 * pad) * dpr))
+          if (
+            canvas.width < needW || canvas.width > needW * 1.5 ||
+            canvas.height < needH || canvas.height > needH * 1.5
+          ) {
+            canvas.width = needW
+            canvas.height = needH
           }
           // Always set transform explicitly — canvas.width/height assignment resets it,
           // and the legacy sizing path may have set a different scale.
           const ctx = canvas.getContext('2d')
           if (ctx) {
-            ctx.setTransform(newW / vpW, 0, 0, newH / vpH, 0, 0)
+            ctx.setTransform(canvas.width / vpW, 0, 0, canvas.height / vpH, 0, 0)
           }
         }
 
@@ -801,6 +896,25 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
       currentPathRef.current = [{ x, y, pressure }]
+      strokeAnchorRef.current = null
+      if (currentModeRef.current === 'draw') {
+        // Anchor from LIVE positions at pen-down. Falls back to the cached
+        // headingPositions only when no section element is in the DOM.
+        const root: ParentNode = document.getElementById('paper') ?? document
+        const el = pickAnchorElement(e.clientY, root)
+        const sectionId =
+          el?.getAttribute('data-section-id') ||
+          determineSectionFromY(y, headingPositionsRef.current) ||
+          'paper-top'
+        strokeAnchorRef.current = {
+          el,
+          sectionId,
+          screenTop: el ? el.getBoundingClientRect().top : 0,
+          paperTop: measureSectionOffsetY(sectionId, (canvas.offsetParent as HTMLElement | null) ?? null),
+          shifts: [0],
+          lastShift: 0,
+        }
+      }
       if (currentModeRef.current === 'erase') {
         // Touch has no hover: show the circle from the first contact on.
         updateEraserCursorPosition(x, y)
@@ -926,6 +1040,22 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const coalescedEvents = e.nativeEvent.getCoalescedEvents?.() || []
       const events = coalescedEvents.length > 0 ? coalescedEvents : [e.nativeEvent]
 
+      // Anchor's on-screen move since pointerdown, in paper units — one rect
+      // read per move event (layout is normally clean here, so cheap). The
+      // paper-per-screen-px factor is the one screenToPaper uses.
+      const anchor = strokeAnchorRef.current
+      if (anchor?.el && currentModeRef.current === 'draw') {
+        if (!anchor.el.isConnected) {
+          // Re-rendered section: re-find it; keep the last shift if it's gone.
+          anchor.el = document.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(anchor.sectionId)}"]`)
+        }
+        if (anchor.el) {
+          const vp = viewportRef.current
+          const k = (vp ? vp.h : height) / rect.height
+          anchor.lastShift = (anchor.el.getBoundingClientRect().top - anchor.screenTop) * k
+        }
+      }
+
       // Process each coalesced event to capture all intermediate points
       events.forEach((event) => {
         // Convert screen coordinates to paper-space coordinates
@@ -947,6 +1077,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         }
         if (!isDuplicate) {
           path.push({ x, y, pressure })
+          if (anchor) anchor.shifts.push(anchor.lastShift)
         }
 
         // For eraser mode, check for collisions with existing strokes
@@ -1067,7 +1198,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (currentModeRef.current !== 'erase') {
         redrawInProgressStroke()
       }
-    }, [mode, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, redrawInProgressStroke, clearHoldTimer, svgHandlesDisplay, pointEraseAt])
+    }, [mode, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, redrawInProgressStroke, clearHoldTimer, svgHandlesDisplay, pointEraseAt, height])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       if (e && endForwarded(e)) return
@@ -1171,9 +1302,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // is an ordinary stroke: same storage, eraser, undo, sync, section anchor.
       clearHoldTimer()
       holdAnchorRef.current = null
+      let pointsAreRaw = true
       if (snappedPathRef.current && currentModeRef.current === 'draw') {
         currentPathRef.current = snappedPathRef.current
         snappedPathRef.current = null
+        pointsAreRaw = false
       }
       snapSourceRef.current = null
 
@@ -1247,13 +1380,17 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const lengthPerPoint = pointCount > 1 ? totalLength / (pointCount - 1) : 0
         const durationPerPoint = pointCount > 1 ? durationMs / (pointCount - 1) : 0
 
-        // Determine which section this stroke belongs to based on first point
-        const firstPoint = currentPathRef.current[0]
+        // Section anchor: picked at pointerdown from live element positions
+        // (strokeAnchorRef). The fallback (no anchor recorded) uses the first
+        // point against the cached headingPositions, as before.
         // 'paper-top' is the always-present sentinel injected by the
         // heading-section-ids rehype plugin at the top of the markdown tree.
         // Falling back to it (rather than 'unknown') means even strokes drawn
         // above the first real heading have a valid DOM anchor.
-        const sectionId = determineSectionFromY(firstPoint.y, headingPositions) || 'paper-top'
+        const anchor = strokeAnchorRef.current
+        strokeAnchorRef.current = null
+        const sectionId =
+          anchor?.sectionId ?? (determineSectionFromY(currentPathRef.current[0].y, headingPositions) || 'paper-top')
         // Live-measure the section's current paper-top against the canvas's
         // own coord origin (the wrapper element that contains the canvas, which
         // sits at paper's padding edge — `position: absolute; inset: 0`).
@@ -1271,7 +1408,20 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // (implemented in measureSectionOffsetY, shared with selection moves)
         const sectionOffsetY =
           measureSectionOffsetY(sectionId, (canvasRef.current?.offsetParent as HTMLElement | null) ?? null) ??
+          anchor?.paperTop ??
           headingPositions.find(h => h.sectionId === sectionId)?.offsetY ?? 0
+        // Points were captured in the pointerdown layout; bring them into the
+        // commit layout and undo any anchor move during the stroke (plugin
+        // iframe growing above the anchor, scroll). Unchanged when nothing
+        // moved. See rebaseStrokePoints.
+        if (anchor) {
+          currentPathRef.current = rebaseStrokePoints(
+            currentPathRef.current,
+            pointsAreRaw ? anchor.shifts : null,
+            anchor.lastShift,
+            anchor.paperTop !== null ? sectionOffsetY - anchor.paperTop : 0,
+          )
+        }
 
         // Telemetry: sample every Nth stroke
         telemetryStrokeCountRef.current++

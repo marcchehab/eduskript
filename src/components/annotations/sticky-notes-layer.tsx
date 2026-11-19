@@ -48,6 +48,7 @@ import {
   type HeadingPosition,
 } from '@/lib/annotations/reposition-strokes'
 import { useHeadingPositions } from '@/contexts/heading-positions-context'
+import { findSectionElement, readLegacySectionIds } from '@/lib/annotations/reposition-strokes'
 import { useZoom } from '@/contexts/zoom-context'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
@@ -529,11 +530,13 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
 
   useEffect(() => {
     const next = new Map<string, HTMLElement>()
+    // Current or legacy (pre-2026-11-19) section ids, see findSectionElement.
+    const legacy = readLegacySectionIds()
     for (const note of allNotes) {
       if (!note.sectionId) continue
       if (next.has(note.sectionId)) continue
-      const el = document.querySelector(`[data-section-id="${CSS.escape(note.sectionId)}"]`)
-      if (el instanceof HTMLElement) next.set(note.sectionId, el)
+      const el = findSectionElement(note.sectionId, document, legacy)
+      if (el) next.set(note.sectionId, el)
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: querying live DOM for portal targets after render. Same-value short-circuit prevents cascade.
     setSectionTargets((prev) => {
@@ -544,12 +547,11 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
   }, [allNotes, headingPositions])
 
   /** Returns { target, originX, originY } — where to portal this note.
-   * Returns null when the note's section was a markdown-dynamic-height
-   * element (callout, code-editor, plugin) that's no longer in the DOM —
-   * caller renders nothing in that case. Mental model: variable-height
-   * element disappears → its annotations disappear too. Data persists.
-   * Other anchors (h1/h2/h3, spacers) fall through to the paper-absolute
-   * fallback so the note stays visible at its drawn position. */
+   * A note whose section is no longer in the DOM (any id kind) falls through
+   * to the paper-absolute fallback, so it stays visible at its drawn
+   * position, like orphaned strokes. Until 2026-11-19 notes on removed
+   * callouts/editors/plugins were hidden instead. Returns null only before
+   * the paper element exists. */
   const resolveTarget = useCallback((note: StickyNote): { target: HTMLElement; originX: number; originY: number } | null => {
     if (!paperEl) return null
     if (note.sectionId && note.sectionOffsetY !== undefined) {
@@ -569,9 +571,6 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
           originX: paperPaddingLeft + borderLeft,
           originY: note.sectionOffsetY + borderTop,
         }
-      }
-      if (/^(callout|editor|plugin)-/.test(note.sectionId)) {
-        return null
       }
     }
     return { target: paperEl, originX: 0, originY: 0 }

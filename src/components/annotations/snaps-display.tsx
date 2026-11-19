@@ -7,6 +7,7 @@ import type { Snap, SnapColor } from '@/types/snap'
 import { SnapViewerOverlay } from './snap-viewer-overlay'
 import { useZoom } from '@/contexts/zoom-context'
 import { snapImageSrc } from '@/lib/snap-url'
+import { findSectionElement, readLegacySectionIds } from '@/lib/annotations/reposition-strokes'
 
 const SNAP_COLORS: SnapColor[] = ['blue', 'yellow', 'green', 'pink', 'purple']
 
@@ -1183,9 +1184,11 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
 
   useEffect(() => {
     const next = new Map<string, HTMLElement>()
+    // Current or legacy (pre-2026-11-19) section ids, see findSectionElement.
+    const legacy = readLegacySectionIds()
     for (const sid of ownSnapAnchors) {
-      const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
-      if (el instanceof HTMLElement) next.set(sid, el)
+      const el = findSectionElement(sid, document, legacy)
+      if (el) next.set(sid, el)
     }
      
     setSectionTargets((prev) => {
@@ -1324,19 +1327,10 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
               ? sectionTargets.get(snap.sectionId)
               : undefined
 
-            // If the snap was anchored to a markdown-dynamic-height element
-            // (callout, code-editor, plugin) that has since been removed from
-            // the markdown, hide it. Same mental model as section-anchored-
-            // strokes: variable-height element disappears → its annotations
-            // disappear with it. Data persists; only render is suppressed,
-            // so re-adding the element makes the snap reappear.
-            if (
-              !sectionTarget &&
-              snap.sectionId &&
-              /^(callout|editor|plugin)-/.test(snap.sectionId)
-            ) {
-              return null
-            }
+            // A snap whose section is gone (any id kind) falls through to the
+            // paper-absolute fallback at its stored position, like orphaned
+            // strokes (section-anchored-strokes.tsx). Until 2026-11-19 snaps
+            // on removed callouts/editors/plugins were hidden instead.
 
             // Section's own border-top/border-left shifts the absolute child's
             // (top:0, left:0) reference frame inside the border (to the
@@ -1395,14 +1389,6 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
           const sectionTarget = snap.sectionId && snap.sectionOffsetY !== undefined
             ? sectionTargets.get(snap.sectionId)
             : undefined
-
-          if (
-            !sectionTarget &&
-            snap.sectionId &&
-            /^(callout|editor|plugin)-/.test(snap.sectionId)
-          ) {
-            return null
-          }
 
           let sectionBorderTop = 0
           let sectionBorderLeft = 0

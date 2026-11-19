@@ -11,7 +11,7 @@
  * When not active, resize handles are still available via touch only.
  */
 
-import { useEffect, useRef, useCallback, useState, forwardRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, forwardRef } from 'react'
 import { createPortal } from 'react-dom'
 import { SeparatorHorizontal, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -266,7 +266,6 @@ interface SpacerSidePanelProps {
 const SpacerSidePanel = forwardRef<HTMLDivElement, SpacerSidePanelProps>(
   function SpacerSidePanel({ spacer, getSourceRect, onPatternChange, onDelete }, ref) {
     const innerRef = useRef<HTMLDivElement>(null)
-    const [pos, setPos] = useState({ left: 0, top: 0 })
 
     const setRefs = useCallback(
       (node: HTMLDivElement | null) => {
@@ -277,7 +276,8 @@ const SpacerSidePanel = forwardRef<HTMLDivElement, SpacerSidePanelProps>(
       [ref],
     )
 
-    useEffect(() => {
+    // Layout effect: the first position is written before paint.
+    useLayoutEffect(() => {
       const update = () => {
         const sourceRect = getSourceRect()
         if (!sourceRect) return
@@ -308,7 +308,12 @@ const SpacerSidePanel = forwardRef<HTMLDivElement, SpacerSidePanelProps>(
           Math.min(vh - VIEWPORT_MARGIN - panelH / 2, desiredY),
         )
 
-        setPos({ left, top })
+        // Written to the DOM directly, not via state: this runs on every
+        // scroll event and only moves this one fixed element.
+        if (panel) {
+          panel.style.left = `${left}px`
+          panel.style.top = `${top}px`
+        }
       }
       update()
 
@@ -325,9 +330,8 @@ const SpacerSidePanel = forwardRef<HTMLDivElement, SpacerSidePanelProps>(
       <div
         ref={setRefs}
         className="fixed flex flex-col items-center gap-1.5 rounded-lg border border-border bg-popover p-1.5 shadow-lg select-none"
+        // left/top are set by the positioning effect above.
         style={{
-          left: pos.left,
-          top: pos.top,
           transform: 'translate(-50%, -50%)',
           zIndex: 45,
         }}

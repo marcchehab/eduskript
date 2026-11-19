@@ -28,6 +28,7 @@
     "test:e2e:seed": "node scripts/seed-e2e.mjs",
     "test:e2e": "node scripts/seed-e2e.mjs && playwright test",
     "test:e2e:ui": "node scripts/seed-e2e.mjs && playwright test --ui",
+    "test:e2e:fixes": "playwright test e2e/annotation-fixes",
     "test:e2e:watch": "node scripts/seed-e2e.mjs && E2E_HEADED=1 E2E_SLOMO=350 playwright test",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy && node scripts/seed-admin.js",

@@ -1,11 +1,36 @@
 import { visit, SKIP } from 'unist-util-visit'
 import type { Root, Element } from 'hast'
 
+import { LEGACY_SECTION_IDS_ATTR } from '@/lib/annotations/reposition-strokes'
+
+// "2 Addieren", "2. Addieren", "2.1 Addieren", "2) Addieren" → "Addieren".
+// Requires whitespace after the number, so "2024" or "3D-Druck" stay as they are.
+const LEADING_NUMBER = /^\s*\d+(?:\.\d+)*[.)]?\s+/
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, '')
+    .trim()
+    .replace(/\s+/g, '-')
+}
+
+/**
+ * Heading slug for the current section ids: like rehype-slug's, but without a
+ * leading section number (renumbering headings must not change ids). Keeps
+ * only letters, digits, `_` and `-`, so it never contains `@`, `#`, `/` or `~`,
+ * the separators of the id format below. Falls back to the full text when
+ * the text is only a number.
+ */
+export function stableHeadingSlug(text: string): string {
+  return slugify(text.replace(LEADING_NUMBER, '')) || slugify(text)
+}
+
 /**
  * Rehype plugin to add data-section-id attributes to elements for annotation alignment.
  *
  * Tracks:
- * - h1, h2, h3 headings (using their slug as ID)
+ * - h1, h2, h3 headings
  * - pre (code blocks)
  * - code-editor (interactive editors) - dynamic height due to console output
  * - plugin (iframe plugins) - dynamic height due to iframe auto-resize
@@ -13,6 +38,32 @@ import type { Root, Element } from 'hast'
  * - figure (images)
  * - table (tables)
  * - flex (side-by-side layout container) - subsumes its descendants
+ * - solution - end sentinel only (see below)
+ *
+ * ID FORMAT (since 2026-11-19). New strokes store these:
+ * - heading: `h2-@<slug>`; h3: `h3-@<h2 key>/<slug>` (scoped to the preceding
+ *   h2, so "### Übungen" under different h2s never collide). `<slug>` drops a
+ *   leading section number. A repeated key gets `~2`, `~3`, … in document order
+ *   (the only order-dependent part: inserting a same-named heading in the same
+ *   scope above shifts the later ones).
+ * - other blocks: `<kind>@<scope>#<n>`, e.g. `callout@h2-@addieren#1`,
+ *   `plugin-teacher-vektor-labor@h2-@addieren#2`. `<scope>` is the id of the
+ *   nearest preceding h1-h3 (`top` before the first one); `<n>` counts that
+ *   kind within the scope. Inserting or removing content in another section
+ *   therefore leaves the id unchanged; inserting the same kind earlier in the
+ *   SAME section still shifts it. Renaming the scope heading changes it.
+ * - the `-end` sentinel: `<id>-end`. Block ids end in `#<n>`, so a sentinel id
+ *   never equals another block id.
+ * Heading ids keep the `h1-`/`h2-` prefix that ai-feedback.tsx selects on.
+ *
+ * LEGACY IDS (before 2026-11-19, still stored by most strokes): `h2-<rehype-slug
+ * id>`, `callout-<n>` / `pre-<n>` / `editor-<n>` / `figure-<n>` / `table-<n>` /
+ * `flex-<n>` / src-less `plugin-<n>` counted over the whole document,
+ * `plugin-<src>[-<n>]` per src. They are generated exactly as before and put
+ * into the {@link LEGACY_SECTION_IDS_ATTR} map on `paper-top` (legacy → current
+ * id), so a stored legacy id resolves to the same element as before on
+ * unchanged content. Legacy ids never contain `@`, so the two namespaces are
+ * disjoint. `paper-top` is the same in both.
  *
  * `<flex>` is treated as a single section: it gets its own section ID and the
  * walker skips its subtree, so headings/callouts/etc. that sit side-by-side
@@ -24,23 +75,17 @@ import type { Root, Element } from 'hast'
  * can track both top and bottom positions, AND get a 0-height sibling
  * `<div data-section-id="${id}-end">` inserted right after them. The sibling
  * is what the per-section annotation portal anchors to: strokes drawn near
- * the bottom of a dynamic-height element get sectionId `${id}-end` (assigned
- * by simple-canvas.tsx using the headingPositions list), and the sibling
- * gives those strokes a real DOM anchor that follows the element's bottom
- * edge as it grows/shrinks.
+ * the bottom of a dynamic-height element get sectionId `${id}-end` (picked by
+ * simple-canvas.tsx), and the sibling gives those strokes a real DOM anchor
+ * that follows the element's bottom edge as it grows/shrinks.
+ *
+ * `<solution>` gets only the `-end` sentinel (it is collapsed on every load, so
+ * strokes below an opened one used to float one solution-height too low). The
+ * Solution component does not receive data-section-id (markdown-components.tsx
+ * passes title/teacher/children only), so there is no top anchor. Skipped
+ * inside `<p>` (a div there is invalid HTML).
  */
 export function rehypeHeadingSectionIds() {
-  // Counters for generating sequential IDs
-  const counters: Record<string, number> = {
-    pre: 0,
-    'code-editor': 0,
-    plugin: 0,
-    callout: 0,
-    figure: 0,
-    table: 0,
-    flex: 0,
-  }
-
   return (tree: Root) => {
     // Always-present synthetic "first section" at the top of the rendered
     // content. Anything drawn above the first real heading would otherwise
@@ -50,7 +95,7 @@ export function rehypeHeadingSectionIds() {
     // every stroke has a valid anchor regardless of what headings the
     // markdown contains. ColorTitleHeading also strips data-section-id off
     // h1, so without this even pages WITH an h1 are vulnerable.
-    tree.children.unshift({
+    const paperTop: Element = {
       type: 'element',
       tagName: 'div',
       properties: {
@@ -59,120 +104,157 @@ export function rehypeHeadingSectionIds() {
         style: 'height:0;pointer-events:none',
       },
       children: [],
-    })
+    }
+    tree.children.unshift(paperTop)
+
+    // Legacy counters (document-wide, exactly as before 2026-11-19).
+    const counters: Record<string, number> = {
+      pre: 0,
+      'code-editor': 0,
+      plugin: 0,
+      callout: 0,
+      figure: 0,
+      table: 0,
+      flex: 0,
+    }
+    const pluginSeen: Record<string, number> = {}
+    const legacyIds: Record<string, string> = {}
+
+    // Current scheme state.
+    let scope = 'top'
+    let scopeCounts = new Map<string, number>()
+    let h2Key: string | undefined
+    const headingSeen = new Map<string, number>()
+    const blockId = (kind: string) => {
+      const n = (scopeCounts.get(kind) ?? 0) + 1
+      scopeCounts.set(kind, n)
+      return `${kind}@${scope}#${n}`
+    }
 
     // Collect end-sentinel insertions during visit; apply after the walk so we
-    // don't perturb traversal indices. Each entry: { parent, index, sectionId }.
-    const inserts: Array<{ parent: Element | Root; index: number; sectionId: string }> = []
-    // Occurrences per src-derived plugin ID (see the plugin branch below).
-    const pluginSeen: Record<string, number> = {}
+    // don't perturb traversal indices.
+    const inserts: Array<{ parent: Element | Root; index: number; sectionId: string; legacyId?: string }> = []
+
+    const anchor = (
+      node: Element,
+      sectionId: string,
+      legacyId: string,
+      index: number | undefined,
+      parent: Element | Root | undefined,
+      dynamic: boolean,
+    ) => {
+      node.properties['data-section-id'] = sectionId
+      legacyIds[legacyId] = sectionId
+      if (dynamic) {
+        node.properties['data-dynamic-height'] = 'true'
+        if (parent && typeof index === 'number') inserts.push({ parent, index, sectionId, legacyId })
+      }
+    }
 
     visit(tree, 'element', (node: Element, index, parent) => {
+      if (node === paperTop) return
       node.properties = node.properties || {}
+      const p = parent as Element | Root | undefined
 
       // Flex container: claims one section ID for the whole subtree and
       // SKIPs descendants so siblings inside don't each become a section.
       // Marked dynamic-height because callouts inside can fold/unfurl.
       if (node.tagName === 'flex') {
-        const sectionId = `flex-${counters.flex++}`
-        node.properties['data-section-id'] = sectionId
-        node.properties['data-dynamic-height'] = 'true'
-        if (parent && typeof index === 'number') {
-          inserts.push({ parent: parent as Element | Root, index, sectionId })
-        }
+        anchor(node, blockId('flex'), `flex-${counters.flex++}`, index, p, true)
         return SKIP
       }
 
-      // H1-H3 headings (use slug-based ID)
-      if (['h1', 'h2', 'h3'].includes(node.tagName)) {
+      // H1-H3 headings. No rehype-slug id → no anchor (as before), and the
+      // heading does not open a scope.
+      if (node.tagName === 'h1' || node.tagName === 'h2' || node.tagName === 'h3') {
         const headingId = node.properties?.id as string | undefined
         if (!headingId) return
 
         const headingText = extractText(node)
-        const sectionId = `${node.tagName}-${headingId}`
+        const slug = stableHeadingSlug(headingText)
+        const key = node.tagName === 'h3' && h2Key !== undefined ? `${h2Key}/${slug}` : slug
+        const base = `${node.tagName}-@${key}`
+        const n = (headingSeen.get(base) ?? 0) + 1
+        headingSeen.set(base, n)
+        const sectionId = n === 1 ? base : `${base}~${n}`
+        if (node.tagName === 'h2') h2Key = n === 1 ? key : `${key}~${n}`
+        if (node.tagName === 'h1') h2Key = undefined
 
-        node.properties['data-section-id'] = sectionId
+        anchor(node, sectionId, `${node.tagName}-${headingId}`, index, p, false)
         node.properties['data-heading-text'] = headingText
+        scope = sectionId
+        scopeCounts = new Map()
         return
       }
 
       // Code blocks (pre elements, but not inside code-editor)
       if (node.tagName === 'pre') {
-        const sectionId = `pre-${counters.pre++}`
-        node.properties['data-section-id'] = sectionId
+        anchor(node, blockId('pre'), `pre-${counters.pre++}`, index, p, false)
         return
       }
 
-      // Interactive code editors (custom element)
+      // Interactive code editors (custom element). Console output can change height.
       if (node.tagName === 'code-editor') {
-        const sectionId = `editor-${counters['code-editor']++}`
-        node.properties['data-section-id'] = sectionId
-        node.properties['data-dynamic-height'] = 'true' // Console output can change height
-        if (parent && typeof index === 'number') {
-          inserts.push({ parent: parent as Element | Root, index, sectionId })
-        }
+        anchor(node, blockId('editor'), `editor-${counters['code-editor']++}`, index, p, true)
         return
       }
 
-      // Plugin iframes (custom element) - dynamic height due to iframe auto-resize
-      // ID from the src attribute (sequential counters break when plugins are
-      // added/removed). The same plugin embedded several times gets `-2`, `-3`
-      // … from its second occurrence on: before 2026-11-09 every occurrence
-      // shared one ID, so strokes below a later one were anchored (querySelector
-      // → first match) to the first and shifted when anything in between
-      // changed height. The first keeps the old ID so existing strokes render
-      // where they did.
+      // Plugin iframes (custom element) - dynamic height due to iframe auto-resize.
+      // Legacy ID from the src attribute: the same plugin embedded several times
+      // got `-2`, `-3` … from its second occurrence on (before 2026-11-09 every
+      // occurrence shared one ID; the first kept it).
       if (node.tagName === 'plugin') {
         const src = node.properties?.src as string | undefined
-        let sectionId: string
+        let legacyId: string
+        let kind: string
         if (src) {
           const base = `plugin-${src.replace(/[^a-zA-Z0-9-]/g, '-')}`
           const n = (pluginSeen[base] = (pluginSeen[base] ?? 0) + 1)
-          sectionId = n === 1 ? base : `${base}-${n}`
+          legacyId = n === 1 ? base : `${base}-${n}`
+          kind = base
         } else {
-          sectionId = `plugin-${counters.plugin++}`
+          legacyId = `plugin-${counters.plugin++}`
+          kind = 'plugin'
         }
-        node.properties['data-section-id'] = sectionId
-        node.properties['data-dynamic-height'] = 'true'
-        if (parent && typeof index === 'number') {
-          inserts.push({ parent: parent as Element | Root, index, sectionId })
-        }
+        anchor(node, blockId(kind), legacyId, index, p, true)
         return
       }
 
-      // Callouts (blockquote with callout class)
+      // Callouts (blockquote with callout class). Collapsible.
       if (node.tagName === 'blockquote') {
         const classes = node.properties?.className
         const classArray = Array.isArray(classes) ? classes : [classes]
         if (classArray.some(c => String(c).includes('callout'))) {
-          const sectionId = `callout-${counters.callout++}`
-          node.properties['data-section-id'] = sectionId
-          node.properties['data-dynamic-height'] = 'true' // Collapsible
-          if (parent && typeof index === 'number') {
-            inserts.push({ parent: parent as Element | Root, index, sectionId })
-          }
+          anchor(node, blockId('callout'), `callout-${counters.callout++}`, index, p, true)
           return
         }
       }
 
       // Figures (images wrapped in figure tags)
       if (node.tagName === 'figure') {
-        const sectionId = `figure-${counters.figure++}`
-        node.properties['data-section-id'] = sectionId
+        anchor(node, blockId('figure'), `figure-${counters.figure++}`, index, p, false)
         return
       }
 
       // Tables
       if (node.tagName === 'table') {
-        const sectionId = `table-${counters.table++}`
-        node.properties['data-section-id'] = sectionId
+        anchor(node, blockId('table'), `table-${counters.table++}`, index, p, false)
+        return
+      }
+
+      // <solution>: end sentinel only, no legacy id (new since 2026-11-19).
+      if (node.tagName === 'solution') {
+        if (p && typeof index === 'number' && !(p.type === 'element' && p.tagName === 'p')) {
+          inserts.push({ parent: p, index, sectionId: blockId('solution') })
+        }
         return
       }
     })
 
     // Apply end-sentinel insertions in reverse order so earlier indices stay valid.
+    // Same parent + same index cannot happen (one insert per element).
     inserts.sort((a, b) => b.index - a.index)
-    for (const { parent, index, sectionId } of inserts) {
+    for (const { parent, index, sectionId, legacyId } of inserts) {
       const sentinel: Element = {
         type: 'element',
         tagName: 'div',
@@ -184,7 +266,12 @@ export function rehypeHeadingSectionIds() {
         },
         children: [],
       }
+      if (legacyId) legacyIds[`${legacyId}-end`] = `${sectionId}-end`
       parent.children.splice(index + 1, 0, sentinel)
+    }
+
+    if (Object.keys(legacyIds).length > 0) {
+      paperTop.properties[LEGACY_SECTION_IDS_ATTR] = JSON.stringify(legacyIds)
     }
   }
 }

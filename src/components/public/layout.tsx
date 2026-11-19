@@ -430,12 +430,11 @@ export function PublicSiteLayout({
       if (vw < PAPER_WIDTH) {
         const scale = vw / PAPER_WIDTH
         document.documentElement.style.setProperty('--paper-scale', scale.toString())
-        // Negative margin to compensate for scaled height
-        const marginAdjust = `calc(-1 * (1 - ${scale}) * var(--paper-height, 0px))`
-        document.documentElement.style.setProperty('--paper-scale-margin', marginAdjust)
+        // The blank tail this leaves below the paper (its layout box keeps the
+        // unscaled height) is removed via --paper-scale-margin, which
+        // AnnotationLayer keeps in sync with the paper's height.
       } else {
         document.documentElement.style.removeProperty('--paper-scale')
-        document.documentElement.style.removeProperty('--paper-scale-margin')
       }
     }
 
@@ -932,7 +931,9 @@ export function PublicSiteLayout({
             hideSidebar ? 'no-sidebar' : isSidebarCollapsed ? 'min-[1344px]:ml-16' : 'min-[1344px]:ml-80'
           }`}
         >
-          <main className="bg-background min-h-screen">
+          {/* flow-root: #paper's negative margin-bottom (--paper-scale-margin,
+              globals.css) must shrink <main>, not collapse through it. */}
+          <main className="flow-root bg-background min-h-screen">
             {children}
           </main>
         </div>

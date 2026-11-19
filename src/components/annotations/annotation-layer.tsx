@@ -123,12 +123,19 @@ import { PasteSnapHandler } from './paste-snap-handler'
 import { SnapsDisplay, type StudentWorkSnap, type SnapOverridesData, type SnapPositionOverride, type SnapPositionOverrides } from './snaps-display'
 import { LayerBadges } from './layer-badges'
 import { SpacersDisplay } from './spacers-display'
+import { reanchorStrokesInPlace, reportableOrphans } from '@/lib/annotations/orphan-strokes'
+import { blockChildren, computeSpacerAnchor, resolveSpacerBlockIndex } from '@/lib/annotations/spacer-anchor'
 import { createLogger } from '@/lib/logger'
 import { safeRandomUUID } from '@/lib/uuid'
-import { TAP_MAX_MOVE, recordEdit, stepHistory, tapTouchEnd, tapTouchMove, tapTouchStart, type StrokeHistory, type TapAction, type TapGesture, type TouchPoint } from '@/lib/annotations/tap-gesture'
+import { clampZoom, pinchLeftDeadZone, pinchOrigin, pinchStep, recordEdit, stepHistory, tapTouchEnd, tapTouchMove, tapTouchStart, type StrokeHistory, type TapAction, type TapGesture, type TouchPoint, type PinchOrigin } from '@/lib/annotations/tap-gesture'
 import { DEFAULT_PENS, loadPens, savePens, addPen, removePen, reorderPens, setPenColor, setPenSize, type PenConfig, type PenType } from '@/lib/annotations/pens'
 
 const log = createLogger('annotations:layer')
+
+/** Ctrl/⌘+wheel zoom: commit the `zoom` state this long after the last wheel event. */
+const WHEEL_ZOOM_COMMIT_MS = 150
+// Orphaned-strokes banner shows only after the orphan set was stable this long.
+const ORPHAN_BANNER_DELAY_MS = 2000
 
 /** Finger touches as points; Apple Pencil touches (touchType 'stylus') left out. */
 function fingerPoints(list: TouchList): TouchPoint[] {
@@ -1266,14 +1273,18 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const renderedZoomRef = useRef(1.0)
   const rafIdRef = useRef<number | null>(null)
   const touchesRef = useRef<Map<number, { x: number; y: number }>>(new Map())
-  const initialPinchDistanceRef = useRef<number | null>(null)
-  // Zoom starts only once the fingers moved more than TAP_MAX_MOVE, so a
-  // two-finger tap (undo) does not zoom; until then this is false.
+  // Active touch pinch (null = none). Re-based whenever the finger pair
+  // changes; see pinchOrigin/pinchStep in lib/annotations/tap-gesture.ts.
+  const pinchOriginRef = useRef<PinchOrigin | null>(null)
+  // While a two-finger tap (undo) is possible, zoom starts only once the
+  // fingers moved more than TAP_MAX_MOVE; until then this is false. Without a
+  // tap gesture in progress the pinch is engaged from the first move.
   const pinchEngagedRef = useRef(false)
-  const initialZoomRef = useRef(1.0)
-  const initialPinchCenterRef = useRef<{ x: number; y: number } | null>(null)
-  // Store the content point under the initial pinch center (in unscaled content coordinates)
-  const initialContentPointRef = useRef<{ x: number; y: number } | null>(null)
+  // Ctrl/⌘+wheel: the `zoom` state is committed once the wheel burst pauses
+  // (WHEEL_ZOOM_COMMIT_MS), not per event — each setZoom re-renders this layer.
+  const wheelZoomCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Fractional scroll position applyZoom wrote last (see the WebKit note there).
+  const wheelScrollRef = useRef<{ left: number; top: number } | null>(null)
   // Scroll container ref for zoom-scroll sync
   const scrollContainerRef = useRef<HTMLElement | null>(null)
   // Display-only zoom state (updated on gesture end, not during gesture)
@@ -1302,10 +1313,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const mainRef = useRef<HTMLElement | null>(null)
   const [eraserMarkedIds, setEraserMarkedIds] = useState<Set<string>>(new Set())
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // True between a local edit (debounced save scheduled) and the save that
+  // persists it. Unload/unmount save only then: an unconditional save pushed
+  // this tab's (possibly stale) copy to the server on every reload/close and
+  // overwrote strokes another device had added meanwhile (equal versions are
+  // not rejected by /api/user-data/sync).
+  const unsavedChangesRef = useRef(false)
   const isClearingRef = useRef(false)
   const performSaveRef = useRef<(() => Promise<void>) | null>(null)
   const [pageHeight, setPageHeight] = useState(0)
-  const [orphanedStrokesCount, setOrphanedStrokesCount] = useState(0)
   // Strokes whose sectionId currently doesn't resolve to a live DOM element.
   // These get rendered in a paper-anchored fallback overlay (no section to follow).
   // Updated by SectionAnchoredStrokes' onOrphansChange.
@@ -1700,6 +1716,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     if (canvasData === '') resetHistory()
   }, [canvasData, resetHistory])
 
+  // Every stroke id the canvas has held since it was last empty. A stroke id
+  // in here that is no longer on the canvas was erased locally; the merge in
+  // the load effect below must not bring it back.
+  const heldStrokeIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (canvasData === '') heldStrokeIdsRef.current = new Set()
+    for (const s of parsedStrokes) if (s.id) heldStrokeIdsRef.current.add(s.id)
+  }, [canvasData, parsedStrokes])
+  const lastMergedAnnotationDataRef = useRef<AnnotationData | null>(null)
+
   useEffect(() => {
     headingPositionsRef.current = headingPositions
   }, [headingPositions])
@@ -1772,9 +1798,44 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     // Don't reload if we're in the middle of clearing
     if (isClearingRef.current) return
 
-    // Don't reload if we already have canvas data (user is drawing)
-    // Exception: Allow reload if canvasData is empty (just switched targets or initial load)
-    if (canvasData) return
+    // Canvas already holds strokes (local IndexedDB copy shown first, or the
+    // user is drawing) and a newer value arrives (server copy merged by the
+    // sync engine, or our own write echoed back):
+    //  - no unsaved local edit (unsavedChangesRef): take the delivered value
+    //    as is. It is the store's current state, so strokes changed on the
+    //    server under the same id (moved, re-anchored by a port) show too.
+    //    Our own echoed write equals canvasData, a no-op.
+    //  - unsaved local edit: keep the canvas, append only strokes whose id it
+    //    never held (heldStrokeIdsRef), so local erasures stay erased. Server
+    //    changes to strokes the canvas already has are not shown; the next
+    //    save pushes the local version of those strokes.
+    // O(n) parse per new annotationData object, skipped when unchanged.
+    // Before this, a reload showed the local copy and ignored the server copy
+    // until a second reload.
+    if (canvasData) {
+      if (!annotationData?.canvasData || lastMergedAnnotationDataRef.current === annotationData) return
+      lastMergedAnnotationDataRef.current = annotationData
+      if (!unsavedChangesRef.current) {
+        if (annotationData.canvasData !== canvasData) {
+          setCanvasData(annotationData.canvasData)
+          resetHistory()
+          log('took delivered annotation state (no unsaved local edits)')
+        }
+        return
+      }
+      try {
+        const incoming: StrokeData[] = JSON.parse(annotationData.canvasData)
+        const held = heldStrokeIdsRef.current
+        const fresh = incoming.filter(s => s.id && !held.has(s.id))
+        if (fresh.length === 0) return
+        const local: StrokeData[] = JSON.parse(canvasData)
+        setCanvasData(JSON.stringify([...local, ...fresh]))
+        log('merged', fresh.length, 'stroke(s) delivered after the canvas loaded')
+      } catch {
+        // Ignore parse errors
+      }
+      return
+    }
 
     if (annotationData && annotationData.canvasData) {
       try {
@@ -1789,7 +1850,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         // Ignore parse errors
       }
     }
-  }, [annotationData, canvasData, targetingKey])
+  }, [annotationData, canvasData, targetingKey, resetHistory])
 
   // Helper function to recalculate heading positions and paper dimensions
   const recalculateHeadingPositions = useCallback(() => {
@@ -1954,13 +2015,12 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     return contentRef.current.querySelector('.markdown-content') ?? contentRef.current
   }, [])
 
-  // Helper: get block children (non-spacer direct children of markdown container)
+  // Helper: content blocks of the markdown container, in afterBlockIndex
+  // indexing (no spacers, no post-legacy sentinels; see spacer-anchor.ts).
   const getBlockChildren = useCallback(() => {
     const container = getMarkdownContainer()
     if (!container) return []
-    return Array.from(container.children).filter(
-      el => !el.hasAttribute('data-spacer-id') && !el.hasAttribute('data-spacer-end')
-    )
+    return blockChildren(container)
   }, [getMarkdownContainer])
 
   // Inject spacer DOM elements between block children of .markdown-content
@@ -2004,12 +2064,20 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       return
     }
 
-    // Sort spacers by afterBlockIndex descending so new insertions don't shift
-    // indices of later inserts. (Existing spacers stay where they are.)
-    const sorted = [...allSpacersToInject].sort((a, b) => b.afterBlockIndex - a.afterBlockIndex)
+    // Resolve every spacer's target block up front (spacer-anchor.ts: anchor
+    // fields for new spacers, afterBlockIndex for legacy ones). Spacer
+    // elements are excluded from `blocks`, so inserting one doesn't change the
+    // others' targets. Insert order: target index descending, ties by
+    // afterBlockIndex descending — for legacy spacers this is the same order
+    // as the old sort by afterBlockIndex, so spacers sharing a block stack
+    // exactly as before. (Existing spacers stay where they are.)
+    const blocks = blockChildren(container)
+    const sorted = allSpacersToInject
+      .map(spacer => ({ spacer, target: resolveSpacerBlockIndex(blocks, spacer) }))
+      .sort((a, b) => (b.target - a.target) || (b.spacer.afterBlockIndex - a.spacer.afterBlockIndex))
 
     let createdAnyNew = false
-    for (const spacer of sorted) {
+    for (const { spacer, target } of sorted) {
       const existingDiv = existingSpacers.get(spacer.id)
 
       if (existingDiv) {
@@ -2023,14 +2091,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         continue
       }
 
-      // New spacer — create + insert. Re-query block children excluding any
-      // spacer/sentinel elements so afterBlockIndex maps onto content blocks.
-      const currentChildren = Array.from(container.children).filter(
-        el => !el.hasAttribute('data-spacer-id') && !el.hasAttribute('data-spacer-end')
-      )
-      const clampedIndex = Math.min(spacer.afterBlockIndex, currentChildren.length - 1)
-      if (clampedIndex < 0) continue
-      const targetChild = currentChildren[clampedIndex]
+      // New spacer — create + insert after its resolved block.
+      if (target < 0) continue
+      const targetChild = blocks[target]
       if (!targetChild) continue
 
       const spacerDiv = document.createElement('div')
@@ -2091,12 +2154,18 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       afterBlockIndex,
       height: 80,
       pattern: spacerPattern,
+      // Stable placement for edited content (spacer-anchor.ts).
+      ...computeSpacerAnchor(getBlockChildren(), afterBlockIndex),
     }
     setLastCreatedSpacerId(id)
     pendingSpacerReassignmentRef.current = { id, height: 80 }
     const current = spacersData?.spacers || []
-    updateSpacersData({ spacers: [...current, newSpacer] })
-  }, [spacerPattern, spacersData, updateSpacersData])
+    // immediate (also on update/remove): useSyncedUserData (provider.tsx)
+    // queues the server sync from the IndexedDB record it reads right after
+    // save(); with the default 1 s save debounce that record doesn't exist yet
+    // for a page's first spacer, so the spacer never reached the server.
+    updateSpacersData({ spacers: [...current, newSpacer] }, { immediate: true })
+  }, [spacerPattern, spacersData, updateSpacersData, getBlockChildren])
 
   // Use ref to avoid stale closure — resize saves height, then pattern change
   // must read the latest spacersData (not the one captured before resize)
@@ -2107,7 +2176,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     const current = spacersDataRef.current?.spacers || []
     updateSpacersData({
       spacers: current.map(s => s.id === id ? { ...s, ...updates } : s)
-    })
+    }, { immediate: true })
   }, [updateSpacersData])
 
   const handleRemoveSpacer = useCallback((id: string) => {
@@ -2292,7 +2361,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
 
     const current = spacersData?.spacers || []
-    updateSpacersData({ spacers: current.filter(s => s.id !== id) })
+    updateSpacersData({ spacers: current.filter(s => s.id !== id) }, { immediate: true })
     // Exit spacer mode after a delete — same UX as pressing Esc. Without
     // this the user has to manually toggle off; the click that deleted is
     // also a clear "I'm done with this spacer" signal.
@@ -2356,8 +2425,21 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           }
         })
         if (changed) {
+          // Persist through the normal 2 s autosave debounce (same timer as
+          // handleCanvasUpdate). Until 2026-11-19 this only set state, so
+          // IndexedDB/server kept the old anchors until beforeunload; a killed
+          // tab brought the strokes back un-shifted under the spacer. Not an
+          // immediate save: the spacer's own immediate sync is usually in
+          // flight now, and sync-engine.ts sync() returns early while syncing
+          // without rescheduling, which left this item queued.
+          // performSave reads canvasDataRef.
+          const newData = JSON.stringify(next)
           resetHistory()
-          setCanvasData(JSON.stringify(next))
+          canvasDataRef.current = newData
+          setCanvasData(newData)
+          if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+          unsavedChangesRef.current = true
+          saveTimeoutRef.current = setTimeout(() => { void performSaveRef.current?.() }, 2000)
         }
       } catch { /* ignore */ }
     }
@@ -2483,6 +2565,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     if (isClearingRef.current) return
 
     if (!currentCanvasData || !currentPageVersion) return
+    unsavedChangesRef.current = false
 
     // If heading positions haven't been calculated yet, try to calculate them now
     // This can happen during fast refresh or when save is triggered before the 500ms delay
@@ -2591,8 +2674,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
-      // Perform immediate save on unmount
-      performSave()
+      // Perform immediate save on unmount, only if an edit is still unsaved
+      if (unsavedChangesRef.current) performSave()
     }
   }, [performSave])
 
@@ -2602,8 +2685,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
-      // Perform immediate save
-      performSave()
+      // Perform immediate save, only if an edit is still unsaved
+      if (unsavedChangesRef.current) performSave()
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
@@ -2704,6 +2787,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
 
     // Debounce save by 2 seconds
+    unsavedChangesRef.current = true
     saveTimeoutRef.current = setTimeout(() => {
       performSave()
     }, 2000)
@@ -2860,7 +2944,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       setCanvasData('')
       setHasAnnotations(false)
       setAnnotationVersionMismatch(false)
-      setOrphanedStrokesCount(0)
 
       // Clear user data
       await deleteAnnotationData()
@@ -2904,7 +2987,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         setCanvasData('')
         setHasAnnotations(false)
         setAnnotationVersionMismatch(false)
-        setOrphanedStrokesCount(0)
 
         // Clear canvas
         if (canvasRef.current) {
@@ -2943,33 +3025,52 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   }, [handleClearAll, setOnClearAnnotations])
 
 
-  // Handle removal of orphaned strokes
-  const handleRemoveOrphans = useCallback(() => {
-    if (!canvasData) return
-
-    try {
-      const strokes: StrokeData[] = JSON.parse(canvasData)
-      const filtered = strokes.filter(stroke => !stroke.sectionId.endsWith('-ORPHANED'))
-
-      const newData = JSON.stringify(filtered)
-      resetHistory()
-      setCanvasData(newData)
-      setOrphanedStrokesCount(0)
-
-      // Update canvas
-      if (canvasRef.current) {
-        // The canvas will reload with filtered data via initialData prop
-      }
-
-      // Trigger immediate save
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
-      performSave()
-    } catch {
-      // Ignore orphan removal errors
+  // Orphaned strokes banner. domOrphanedStrokes comes from the active layer's
+  // SectionAnchoredStrokes (sectionId resolves to no live element, e.g. the
+  // teacher removed or renamed that section). Strokes on spacers that are
+  // still in the spacer data are left out (only orphaned until the spacer is
+  // injected). The banner waits ORPHAN_BANNER_DELAY_MS so sections that mount
+  // late don't flash it; dismissing hides it until the set of orphans changes.
+  const bannerOrphans = useMemo(
+    () => reportableOrphans(domOrphanedStrokes, new Set(allSpacersToInject.map(s => s.id))),
+    [domOrphanedStrokes, allSpacersToInject],
+  )
+  const bannerOrphansKey = useMemo(() => bannerOrphans.map(s => s.id).sort().join(','), [bannerOrphans])
+  const [settledOrphansKey, setSettledOrphansKey] = useState('')
+  const [dismissedOrphansKey, setDismissedOrphansKey] = useState('')
+  useEffect(() => {
+    if (!bannerOrphansKey) {
+      setSettledOrphansKey('')
+      return
     }
-  }, [canvasData, performSave, resetHistory])
+    const t = setTimeout(() => setSettledOrphansKey(bannerOrphansKey), ORPHAN_BANNER_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [bannerOrphansKey])
+  const orphanedStrokesCount =
+    settledOrphansKey !== '' && settledOrphansKey === bannerOrphansKey && dismissedOrphansKey !== bannerOrphansKey
+      ? bannerOrphans.length
+      : 0
+
+  // "Keep here": anchor the orphans to the section they currently sit in,
+  // without moving them. "Delete": remove them. Both go through
+  // handleCanvasUpdate (undoable, normal debounced save).
+  const handleKeepOrphans = useCallback(() => {
+    const ids = new Set(bannerOrphans.map(s => s.id))
+    if (ids.size === 0) return
+    try {
+      const strokes = JSON.parse(canvasDataRef.current || '[]') as StrokeData[]
+      handleCanvasUpdate(JSON.stringify(reanchorStrokesInPlace(strokes, ids, headingPositionsRef.current)))
+    } catch { /* ignore parse errors */ }
+  }, [bannerOrphans, handleCanvasUpdate])
+
+  const handleRemoveOrphans = useCallback(() => {
+    const ids = new Set(bannerOrphans.map(s => s.id))
+    if (ids.size === 0) return
+    try {
+      const strokes = JSON.parse(canvasDataRef.current || '[]') as StrokeData[]
+      handleCanvasUpdate(JSON.stringify(strokes.filter(s => !ids.has(s.id))))
+    } catch { /* ignore parse errors */ }
+  }, [bannerOrphans, handleCanvasUpdate])
 
   const handlePenSelect = useCallback((id: string) => {
     setActivePenId(id)
@@ -3252,19 +3353,23 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       // ended. Compensate with a negative margin-bottom equal to the
       // "missing" visual space (= layout height × (1 − zoom)). The scroll
       // container's scrollable area then matches the visible paper bottom.
-      // Symmetrically for width via marginRight.
+      // Horizontally the shrunken page is centered with the CSS `translate`
+      // property (applied before `transform`, paint-only, no reflow). A
+      // negative marginRight was used before; it widened the auto-width
+      // <main> and pushed the mx-auto paper to the right edge.
       spacer?.remove()
       main.style.maxWidth = ''
       const dy = main.scrollHeight * (1 - zoomLevel)
-      const dx = main.scrollWidth * (1 - zoomLevel)
       main.style.marginBottom = `-${dy}px`
-      main.style.marginRight = `-${dx}px`
+      main.style.marginRight = ''
+      main.style.translate = `${(main.offsetWidth * (1 - zoomLevel)) / 2}px 0`
       return
     }
 
     // Reset the zoom-out compensation now that we're at >= 1×.
     main.style.marginBottom = ''
     main.style.marginRight = ''
+    main.style.translate = ''
 
     if (zoomLevel === 1) {
       spacer?.remove()
@@ -3317,16 +3422,25 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         const relativeX = focalX - containerRect.left
         const relativeY = focalY - containerRect.top
 
+        // WebKit stores scrollLeft/Top as integers. Reading them back each
+        // wheel event lost up to 1 px per event, so a 30-event burst drifted
+        // ~28 px towards the top-left. Reuse the fractional value written last
+        // time when the container still sits at it (within rounding).
+        const last = wheelScrollRef.current
+        const scrollLeft = last && Math.abs(container.scrollLeft - last.left) < 1 ? last.left : container.scrollLeft
+        const scrollTop = last && Math.abs(container.scrollTop - last.top) < 1 ? last.top : container.scrollTop
+
         // Find the content point under the focal point (in unscaled coordinates)
-        const contentX = (relativeX + container.scrollLeft) / oldZoom
-        const contentY = (relativeY + container.scrollTop) / oldZoom
+        const contentX = (relativeX + scrollLeft) / oldZoom
+        const contentY = (relativeY + scrollTop) / oldZoom
 
         // Calculate new scroll so the same content point stays under the focal point
-        const newScrollX = contentX * newZoom - relativeX
-        const newScrollY = contentY * newZoom - relativeY
+        const newScrollX = Math.max(0, contentX * newZoom - relativeX)
+        const newScrollY = Math.max(0, contentY * newZoom - relativeY)
 
-        container.scrollLeft = Math.max(0, newScrollX)
-        container.scrollTop = Math.max(0, newScrollY)
+        container.scrollLeft = newScrollX
+        container.scrollTop = newScrollY
+        wheelScrollRef.current = { left: newScrollX, top: newScrollY }
       }
 
       rafIdRef.current = null
@@ -3344,33 +3458,30 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
   }, [applyZoom, updateZoomSpacer])
 
-  // Custom pinch-zoom handling (native scroll handles single-finger pan)
-  /** Start (or re-base) a pinch at the fingers' current position. */
-  const setPinchOrigin = useCallback((container: HTMLElement, touch1: Touch, touch2: Touch) => {
-    const containerRect = container.getBoundingClientRect()
-    const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
-    const centerX = (touch1.clientX + touch2.clientX) / 2
-    const centerY = (touch1.clientY + touch2.clientY) / 2
-
-    // Convert pinch center to container-relative coordinates
-    const relativeX = centerX - containerRect.left
-    const relativeY = centerY - containerRect.top
-
-    // Calculate the content point under the initial pinch center (in unscaled coordinates)
-    // This point should stay under the fingers throughout the gesture
-    const contentX = (relativeX + container.scrollLeft) / zoomRef.current
-    const contentY = (relativeY + container.scrollTop) / zoomRef.current
-
-    initialPinchDistanceRef.current = distance
-    initialPinchCenterRef.current = { x: centerX, y: centerY }
-    initialContentPointRef.current = { x: contentX, y: contentY }
-    initialZoomRef.current = zoomRef.current
+  // Custom pinch-zoom handling (native scroll handles single-finger pan).
+  // Only finger touches count: an Apple Pencil touch (touchType 'stylus') plus
+  // a resting finger is writing, not a pinch (fingerPoints filters it out).
+  /** Start (or re-base) a pinch at the two fingers' current position. */
+  const setPinchOrigin = useCallback((fingers: TouchPoint[]) => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    if (!pinchOriginRef.current) {
+      // New pinch: dead zone only while a two-finger tap (undo) is being tracked.
+      pinchEngagedRef.current = tapRef.current === null
+    }
+    const r = container.getBoundingClientRect()
+    pinchOriginRef.current = pinchOrigin(
+      fingers[0], fingers[1],
+      { left: r.left, top: r.top },
+      { left: container.scrollLeft, top: container.scrollTop },
+      zoomRef.current,
+    )
   }, [])
 
   const handleTouchStart = useCallback((e: TouchEvent) => {
+    const fingers = fingerPoints(e.touches)
     // Multi-finger tap = undo/redo (stylus mode, on the paper).
     if (stylusModeActiveRef.current && !fingerDrawModeRef.current) {
-      const fingers = fingerPoints(e.touches)
       if (fingers.length >= 2) lastMultiTouchAtRef.current = Date.now()
       const onPaper = (e.target as Element | null)?.closest?.('#paper')
       if (tapRef.current || onPaper) tapRef.current = tapTouchStart(tapRef.current, fingers, Date.now())
@@ -3382,20 +3493,18 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       touchesRef.current.set(touch.identifier, { x: touch.clientX, y: touch.clientY })
     }
 
-    // Two touches - start pinch zoom and prevent browser zoom
-    if (e.touches.length === 2) {
+    // Two fingers - start pinch zoom and prevent browser zoom. A third finger
+    // pauses the pinch (moves are ignored) until one lifts; handleTouchEnd
+    // then re-bases on the remaining pair.
+    if (fingers.length === 2) {
       e.preventDefault() // Prevent browser zoom
-
-      const container = scrollContainerRef.current
-      if (!container) return
-
-      pinchEngagedRef.current = false
-      setPinchOrigin(container, e.touches[0], e.touches[1])
+      setPinchOrigin(fingers)
     }
   }, [setPinchOrigin])
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
-    tapTouchMove(tapRef.current, fingerPoints(e.touches))
+    const fingers = fingerPoints(e.touches)
+    tapTouchMove(tapRef.current, fingers)
 
     // Update touch positions
     for (let i = 0; i < e.touches.length; i++) {
@@ -3404,62 +3513,41 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
 
     // Handle pinch zoom (2 fingers) - single-finger is handled by native scroll
-    if (e.touches.length === 2 && initialPinchDistanceRef.current !== null && initialContentPointRef.current !== null) {
+    const origin = pinchOriginRef.current
+    if (fingers.length === 2 && origin) {
       e.preventDefault() // Prevent browser zoom during pinch
 
       const container = scrollContainerRef.current
       if (!container) return
 
-      const touch1 = e.touches[0]
-      const touch2 = e.touches[1]
-      const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
-      const currentCenterX = (touch1.clientX + touch2.clientX) / 2
-      const currentCenterY = (touch1.clientY + touch2.clientY) / 2
-
+      const [a, b] = fingers
       if (!pinchEngagedRef.current) {
-        const center = initialPinchCenterRef.current
-        const movedBy = Math.max(
-          Math.abs(currentDistance - initialPinchDistanceRef.current),
-          center ? Math.hypot(currentCenterX - center.x, currentCenterY - center.y) : 0,
-        )
-        if (movedBy <= TAP_MAX_MOVE) return
-        // Re-base at the current position: zooming starts from here, no jump.
+        if (!pinchLeftDeadZone(origin, a, b)) return
+        // Engage, computed from the original origin: the movement inside the
+        // dead zone is applied now (one step of ≤ ~TAP_MAX_MOVE px), not lost.
         pinchEngagedRef.current = true
-        setPinchOrigin(container, touch1, touch2)
-        return
       }
 
-      const containerRect = container.getBoundingClientRect()
-
-      // Calculate zoom factor relative to initial state
-      const zoomFactor = currentDistance / initialPinchDistanceRef.current
-      const newZoom = Math.max(0.5, Math.min(50, initialZoomRef.current * zoomFactor))
-
-      // Convert current pinch center to container-relative coordinates
-      const relativeX = currentCenterX - containerRect.left
-      const relativeY = currentCenterY - containerRect.top
-
-      // Calculate scroll position to keep the initial content point under the current pinch center
-      // Formula: contentPoint * newZoom - relativePosition = newScroll
-      const newScrollX = initialContentPointRef.current.x * newZoom - relativeX
-      const newScrollY = initialContentPointRef.current.y * newZoom - relativeY
+      const r = container.getBoundingClientRect()
+      const next = pinchStep(origin, a, b, { left: r.left, top: r.top })
 
       // Apply transform and scroll synchronously (no RAF) for smooth gesture handling
-      zoomRef.current = newZoom
-      renderedZoomRef.current = newZoom
+      zoomRef.current = next.zoom
+      renderedZoomRef.current = next.zoom
       if (mainRef.current) {
-        mainRef.current.style.transform = `scale(${newZoom})`
+        mainRef.current.style.transform = `scale(${next.zoom})`
       }
-      updateZoomSpacer(newZoom)
-      container.scrollLeft = Math.max(0, newScrollX)
-      container.scrollTop = Math.max(0, newScrollY)
+      updateZoomSpacer(next.zoom)
+      container.scrollLeft = Math.max(0, next.scrollLeft)
+      container.scrollTop = Math.max(0, next.scrollTop)
     }
-  }, [updateZoomSpacer, setPinchOrigin])
+  }, [updateZoomSpacer])
 
   const handleTouchEnd = useCallback((e: TouchEvent) => {
+    const fingers = fingerPoints(e.touches)
     if (tapRef.current) {
       if (e.type === 'touchcancel') tapRef.current.moved = true
-      const { gesture, action } = tapTouchEnd(tapRef.current, fingerPoints(e.touches).length, Date.now(), lastPenContactRef.current)
+      const { gesture, action } = tapTouchEnd(tapRef.current, fingers.length, Date.now(), lastPenContactRef.current)
       tapRef.current = gesture
       if (action) applyHistoryRef.current?.(action)
     }
@@ -3470,22 +3558,30 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       touchesRef.current.delete(touch.identifier)
     }
 
-    // Reset pinch state when less than 2 touches remain
-    if (e.touches.length < 2) {
+    if (fingers.length === 2) {
+      // 3 → 2 fingers (or a finger of the pair replaced): re-base on the
+      // remaining pair, otherwise the next move compares the new pair's
+      // distance/midpoint with the old pair's and the page jumps.
+      setPinchOrigin(fingers)
+    } else if (fingers.length < 2) {
       // Update display zoom state when pinch gesture ends
-      if (initialPinchDistanceRef.current !== null) {
+      if (pinchOriginRef.current !== null) {
         setZoom(zoomRef.current)
       }
-      initialPinchDistanceRef.current = null
+      pinchOriginRef.current = null
       pinchEngagedRef.current = false
-      initialPinchCenterRef.current = null
-      initialContentPointRef.current = null
     }
-  }, [])
+  }, [setPinchOrigin])
 
   // Handle trackpad pinch zoom (Ctrl+wheel) and keyboard Ctrl+scroll
   // Trackpad pinch sends wheel events with ctrlKey=true WITHOUT a keydown event
-  // So we must always listen for wheel events (non-passive) to intercept them
+  // So we must always listen for wheel events (non-passive) to intercept them.
+  // Plugin iframes forward their pinch as synthetic ctrl+wheel events too
+  // (plugin-container.tsx). The transform is applied per rAF (applyZoom); the
+  // `zoom` state is committed once, WHEEL_ZOOM_COMMIT_MS after the last event,
+  // so the burst does not re-render this layer per event. Stroke geometry does
+  // not depend on that state being current (section-anchored-strokes.tsx
+  // measures the scale from the DOM, d88145ec).
   const handleZoomWheel = useCallback((e: WheelEvent) => {
     // Only handle zoom when Ctrl/Cmd is pressed (includes trackpad pinch)
     if (!e.ctrlKey && !e.metaKey) return
@@ -3496,13 +3592,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     // Normalize: scroll wheels send large deltaY (~100px), trackpads send small values
     // Use multiplicative scaling for consistent feel at any zoom level
     const factor = Math.pow(1.002, -e.deltaY)
-    const newZoom = Math.max(0.5, Math.min(10, zoomRef.current * factor))
+    const newZoom = clampZoom(zoomRef.current * factor)
 
     // Apply zoom with focal point at cursor position
     applyZoom(newZoom, e.clientX, e.clientY)
 
-    // Update display state for child components
-    setZoom(newZoom)
+    if (wheelZoomCommitTimerRef.current !== null) clearTimeout(wheelZoomCommitTimerRef.current)
+    wheelZoomCommitTimerRef.current = setTimeout(() => {
+      wheelZoomCommitTimerRef.current = null
+      setZoom(zoomRef.current)
+    }, WHEEL_ZOOM_COMMIT_MS)
   }, [applyZoom])
 
   // Attach wheel handler to capture trackpad pinch zoom
@@ -3512,6 +3611,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
     return () => {
       document.removeEventListener('wheel', handleZoomWheel)
+      if (wheelZoomCommitTimerRef.current !== null) clearTimeout(wheelZoomCommitTimerRef.current)
     }
   }, [handleZoomWheel])
 
@@ -3544,6 +3644,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       if (mainRef.current) {
         mainRef.current.style.marginBottom = ''
         mainRef.current.style.marginRight = ''
+        mainRef.current.style.translate = ''
         mainRef.current.style.maxWidth = ''
       }
     }
@@ -3551,6 +3652,47 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+
+  // Narrow viewports (< 1280px): layout.tsx shrinks #paper with
+  // `transform: scale(var(--paper-scale))`, which leaves its layout box at the
+  // full unscaled height — (1 − scale) × height of blank scroll below the page
+  // (3474 px on an 820px iPad). globals.css adds `--paper-scale-margin` to the
+  // paper's margin-bottom; this keeps it at −(1 − scale) × paper height. The
+  // paper's height changes with content (images, solutions, editors), so a
+  // ResizeObserver re-syncs it; on window resize it waits a frame because
+  // layout.tsx's own resize listener (registered after this one) sets the new
+  // --paper-scale. The zoom spacer / zoom-out margins are re-synced after it,
+  // since they are sized from main.scrollHeight.
+  useEffect(() => {
+    const main = mainRef.current
+    const paper = main?.querySelector<HTMLElement>('#paper')
+    if (!main || !paper) return
+    const root = document.documentElement
+    const sync = () => {
+      const scale = parseFloat(getComputedStyle(root).getPropertyValue('--paper-scale')) || 1
+      if (scale < 1) root.style.setProperty('--paper-scale-margin', `${-(1 - scale) * paper.offsetHeight}px`)
+      else root.style.removeProperty('--paper-scale-margin')
+      updateZoomSpacer(renderedZoomRef.current)
+    }
+    let raf: number | null = null
+    const onResize = () => {
+      if (raf !== null) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => { raf = null; sync() })
+    }
+    // Fires once right after observe() too (after layout.tsx's mount effect
+    // has set --paper-scale), which does the initial sync.
+    const ro = new ResizeObserver(sync)
+    ro.observe(paper)
+    window.addEventListener('resize', onResize)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', onResize)
+      if (raf !== null) cancelAnimationFrame(raf)
+      root.style.removeProperty('--paper-scale-margin')
+    }
+    // updateZoomSpacer is referentially stable (useCallback with [] deps).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Middle-drag moves the paper via the scroll container.
   useDragPan(scrollContainerRef)
@@ -3595,19 +3737,33 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         document.body
       )}
 
-      {/* Orphaned strokes warning banner */}
+      {/* Orphaned strokes banner (see bannerOrphans) */}
       {orphanedStrokesCount > 0 && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-600 rounded-lg shadow-lg px-4 py-2 max-w-md">
+        <div role="status" data-testid="orphan-strokes-banner" className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-600 rounded-lg shadow-lg px-4 py-2 max-w-md">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0" />
             <span className="text-sm text-yellow-800 dark:text-yellow-200">
-              {orphanedStrokesCount} annotation{orphanedStrokesCount > 1 ? 's are' : ' is'} orphaned (original section{orphanedStrokesCount > 1 ? 's' : ''} deleted)
+              {orphanedStrokesCount === 1 ? '1 stroke no longer matches' : `${orphanedStrokesCount} strokes no longer match`} the page content (the part {orphanedStrokesCount === 1 ? 'it was' : 'they were'} drawn on changed). {orphanedStrokesCount === 1 ? 'It is' : 'They are'} shown where {orphanedStrokesCount === 1 ? 'it was' : 'they were'} drawn.
             </span>
             <button
-              onClick={handleRemoveOrphans}
+              onClick={handleKeepOrphans}
               className="ml-2 px-2 py-1 bg-yellow-200 dark:bg-yellow-800 hover:bg-yellow-300 dark:hover:bg-yellow-700 rounded text-xs text-yellow-900 dark:text-yellow-100 whitespace-nowrap"
+              title="Attach the strokes to the content they now sit next to"
             >
-              Remove
+              Keep here
+            </button>
+            <button
+              onClick={handleRemoveOrphans}
+              className="px-2 py-1 bg-yellow-200 dark:bg-yellow-800 hover:bg-yellow-300 dark:hover:bg-yellow-700 rounded text-xs text-yellow-900 dark:text-yellow-100 whitespace-nowrap"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => setDismissedOrphansKey(bannerOrphansKey)}
+              className="px-1 text-sm leading-none text-yellow-800 dark:text-yellow-200"
+              aria-label="Dismiss"
+            >
+              ×
             </button>
           </div>
         </div>
@@ -3643,7 +3799,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           {/* Fallback layer: strokes whose sectionId doesn't resolve to a live DOM
               element (deleted section, or section unmounted mid-render). Rendered at
               their stored absolute paper coordinates, no transform — they sit where
-              they were drawn until the user removes them via the orphans banner. */}
+              they were drawn until the user keeps or deletes them via the orphans banner. */}
           {domOrphanedStrokes.length > 0 && (
             <AnnotationSvgLayer
               strokes={domOrphanedStrokes}

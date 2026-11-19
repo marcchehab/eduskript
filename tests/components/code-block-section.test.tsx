@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { compileMarkdown } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createEmptySkriptFiles } from '@/lib/skript-files'
+import { findSectionElement } from '@/lib/annotations/reposition-strokes'
 
 vi.mock('@/lib/userdata', () => ({
   useSyncedUserData: () => ({ data: null, updateData: vi.fn(), isLoading: false }),
@@ -25,15 +26,18 @@ async function renderMd(md: string) {
 describe('code block annotation section', () => {
   it('language code block keeps its data-section-id in the DOM', async () => {
     const { container } = await renderMd('Intro\n\n```python\nx = 2\n```')
-    const section = container.querySelector('[data-section-id="pre-0"]')
+    const section = container.querySelector('[data-section-id="pre@top#1"]')
     expect(section).not.toBeNull()
     expect(section!.querySelector('.code-block')).not.toBeNull()
+    // Legacy id (strokes stored before 2026-11-19) resolves to the same element.
+    expect(findSectionElement('pre-0', container)).toBe(section)
   })
 
   it('plain code block keeps its data-section-id on the <pre>', async () => {
     const { container } = await renderMd('Intro\n\n```\nplain\n```')
-    const pre = container.querySelector('pre[data-section-id="pre-0"]')
+    const pre = container.querySelector('pre[data-section-id="pre@top#1"]')
     expect(pre).not.toBeNull()
+    expect(findSectionElement('pre-0', container)).toBe(pre)
   })
 
   it('colour tints survive sanitizing and become CodeMirror line classes', async () => {

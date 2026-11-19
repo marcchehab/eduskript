@@ -33,6 +33,9 @@ interface PendingSave<T = any> {
 /**
  * Singleton service for user data management
  */
+/** sourceId passed to subscribers for writes made by the sync engine. */
+export const REMOTE_CHANGE_SOURCE = 'sync-engine'
+
 export class UserDataService {
   private static instance: UserDataService
   private currentUserId: string = 'anonymous'
@@ -263,6 +266,27 @@ export class UserDataService {
     return () => {
       this.listeners.get(cacheKey)?.delete(entry)
     }
+  }
+
+  /**
+   * Tell subscribers of one record that the sync engine replaced it with
+   * server (or merged) state — the initial manifest pass and conflict
+   * resolution write IndexedDB directly, bypassing save(). Without this,
+   * hooks that already read the store keep their stale state (an empty one in
+   * a fresh browser) and their next write replaces the server row.
+   * Listeners see sourceId === REMOTE_CHANGE_SOURCE.
+   */
+  public notifyRemoteChange(
+    userId: string,
+    siteId: string,
+    pageId: string,
+    componentId: string,
+    targetType: string,
+    targetId: string,
+    data: unknown,
+  ): void {
+    const tt = (targetType || null) as 'class' | 'student' | 'page' | null
+    this.notifyListeners(this.getCacheKey(pageId, componentId, tt, targetId || null, userId, siteId), data, REMOTE_CHANGE_SOURCE)
   }
 
   /**

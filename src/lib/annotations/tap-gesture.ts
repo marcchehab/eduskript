@@ -91,3 +91,78 @@ export function stepHistory(h: StrokeHistory, action: TapAction, current: string
   to.push(current)
   return data
 }
+
+// ── Pinch zoom (annotation-layer.tsx handleTouch*) ──────────────────────────
+//
+// Kept here because the pinch shares TAP_MAX_MOVE with the tap above: while a
+// two-finger tap is still possible (stylus mode, on the paper) the pinch does
+// not zoom until the fingers moved more than TAP_MAX_MOVE. Once it engages it
+// is computed from the ORIGINAL origin, so the movement inside that dead zone
+// is caught up in one step (a jump of at most ~TAP_MAX_MOVE px) instead of
+// being lost.
+
+/** Zoom limits for every zoom input (touch pinch, Ctrl/⌘+wheel, plugin-forwarded pinch). */
+export const ZOOM_MIN = 0.5
+export const ZOOM_MAX = 10
+
+export function clampZoom(z: number): number {
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z))
+}
+
+/**
+ * A pinch's reference state, captured when it starts and whenever the pair
+ * of fingers changes (2 → 3 → 2 fingers, a finger replaced).
+ * `content`: the unscaled content point under `center`.
+ */
+export interface PinchOrigin {
+  distance: number
+  center: { x: number; y: number }
+  content: { x: number; y: number }
+  zoom: number
+}
+
+/**
+ * Origin for fingers `a`, `b` (client coords). `rel` = container's client
+ * left/top; `scroll` = container scroll position; `zoom` = current zoom.
+ */
+export function pinchOrigin(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  rel: { left: number; top: number },
+  scroll: { left: number; top: number },
+  zoom: number,
+): PinchOrigin {
+  const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+  return {
+    distance: Math.hypot(b.x - a.x, b.y - a.y),
+    center,
+    content: { x: (center.x - rel.left + scroll.left) / zoom, y: (center.y - rel.top + scroll.top) / zoom },
+    zoom,
+  }
+}
+
+/** True once the fingers spread/pinched or panned more than TAP_MAX_MOVE since `o`. */
+export function pinchLeftDeadZone(o: PinchOrigin, a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+  const d = Math.hypot(b.x - a.x, b.y - a.y)
+  const cx = (a.x + b.x) / 2
+  const cy = (a.y + b.y) / 2
+  return Math.max(Math.abs(d - o.distance), Math.hypot(cx - o.center.x, cy - o.center.y)) > TAP_MAX_MOVE
+}
+
+/**
+ * Zoom and scroll position for fingers `a`, `b`: zoom = origin zoom × finger
+ * distance ratio (clamped), scroll keeps `o.content` under the current finger
+ * midpoint. Scroll is not clamped here (the caller clamps at 0; the browser
+ * clamps at the far end).
+ */
+export function pinchStep(
+  o: PinchOrigin,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  rel: { left: number; top: number },
+): { zoom: number; scrollLeft: number; scrollTop: number } {
+  const zoom = clampZoom(o.zoom * (Math.hypot(b.x - a.x, b.y - a.y) / o.distance))
+  const cx = (a.x + b.x) / 2 - rel.left
+  const cy = (a.y + b.y) / 2 - rel.top
+  return { zoom, scrollLeft: o.content.x * zoom - cx, scrollTop: o.content.y * zoom - cy }
+}

@@ -17,8 +17,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { syncEngine, type SyncStatus } from './sync-engine'
-import { userDataService } from './userDataService'
-import { recordDeletions, removedCollectionIds } from './adapters'
+import { userDataService, REMOTE_CHANGE_SOURCE } from './userDataService'
+import { recordDeletions, removedCollectionIds, getAdapter } from './adapters'
 import { runOneTimeMigrationV2ToV3, migrateAnonymousIfNeeded, sweepLegacyTable } from './migrations'
 import { createLogger } from '@/lib/logger'
 import { useCurrentSite } from '@/contexts/current-site-context'
@@ -251,6 +251,22 @@ export function useSyncedUserData<T>(
   // (callers often pass inline objects which would cause infinite loops)
   const initialDataRef = React.useRef(initialData)
 
+  // Stale-writer guard (adapters with itemIds/addItems — annotations only).
+  // A consumer may keep writing from its own state after the sync engine
+  // replaced the record (annotation-layer ignores new `data` once it holds
+  // strokes). `seenIdsRef`: item ids the consumer is known to hold — those it
+  // got from the initial load and those it wrote. `deliveredRef`: the last
+  // value handed out that the consumer may not have applied (remote change or
+  // a guarded write). See guardStaleWrite in updateData.
+  const seenIdsRef = React.useRef<Set<string>>(new Set())
+  const deliveredRef = React.useRef<T | null>(null)
+
+  // True once this hook wrote since it (re)loaded. A remote delivery then
+  // merges into the local state instead of replacing it (see the subscriber).
+  const localEditsRef = React.useRef(false)
+  // updateData is defined below the load effect; the subscriber calls it via this ref.
+  const updateDataRef = React.useRef<((d: T) => Promise<void>) | null>(null)
+
   // Extract targeting from options
   const { targetType, targetId, localOnly } = options
 
@@ -264,10 +280,20 @@ export function useSyncedUserData<T>(
     if (!isDbReady) return
 
     let mounted = true
+    // Set once the sync engine delivered a newer record (below): the local
+    // read in loadData may predate it and must not override it.
+    let gotRemote = false
+    const itemIdsOf = getAdapter<T>(componentId)?.itemIds
+    const markLoaded = (d: T | null) => {
+      seenIdsRef.current = new Set(d && itemIdsOf ? itemIdsOf(d) : [])
+    }
 
     // IMPORTANT: Reset data to initial immediately when targeting changes
     // This ensures we don't show stale data from a previous target
     setData(initialDataRef.current)
+    markLoaded(initialDataRef.current)
+    deliveredRef.current = null
+    localEditsRef.current = false
 
     // Callers (notably sticky-notes-layer / annotation-layer) pass pageId=''
     // as a sentinel for "this layer is dormant — don't load anything". Without
@@ -279,12 +305,43 @@ export function useSyncedUserData<T>(
       return () => { mounted = false }
     }
 
+    // The sync engine writes server state into IndexedDB itself (initial
+    // manifest pass, conflict resolution). In a fresh browser that happens
+    // after this hook read an empty store; without this subscription the
+    // fetched data stayed invisible until a reload, and the next write
+    // replaced the server row with only the new edits.
+    const unsubscribe = userDataService.subscribe<T>(pageId, componentId, (remoteData, sourceId) => {
+      if (!mounted || sourceId !== REMOTE_CHANGE_SOURCE) return
+      gotRemote = true
+      // Local edits made before the server state arrived (e.g. a sticky note
+      // placed in the first second of a fresh browser) may not be in
+      // IndexedDB yet (debounced save), so the delivered record lacks them.
+      // Replacing the state would drop them from the UI, and the pending
+      // debounced save would then push them without the server items. Merge
+      // and save the merged value instead (replaces the pending save).
+      // Adapters with itemIds (annotations) are excluded: their stale-writer
+      // guard (guardStaleWrite) relies on the delivered value staying "unseen"
+      // until the consumer applies it.
+      const adapter = getAdapter<T>(componentId)
+      if (localEditsRef.current && adapter?.merge && !adapter.itemIds && dataRef.current && remoteData) {
+        const merged = adapter.merge(dataRef.current, remoteData)
+        setIsLoading(false)
+        void updateDataRef.current?.(merged).catch(() => { /* logged in updateData */ })
+        return
+      }
+      deliveredRef.current = remoteData
+      setData(remoteData)
+      setIsLoading(false)
+    }, { targetType, targetId, siteId })
+
     const loadData = async () => {
       try {
         setIsLoading(true)
 
         // Always try to load from local IndexedDB first (includes targeting in key)
         const localRecord = await userDataService.get<T>(pageId, componentId, { targetType, targetId, siteId })
+        if (gotRemote) return
+        if (localRecord) markLoaded(localRecord.data)
 
         // For broadcast mode (class/student/page), also check server and compare versions
         // This ensures we get the newest data regardless of which device saved it
@@ -304,6 +361,7 @@ export function useSyncedUserData<T>(
                 if (serverData.data && serverVersion >= localVersion) {
                   // Server has same or newer version - use server data
                   setData(serverData.data as T)
+                  markLoaded(serverData.data as T)
                   setIsSynced(true)
                   // Update local cache with server data if server is newer
                   if (serverVersion > localVersion) {
@@ -371,8 +429,54 @@ export function useSyncedUserData<T>(
 
     return () => {
       mounted = false
+      unsubscribe()
     }
   }, [pageId, componentId, targetType, targetId, isBroadcastMode, isDbReady, siteId]) // Re-run when targeting changes or DB becomes ready
+
+  /**
+   * Keep items of the stored record that this consumer never saw (see
+   * seenIdsRef). Without it, a consumer that drew before the server state
+   * arrived — or ignored the delivered state — overwrote the server row with
+   * only its own items. Rules:
+   *  - A write containing any not-yet-seen id of the delivered value means the
+   *    consumer applied it: all of that value's ids count as seen.
+   *  - Stored items neither seen nor in the write are appended to the write;
+   *    seen items missing from the write are real deletions (eraser).
+   *  - An empty write (clear all / everything erased) is taken as is, even if
+   *    the store holds unseen items: clear all must clear.
+   * Known gap: a consumer that applied a delivered value and then deleted
+   * every one of its new items in one write gets them back once.
+   * Cost: one IndexedDB read per write, only for adapters with itemIds.
+   */
+  const guardStaleWrite = useCallback(async (newData: T): Promise<T> => {
+    const adapter = getAdapter<T>(componentId)
+    if (!adapter?.itemIds || !adapter.addItems || !pageId) return newData
+    const nextIds = adapter.itemIds(newData)
+    const seen = seenIdsRef.current
+    const delivered = deliveredRef.current
+    if (delivered) {
+      const unseen = adapter.itemIds(delivered).filter(id => !seen.has(id))
+      if (unseen.some(id => nextIds.includes(id))) {
+        unseen.forEach(id => seen.add(id))
+        deliveredRef.current = null
+      }
+    }
+    let result = newData
+    if (nextIds.length > 0) {
+      const stored = await userDataService.get<T>(pageId, componentId, { targetType, targetId, siteId })
+      if (stored?.data) {
+        const next = new Set(nextIds)
+        const missing = new Set(adapter.itemIds(stored.data).filter(id => !seen.has(id) && !next.has(id)))
+        if (missing.size > 0) {
+          result = adapter.addItems(newData, stored.data, missing)
+          deliveredRef.current = result
+          log('stale write: kept', missing.size, 'stored item(s) the writer never saw', { pageId, componentId })
+        }
+      }
+    }
+    nextIds.forEach(id => seen.add(id))
+    return result
+  }, [componentId, pageId, targetType, targetId, siteId])
 
   const updateData = useCallback(
     async (newData: T, updateOptions: UpdateDataOptions = {}) => {
@@ -381,7 +485,9 @@ export function useSyncedUserData<T>(
       if (updateOptions.targetTypeOverride === undefined) {
         const previous = dataRef.current
         newData = recordDeletions(componentId, previous, newData, removedCollectionIds(componentId, previous, newData))
+        newData = await guardStaleWrite(newData)
         dataRef.current = newData
+        localEditsRef.current = true
       }
 
       // Use overrides if provided, otherwise use hook's targeting
@@ -432,20 +538,23 @@ export function useSyncedUserData<T>(
             targetType: effectiveTargetType,
             targetId: effectiveTargetId
           })
-          if (record) {
-            syncEngine.queueSync(
-              componentId, // adapter
-              pageId, // itemId
-              JSON.stringify(newData),
-              record.version,
-              {
-                siteId: record.siteId, // '' / legacy → not queued (stays local)
-                immediate: shouldSyncImmediately, // Immediate in broadcast mode
-                targetType: effectiveTargetType ?? null,
-                targetId: effectiveTargetId ?? null,
-              }
-            )
-          }
+          // No record yet = first save of this item: the IndexedDB write
+          // above is debounced and has not run. Queue it anyway (version 0,
+          // the hook's site), otherwise it reached the server only on the next
+          // edit or the next page load's unsynced-items pass.
+          syncEngine.queueSync(
+            componentId, // adapter
+            pageId, // itemId
+            JSON.stringify(newData),
+            record?.version ?? 0,
+            {
+              // '' / legacy → not queued (stays local)
+              siteId: record ? record.siteId : (siteId === undefined ? userDataService.getCurrentSite() : siteId),
+              immediate: shouldSyncImmediately, // Immediate in broadcast mode
+              targetType: effectiveTargetType ?? null,
+              targetId: effectiveTargetId ?? null,
+            }
+          )
         }
 
         if (updateOptions.targetTypeOverride === undefined) {
@@ -457,8 +566,10 @@ export function useSyncedUserData<T>(
       }
     },
     // Note: isBroadcastMode is derived from targetType && targetId, so not needed in deps
-    [pageId, componentId, isAuthenticated, targetType, targetId, localOnly, siteId]
+    [pageId, componentId, isAuthenticated, targetType, targetId, localOnly, siteId, guardStaleWrite]
   )
+
+  useEffect(() => { updateDataRef.current = updateData }, [updateData])
 
   return {
     data,

@@ -28,6 +28,16 @@ export interface DataAdapter<T> {
    * deletion tracking — see `deletedIds` and `recordDeletions`.
    */
   collectionKey?: string
+  /**
+   * Ids of the items in a value, and `addItems` to copy items of one value
+   * into another. Together they enable the stale-writer guard in
+   * useSyncedUserData (provider.tsx): items in the stored record that the
+   * writing component never saw are kept instead of overwritten. Only
+   * annotations implement them.
+   */
+  itemIds?: (data: T) => string[]
+  /** `next` plus the items of `from` whose ids are in `ids`. */
+  addItems?: (next: T, from: T, ids: Set<string>) => T
 }
 
 /**
@@ -174,6 +184,37 @@ export const codeAdapter: DataAdapter<CodeEditorData> = {
   },
 }
 
+type StrokeLike = { id?: string }
+
+/** Strokes in `canvasData` ('' / malformed → none). */
+function parseCanvasStrokes(canvasData: string | undefined): StrokeLike[] {
+  if (!canvasData) return []
+  try {
+    const parsed = JSON.parse(canvasData)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/** Stroke identity: its id; the full JSON for (unexpected) id-less strokes. */
+function strokeKey(stroke: StrokeLike): string {
+  return typeof stroke.id === 'string' ? stroke.id : JSON.stringify(stroke)
+}
+
+/** Append the strokes of `from` whose keys pass `take` to `next`'s strokes. */
+function appendStrokes(next: AnnotationData, from: AnnotationData, take: (key: string) => boolean): AnnotationData {
+  const added = parseCanvasStrokes(from.canvasData).filter(s => take(strokeKey(s)))
+  if (added.length === 0) return next
+  return {
+    ...next,
+    canvasData: JSON.stringify([...parseCanvasStrokes(next.canvasData), ...added]),
+    headingOffsets: { ...from.headingOffsets, ...next.headingOffsets },
+    pageVersion: next.pageVersion || from.pageVersion,
+    paddingLeft: next.paddingLeft ?? from.paddingLeft,
+  }
+}
+
 /**
  * Annotations data adapter
  * Handles canvas drawings (pen and highlighter strokes)
@@ -185,18 +226,25 @@ export const annotationsAdapter: DataAdapter<AnnotationData> = {
 
   deserialize: (raw) => JSON.parse(raw) as AnnotationData,
 
-  // Additive merge - keep strokes from both
+  // Union of strokes by id: local strokes in their order, then remote-only
+  // ones. Losing strokes is worse than the known downside: there is no
+  // deletion record for strokes, so a stroke erased on one side but still on
+  // the other comes back after a merge. Each stroke keeps its own
+  // sectionId/sectionOffsetY, so strokes from both sides stay anchored.
   merge: (local, remote) => {
-    // For annotations, we merge canvas data if possible
-    // Since canvasData is a JSON string of strokes, we'd need to parse and dedupe
-    // For now, prefer local (user's current device work)
+    const localKeys = new Set(parseCanvasStrokes(local.canvasData).map(strokeKey))
+    const merged = appendStrokes(local, remote, key => !localKeys.has(key))
     return {
-      canvasData: local.canvasData,
+      canvasData: merged.canvasData,
       headingOffsets: { ...remote.headingOffsets, ...local.headingOffsets },
-      pageVersion: local.pageVersion,
+      pageVersion: local.pageVersion || remote.pageVersion,
       paddingLeft: local.paddingLeft ?? remote.paddingLeft,
     }
   },
+
+  itemIds: (data) => parseCanvasStrokes(data?.canvasData).map(strokeKey),
+
+  addItems: (next, from, ids) => appendStrokes(next, from, key => ids.has(key)),
 
   validate: (data) => {
     return (

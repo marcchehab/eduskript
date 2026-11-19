@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
+  determineSectionFromY,
+  findSectionElement,
   liveSectionYShift,
+  measureSectionOffsetY,
   measureHeadingPositions,
   repositionCanvasDataToLive,
   type HeadingPosition,
@@ -147,5 +150,84 @@ describe('measureHeadingPositions', () => {
       ['editor-0', 50],
       ['editor-0-end', 250],
     ])
+  })
+})
+
+describe('legacy section ids (pre-2026-11-19 strokes)', () => {
+  const rect = (div: Element, top: number, bottom: number) =>
+    vi.spyOn(div, 'getBoundingClientRect').mockReturnValue({
+      top, bottom, left: 0, right: 0, x: 0, y: top, width: 0, height: bottom - top,
+      toJSON: () => ({}),
+    } as DOMRect)
+
+  // As heading-section-ids.ts emits it: current ids on elements, the
+  // legacy → current map on paper-top.
+  const page = () => {
+    const root = document.createElement('div')
+    const top = document.createElement('div')
+    top.setAttribute('data-section-id', 'paper-top')
+    top.setAttribute('data-legacy-section-ids', JSON.stringify({
+      'h2-2-addieren': 'h2-@addieren',
+      'callout-3': 'callout@h2-@addieren#1',
+      'callout-3-end': 'callout@h2-@addieren#1-end',
+    }))
+    const h2 = document.createElement('h2')
+    h2.setAttribute('data-section-id', 'h2-@addieren')
+    const callout = document.createElement('blockquote')
+    callout.setAttribute('data-section-id', 'callout@h2-@addieren#1')
+    callout.setAttribute('data-dynamic-height', 'true')
+    const end = document.createElement('div')
+    end.setAttribute('data-section-id', 'callout@h2-@addieren#1-end')
+    rect(top, 0, 0)
+    rect(h2, 100, 140)
+    rect(callout, 200, 380)
+    rect(end, 400, 400)
+    root.append(top, h2, callout, end)
+    return { root, h2, callout, end }
+  }
+
+  it('findSectionElement resolves current and legacy ids to the same element', () => {
+    const { root, h2, callout, end } = page()
+    expect(findSectionElement('h2-@addieren', root)).toBe(h2)
+    expect(findSectionElement('h2-2-addieren', root)).toBe(h2)
+    expect(findSectionElement('callout-3', root)).toBe(callout)
+    expect(findSectionElement('callout-3-end', root)).toBe(end)
+    expect(findSectionElement('callout-4', root)).toBeNull()
+  })
+
+  it('measureHeadingPositions adds legacy alias entries at the same offset', () => {
+    const { root } = page()
+    const positions = measureHeadingPositions(root, 0, 1)
+    expect(positions.find(p => p.sectionId === 'callout-3')).toEqual({
+      sectionId: 'callout-3', offsetY: 200, headingText: '', legacy: true,
+    })
+    expect(positions.find(p => p.sectionId === 'callout-3-end')?.offsetY).toBe(400)
+    // A legacy stroke on unchanged content: no shift (renders as before).
+    expect(liveSectionYShift('callout-3', 200, positions)).toBe(0)
+    expect(liveSectionYShift('h2-2-addieren', 100, positions)).toBe(0)
+  })
+
+  it('determineSectionFromY never returns a legacy alias', () => {
+    const { root } = page()
+    const positions = measureHeadingPositions(root, 0, 1)
+    expect(determineSectionFromY(250, positions)).toBe('callout@h2-@addieren#1')
+    expect(determineSectionFromY(120, positions)).toBe('h2-@addieren')
+    expect(determineSectionFromY(500, positions)).toBe('callout@h2-@addieren#1-end')
+  })
+
+  it('measureSectionOffsetY measures a legacy id at its current element', () => {
+    const { root } = page()
+    const paper = document.createElement('div')
+    paper.id = 'paper'
+    Object.defineProperty(paper, 'offsetWidth', { value: 800 })
+    vi.spyOn(paper, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 0, left: 0, right: 800, x: 0, y: 0, width: 800, height: 0, toJSON: () => ({}) } as DOMRect)
+    paper.append(root)
+    document.body.append(paper)
+    try {
+      expect(measureSectionOffsetY('callout-3', paper)).toBe(200)
+      expect(measureSectionOffsetY('callout@h2-@addieren#1', paper)).toBe(200)
+    } finally {
+      paper.remove()
+    }
   })
 })

@@ -97,6 +97,13 @@ export class SyncEngine {
   private siteId: string | null = null
   // Sites whose manifest was reconciled in this session (per user).
   private reconciledSites: Set<string> = new Set()
+  // Sites whose manifest pass (manifest + bulk-fetch merge) is still running.
+  // sync() holds back queued items of these sites: until the server state is
+  // merged into IndexedDB, a local write does not contain it, and pushing it
+  // would replace the server row (the server only rejects a STRICTLY older
+  // version, see src/app/api/user-data/sync/route.ts). Once the pass is done,
+  // initialSync re-queues the merged record and sync() runs again.
+  private reconcilingSites: Set<string> = new Set()
   private syncQueue: Map<string, SyncItem> = new Map()
   private syncTimeout: ReturnType<typeof setTimeout> | null = null
   private retryTimeout: ReturnType<typeof setTimeout> | null = null
@@ -157,6 +164,7 @@ export class SyncEngine {
       // User logged out - clear queue
       this.syncQueue.clear()
       this.reconciledSites.clear()
+      this.reconcilingSites.clear()
       this.updateStatus({ pending: 0 })
     }
   }
@@ -260,14 +268,34 @@ export class SyncEngine {
     }
 
     if (this.status.syncing) {
-      // Already syncing, will be queued
+      // A request is in flight. The items stay in syncQueue; the in-flight
+      // sync() picks them up when it finishes (see the finally block below).
+      // Before, they waited for the next queueSync/retry, so a stroke drawn
+      // during a POST could stay unsynced until the next edit or reload.
       return
     }
 
-    this.updateStatus({ syncing: true, error: null })
+    // Items of a site whose manifest pass is still running stay queued (see
+    // reconcilingSites); initialSync calls sync() again when it is done.
+    // Also held: items of the current site before its manifest pass has even
+    // started (a page writes on mount, before setSiteId/setUser trigger
+    // initialSync). Pushed then, a stale local copy overwrote a newer server
+    // row: the server only rejects strictly older versions, and the local
+    // version equals the server's when this device last synced. Held, the
+    // manifest pass first merges the server row into the local one.
+    const held = (site: string) =>
+      this.reconcilingSites.has(site) ||
+      (!this.reconciledSites.has(site) && (site === this.siteId || this.siteId === null))
+    const batch: SyncItem[] = []
+    for (const [key, item] of this.syncQueue) {
+      if (held(item.siteId)) continue
+      batch.push(item)
+      this.syncQueue.delete(key)
+    }
+    if (batch.length === 0) return
 
-    const batch = Array.from(this.syncQueue.values())
-    this.syncQueue.clear()
+    this.updateStatus({ syncing: true, error: null })
+    let failed = false
 
     // One grouped log entry for the whole request — the modal renders it as
     // an expandable row listing every item covered by this single POST.
@@ -376,7 +404,15 @@ export class SyncEngine {
       })
 
       // Retry with exponential backoff
+      failed = true
       this.scheduleRetry()
+    } finally {
+      // Items queued while this request was in flight: send them now (debounced
+      // like queueSync). Not after a failure, scheduleRetry covers that.
+      if (!failed && this.syncQueue.size > 0 && !this.gatedByPlan) {
+        if (this.syncTimeout) clearTimeout(this.syncTimeout)
+        this.syncTimeout = setTimeout(() => { this.sync() }, this.SYNC_DEBOUNCE_MS)
+      }
     }
   }
 
@@ -420,7 +456,14 @@ export class SyncEngine {
     try {
       if (isSyncableSite(siteId)) {
         this.reconciledSites.add(siteId)
-        await this.reconcileSite(siteId)
+        this.reconcilingSites.add(siteId)
+        try {
+          await this.reconcileSite(siteId)
+        } finally {
+          // Also on failure: holding the site's pushes forever would keep
+          // local edits off the server for the whole session.
+          this.reconcilingSites.delete(siteId)
+        }
         await this.adoptPlacedLegacy(siteId)
       }
 
@@ -455,6 +498,9 @@ export class SyncEngine {
       console.error('[SyncEngine] Initial sync failed:', error)
       // Don't show error to user on initial sync failure
     }
+    // Push what sync() held back while the manifest pass ran (no-op when the
+    // queue is empty; the unsynced pass above usually scheduled it already).
+    if (this.syncQueue.size > 0) void this.sync()
   }
 
   /**
@@ -688,6 +734,9 @@ export class SyncEngine {
         targetType: localRecord?.targetType ?? '',
         targetId: localRecord?.targetId ?? '',
       })
+      // Hooks mounted before this fetch read the store when it was empty or
+      // older; hand them the new state (useSyncedUserData, provider.tsx).
+      userDataService.notifyRemoteChange(this.userId!, siteId, serverItem.itemId, serverItem.adapter, '', '', mergedData)
 
       if (didMerge) mergeCount++
       else fetchCount++
@@ -755,6 +804,7 @@ export class SyncEngine {
           version: conflict.serverVersion,
           savedToRemote: true,
         })
+        userDataService.notifyRemoteChange(this.userId, conflict.siteId, conflict.itemId, conflict.adapter, targetType, targetId, conflict.serverData)
         serverWinsCount++
         continue
       }
@@ -770,6 +820,7 @@ export class SyncEngine {
           version: conflict.serverVersion + 1,
           savedToRemote: false, // Need to sync merged result
         })
+        userDataService.notifyRemoteChange(this.userId, conflict.siteId, conflict.itemId, conflict.adapter, targetType, targetId, mergedData)
 
         // Queue the merged data for sync WITH targeting preserved
         this.queueSync(
@@ -793,6 +844,7 @@ export class SyncEngine {
           version: conflict.serverVersion,
           savedToRemote: true,
         })
+        userDataService.notifyRemoteChange(this.userId, conflict.siteId, conflict.itemId, conflict.adapter, targetType, targetId, conflict.serverData)
         serverWinsCount++
       }
     }

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import { SectionAnchoredStrokes } from '@/components/annotations/section-anchored-strokes'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
@@ -55,5 +55,61 @@ describe('SectionAnchoredStrokes — highlighter layer', () => {
     )
     expect(section.querySelectorAll('svg.annotation-highlighter')).toHaveLength(0)
     expect(section.querySelectorAll('svg.annotation-section-svg')).toHaveLength(1)
+  })
+})
+
+describe('SectionAnchoredStrokes — legacy ids and orphans', () => {
+  // DOM as heading-section-ids.ts emits it: current ids on the elements, the
+  // legacy → current map on paper-top.
+  const page = () => {
+    const top = document.createElement('div')
+    top.setAttribute('data-section-id', 'paper-top')
+    top.setAttribute('data-legacy-section-ids', JSON.stringify({ 'callout-3': 'callout@h2-@x#1', 'callout-3-end': 'callout@h2-@x#1-end' }))
+    const callout = document.createElement('blockquote')
+    callout.setAttribute('data-section-id', 'callout@h2-@x#1')
+    const end = document.createElement('div')
+    end.setAttribute('data-section-id', 'callout@h2-@x#1-end')
+    document.body.append(top, callout, end)
+    return { top, callout, end }
+  }
+  const at = (id: string, sectionId: string): AnimatedStroke => ({ ...stroke(id), sectionId, sectionOffsetY: 40 })
+
+  it('portals a stroke stored with a legacy id into the element that now carries the mapped id', () => {
+    const { callout, end } = page()
+    const onOrphansChange = vi.fn()
+    render(
+      <SectionAnchoredStrokes
+        strokes={[at('old', 'callout-3'), at('old-end', 'callout-3-end'), at('new', 'callout@h2-@x#1')]}
+        paperWidth={800}
+        paperHeight={600}
+        paperPaddingLeft={0}
+        onOrphansChange={onOrphansChange}
+      />,
+    )
+    expect(callout.querySelectorAll('path')).toHaveLength(2)
+    expect(end.querySelectorAll('path')).toHaveLength(1)
+    expect(onOrphansChange).toHaveBeenLastCalledWith([])
+  })
+
+  it('reports orphans of callout/editor/plugin sections instead of dropping them', () => {
+    page()
+    const onOrphansChange = vi.fn()
+    const gone = [at('a', 'callout-7'), at('b', 'editor-2-end'), at('c', 'plugin-t-lab-3'), at('d', 'callout@h2-@y#1')]
+    render(
+      <SectionAnchoredStrokes strokes={gone} paperWidth={800} paperHeight={600} paperPaddingLeft={0} onOrphansChange={onOrphansChange} />,
+    )
+    expect(onOrphansChange).toHaveBeenLastCalledWith(gone)
+  })
+
+  it('reference layer (no onOrphansChange) renders orphans itself at their stored coordinates in paper-top', () => {
+    const { top } = page()
+    render(
+      <SectionAnchoredStrokes strokes={[at('a', 'callout-7')]} paperWidth={800} paperHeight={600} paperPaddingLeft={0} />,
+    )
+    const groups = top.querySelectorAll('svg.annotation-section-svg g')
+    expect(groups).toHaveLength(1)
+    // jsdom rects are 0: paper-top's offset is 0 → no shift, i.e. absolute y.
+    expect(groups[0].getAttribute('transform')).toBe('translate(0, 0)')
+    expect(top.querySelectorAll('path')).toHaveLength(1)
   })
 })

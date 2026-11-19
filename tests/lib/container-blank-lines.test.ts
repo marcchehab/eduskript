@@ -121,7 +121,8 @@ describe('container tags with several paragraphs', () => {
   it('keep order and close before the following content', async () => {
     for (const tag of ['solution', 'fullwidth']) {
       const out = await structure(`A\n\n<${tag}>\nFirst.\n\nSecond.\n</${tag}>\n\n## Next\n\nB\n`)
-      expect(out).toMatch(new RegExp(`<${tag}><p>First.</p><p>Second.</p></${tag}><h2`))
+      // <solution> is followed by its annotation end sentinel (heading-section-ids.ts).
+      expect(out).toMatch(new RegExp(`<${tag}><p>First.</p><p>Second.</p></${tag}>(<div data-section-id="solution@[^"]*-end"[^>]*></div>)?<h2`))
     }
   })
 })

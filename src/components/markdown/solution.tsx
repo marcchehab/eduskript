@@ -56,8 +56,14 @@ export function SolutionPrintLine({ label }: { label: string | null }) {
  * In print the collapsed box stays (same height as online, so strokes below it
  * stay on their text) and its label points to the solution at the end. The
  * box keeps with the block before it (data-print-keep, print-view.tsx).
- * Strokes drawn on an opened solution online land on whatever follows the
- * collapsed box in print.
+ *
+ * Annotations: the open state is not persisted, so every load starts
+ * collapsed. heading-section-ids.ts inserts a `solution@…#n-end` sentinel right
+ * after this box, so strokes drawn below it follow its bottom edge whether it
+ * is open or not. The box itself has no anchor (markdown-components.tsx does
+ * not pass data-section-id): strokes drawn ON an opened solution are anchored
+ * above it and, once it is collapsed again (reload, print), land on whatever
+ * follows.
  */
 export function Solution({ title, pageId, teacher = false, children }: { title?: string; pageId?: string; teacher?: boolean; children?: ReactNode }) {
   const [open, setOpen] = useState(false)

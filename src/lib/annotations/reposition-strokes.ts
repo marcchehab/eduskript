@@ -22,19 +22,73 @@ export interface HeadingPosition {
   sectionId: string
   offsetY: number
   headingText: string
+  /** Alias entry for a legacy section id (same element, same offsetY as the
+   *  entry before it). Lets `.find(sectionId)` lookups resolve strokes stored
+   *  with legacy ids; {@link determineSectionFromY} skips these so new
+   *  content is always stamped with the current id. */
+  legacy?: boolean
+}
+
+/**
+ * Attribute on the `paper-top` sentinel holding a JSON object
+ * `{ legacyId: currentId }` for every section anchor of the document, written
+ * by src/lib/rehype-plugins/heading-section-ids.ts (see its ID FORMAT notes).
+ * One map on a plain div instead of a second attribute per element because the
+ * components rendering callouts, code blocks, plugins, … pass through only
+ * `data-section-id`.
+ */
+export const LEGACY_SECTION_IDS_ATTR = 'data-legacy-section-ids'
+
+/**
+ * Legacy → current section id, merged from every
+ * {@link LEGACY_SECTION_IDS_ATTR} map under `root` in document order (first
+ * wins, matching querySelector's first-match on the old ids). O(anchors).
+ */
+export function readLegacySectionIds(root: ParentNode = document): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const el of Array.from(root.querySelectorAll(`[${LEGACY_SECTION_IDS_ATTR}]`))) {
+    try {
+      const obj = JSON.parse(el.getAttribute(LEGACY_SECTION_IDS_ATTR) || '{}') as Record<string, unknown>
+      for (const [legacy, current] of Object.entries(obj)) {
+        if (typeof current === 'string' && !map.has(legacy)) map.set(legacy, current)
+      }
+    } catch {
+      // Malformed map: legacy ids under it stay unresolved (orphans).
+    }
+  }
+  return map
+}
+
+/**
+ * The live `[data-section-id]` element for a stored section id, current or
+ * legacy. Current ids are tried first; the two namespaces are disjoint (current
+ * block/heading ids contain `@`, legacy ones never do), so the order only
+ * matters for ids that are the same in both (`paper-top`, `spacer-…`).
+ * Pass `legacy` when resolving many ids to parse the map once.
+ */
+export function findSectionElement(
+  sectionId: string,
+  root: ParentNode = document,
+  legacy?: Map<string, string>,
+): HTMLElement | null {
+  const query = (id: string) => root.querySelector(`[data-section-id="${CSS.escape(id)}"]`)
+  const direct = query(sectionId)
+  if (direct instanceof HTMLElement) return direct
+  const current = (legacy ?? readLegacySectionIds(root)).get(sectionId)
+  const el = current ? query(current) : null
+  return el instanceof HTMLElement ? el : null
 }
 
 /**
  * Returns the sectionId of the last heading whose offsetY is <= y, or null
- * when y falls above the first heading.
+ * when y falls above the first heading. Legacy alias entries are ignored.
  */
 export function determineSectionFromY(
   y: number,
   headingPositions: HeadingPosition[],
 ): string | null {
-  if (headingPositions.length === 0) return null
-
-  const sorted = [...headingPositions].sort((a, b) => a.offsetY - b.offsetY)
+  const sorted = headingPositions.filter(h => !h.legacy).sort((a, b) => a.offsetY - b.offsetY)
+  if (sorted.length === 0) return null
 
   for (let i = sorted.length - 1; i >= 0; i--) {
     if (y >= sorted[i].offsetY) {
@@ -132,6 +186,10 @@ export function repositionCanvasDataToLive(
  * consumer that shifts by `headingPositions` (eraser hit-test, layer badges)
  * was off by that margin for strokes below a foldable callout — the eraser
  * removed strokes ~20 px below its circle.
+ *
+ * Each entry whose id has a legacy id in the {@link LEGACY_SECTION_IDS_ATTR}
+ * map is followed by an alias entry (`legacy: true`, same offsetY), so lookups
+ * of strokes stored with legacy ids find their live section.
  */
 export function measureHeadingPositions(
   container: ParentNode,
@@ -142,27 +200,39 @@ export function measureHeadingPositions(
   const present = new Set(elements.map(el => el.getAttribute('data-section-id')))
   const positions: HeadingPosition[] = []
   const s = scale || 1
+  const legacyOf = new Map<string, string[]>()
+  for (const [legacy, current] of readLegacySectionIds(container)) {
+    const list = legacyOf.get(current)
+    if (list) list.push(legacy)
+    else legacyOf.set(current, [legacy])
+  }
+  const push = (sectionId: string, offsetY: number, headingText: string) => {
+    positions.push({ sectionId, offsetY, headingText })
+    for (const legacy of legacyOf.get(sectionId) ?? []) {
+      positions.push({ sectionId: legacy, offsetY, headingText, legacy: true })
+    }
+  }
 
   for (const element of elements) {
     const sectionId = element.getAttribute('data-section-id')
     if (!sectionId) continue
     const rect = element.getBoundingClientRect()
-    positions.push({
-      sectionId,
-      offsetY: (rect.top - originTop) / s,
-      headingText: element.getAttribute('data-heading-text') || '',
-    })
+    push(sectionId, (rect.top - originTop) / s, element.getAttribute('data-heading-text') || '')
     // Track the bottom so annotations BELOW the element follow it when it
     // expands/collapses — unless a real end sentinel already does that.
     if (
       element.getAttribute('data-dynamic-height') === 'true' &&
       !present.has(`${sectionId}-end`)
     ) {
-      positions.push({
-        sectionId: `${sectionId}-end`,
-        offsetY: (rect.bottom - originTop) / s,
-        headingText: '',
-      })
+      const bottom = (rect.bottom - originTop) / s
+      push(`${sectionId}-end`, bottom, '')
+      // Legacy synthetic ends (`<legacy>-end`), unless the map already aliased them.
+      const aliased = legacyOf.get(`${sectionId}-end`) ?? []
+      for (const legacy of legacyOf.get(sectionId) ?? []) {
+        if (!aliased.includes(`${legacy}-end`)) {
+          positions.push({ sectionId: `${legacy}-end`, offsetY: bottom, headingText: '', legacy: true })
+        }
+      }
     }
   }
   return positions
@@ -172,6 +242,7 @@ export function measureHeadingPositions(
  * Live paper-y of a section's top, measured against `originEl` (the element
  * whose top is paper-y 0 for strokes — the canvas wrapper, i.e. the canvas's
  * offsetParent). Returns null when the section or #paper is not in the DOM.
+ * Accepts current and legacy ids ({@link findSectionElement}).
  *
  * Measured, not taken from the debounced headingPositions cache, which can be
  * stale at commit time. Scale = paperRect.width / offsetWidth (width-based:
@@ -182,9 +253,9 @@ export function measureHeadingPositions(
  */
 export function measureSectionOffsetY(sectionId: string, originEl: HTMLElement | null): number | null {
   if (typeof document === 'undefined') return null
-  const sectionEl = document.querySelector(`[data-section-id="${CSS.escape(sectionId)}"]`)
+  const sectionEl = findSectionElement(sectionId)
   const paperEl = document.getElementById('paper')
-  if (!(sectionEl instanceof HTMLElement) || !paperEl) return null
+  if (!sectionEl || !paperEl) return null
   const liveScale = paperEl.getBoundingClientRect().width / paperEl.offsetWidth || 1
   const origin = originEl ?? paperEl
   return (sectionEl.getBoundingClientRect().top - origin.getBoundingClientRect().top) / liveScale

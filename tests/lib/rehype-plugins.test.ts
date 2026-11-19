@@ -15,7 +15,7 @@ import { compileMarkdown, sanitizeSchema } from '@/lib/markdown-compiler'
 
 describe('Rehype Plugins', () => {
   describe('rehypeHeadingSectionIds', () => {
-    it('numbers repeated plugins so each gets its own top and end anchor', async () => {
+    it('numbers repeated plugins so each gets its own top and end anchor (legacy ids kept in the map)', async () => {
       const markdown = [
         '<plugin src="a/graph" id="one"></plugin>',
         '',
@@ -32,7 +32,7 @@ describe('Rehype Plugins', () => {
         .use(rehypeRaw)
         .use(rehypeHeadingSectionIds)
 
-      const hast = await processor.run(processor.parse(markdown))
+      const hast: any = await processor.run(processor.parse(markdown))
       const ids: string[] = []
       const walk = (n: any) => {
         const id = n.properties?.['data-section-id']
@@ -41,13 +41,22 @@ describe('Rehype Plugins', () => {
       }
       walk(hast)
 
-      // The first occurrence keeps the pre-2026-11-09 ID (existing strokes).
       expect(ids).toEqual([
-        'plugin-a-graph', 'plugin-a-graph-end',
-        'plugin-a-other', 'plugin-a-other-end',
-        'plugin-a-graph-2', 'plugin-a-graph-2-end',
-        'plugin-a-graph-3', 'plugin-a-graph-3-end',
+        'plugin-a-graph@top#1', 'plugin-a-graph@top#1-end',
+        'plugin-a-other@top#1', 'plugin-a-other@top#1-end',
+        'plugin-a-graph@top#2', 'plugin-a-graph@top#2-end',
+        'plugin-a-graph@top#3', 'plugin-a-graph@top#3-end',
       ])
+      // Legacy ids (stored by existing strokes) → current ids, on paper-top.
+      // The first occurrence keeps the pre-2026-11-09 legacy ID.
+      const map = JSON.parse(hast.children[0].properties['data-legacy-section-ids'])
+      expect(map).toMatchObject({
+        'plugin-a-graph': 'plugin-a-graph@top#1',
+        'plugin-a-graph-end': 'plugin-a-graph@top#1-end',
+        'plugin-a-other': 'plugin-a-other@top#1',
+        'plugin-a-graph-2': 'plugin-a-graph@top#2',
+        'plugin-a-graph-3-end': 'plugin-a-graph@top#3-end',
+      })
     })
 
     it('should add data-section-id to h1 headings', async () => {
@@ -64,7 +73,7 @@ describe('Rehype Plugins', () => {
 
       const h1 = findNode(hast, (node: any) => node.tagName === 'h1')
 
-      expect(h1?.properties?.['data-section-id']).toBe('h1-main-heading')
+      expect(h1?.properties?.['data-section-id']).toBe('h1-@main-heading')
     })
 
     it('should add data-section-id to h2 headings', async () => {
@@ -81,7 +90,7 @@ describe('Rehype Plugins', () => {
 
       const h2 = findNode(hast, (node: any) => node.tagName === 'h2')
 
-      expect(h2?.properties?.['data-section-id']).toBe('h2-sub-heading')
+      expect(h2?.properties?.['data-section-id']).toBe('h2-@sub-heading')
     })
 
     it('should add data-heading-text attribute', async () => {
@@ -115,7 +124,7 @@ describe('Rehype Plugins', () => {
 
       const h3 = findNode(hast, (node: any) => node.tagName === 'h3')
 
-      expect(h3?.properties?.['data-section-id']).toBe('h3-level-3-heading')
+      expect(h3?.properties?.['data-section-id']).toBe('h3-@level-3-heading')
       expect(h3?.properties?.['data-heading-text']).toBe('Level 3 Heading')
     })
 

@@ -24,13 +24,21 @@
  * outer edge. We render strokes at `point.x - paperPaddingLeft` so a
  * stored paper-X of 200 lines up with the visual paper-X of 200.
  *
- * Strokes whose `sectionId` does not resolve to any live DOM element are
- * surfaced via `onOrphansChange` so the caller can render them in a
- * paper-anchored fallback (with no JS reposition) — same orphan UX as
- * before this refactor.
+ * Stored section ids may be current or legacy (pre-2026-11-19 order-based
+ * ids such as `callout-3`); both resolve through `findSectionElement`, legacy
+ * ones via the `data-legacy-section-ids` map that heading-section-ids.ts
+ * writes onto `paper-top`. On unchanged content a legacy id resolves to the
+ * same element as before, so those strokes render exactly where they did.
+ *
+ * Strokes whose `sectionId` does not resolve to any live DOM element (orphans:
+ * the section was removed or renamed) are never dropped. With
+ * `onOrphansChange` (active layer) they are reported to the caller, which
+ * renders them in a paper-anchored fallback at their stored absolute
+ * coordinates. Without it (reference layers) this component renders them
+ * itself at the same stored coordinates, portaled into `paper-top`.
  */
 
-import { memo, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { getSvgPathFromStroke, isHighlighterStroke, strokeOutline } from '@/lib/annotations/svg-path'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
@@ -38,6 +46,7 @@ import { useZoom } from '@/contexts/zoom-context'
 import { isEditableLine, moveEndpoint, moveLine, type EditPoint } from '@/lib/annotations/line-edit'
 import { usePrintLayoutVersion, usePrintMode } from '@/lib/print/print-mode'
 import { collectPrintMarkers, printShiftAt, printShiftsFor, type PrintShift } from '@/lib/print/stroke-shift'
+import { findSectionElement, readLegacySectionIds } from '@/lib/annotations/reposition-strokes'
 
 type BadgeColor = 'purple' | 'blue' | 'orange' | 'green'
 
@@ -47,8 +56,10 @@ interface SectionAnchoredStrokesProps {
   paperHeight: number
   paperPaddingLeft: number
   markedForDeletion?: Set<string>
-  /** Fired with strokes whose sectionId is not currently in the DOM (deleted section,
-   *  pre-load, etc.). Caller renders these in a fallback paper-anchored overlay. */
+  /** Fired with strokes whose sectionId is not currently in the DOM (deleted or
+   *  renamed section, pre-load, etc.). Caller renders these in a fallback
+   *  paper-anchored overlay. Omitted → this component renders them itself at
+   *  their stored paper coordinates (reference layers). */
   onOrphansChange?: (orphans: AnimatedStroke[]) => void
   /** Used purely as a re-resolution trigger: whenever the section DOM layout
    *  changes (markdown re-render, spacer add/resize/remove, callout open),
@@ -105,6 +116,9 @@ interface SectionBounds {
    *  of the section's top). All strokes in a section share the same value. */
   sectionOffsetY: number
 }
+
+/** Always-present top sentinel (heading-section-ids.ts); hosts reference-layer orphans. */
+const ORPHAN_HOST = 'paper-top'
 
 const isRenderable = (s: AnimatedStroke) => s.mode !== 'erase' && s.points.length >= 2
 
@@ -298,9 +312,14 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors the same DOM-measurement → state pattern used for targets/sectionGeom below.
     setLiveScale(prev => (prev === paperScale ? prev : paperScale))
     const printMarkers = printing && paperEl ? collectPrintMarkers(paperEl) : []
-    for (const sid of grouped.keys()) {
-      const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
-      if (el instanceof HTMLElement) {
+    const legacyIds = readLegacySectionIds(document)
+    const sids = Array.from(grouped.keys())
+    // Reference layers render their own orphans inside paper-top (see render).
+    if (!onOrphansChange) sids.push(ORPHAN_HOST)
+    for (const sid of sids) {
+      if (next.has(sid)) continue
+      const el = findSectionElement(sid, document, legacyIds)
+      if (el) {
         next.set(sid, el)
         const cs = window.getComputedStyle(el)
         const elRect = el.getBoundingClientRect()
@@ -346,25 +365,18 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     })
 
     if (onOrphansChange) {
-      // Hide orphans whose lost section was a markdown-dynamic-height element
-      // (callout, code-editor, plugin). The user's mental model: each variable-
-      // height element is its own section, and "the element disappears" should
-      // imply "its annotations disappear too". When the markdown is edited to
-      // remove a callout, its section element unmounts; surfacing those strokes
-      // in the orphan-fallback layer would render them at their absolute paper-y
-      // — but the layout shifted when the element was removed, so the position
-      // is meaningless. Drop them silently. Heading-/spacer- orphans still
-      // surface (transient unmount during Fast Refresh, or genuinely lost
-      // references the user can clean up via the orphans banner).
+      // Every renderable stroke without a live section is reported, whatever
+      // the kind of its lost section. Until 2026-11-19 orphans of callout-,
+      // editor- and plugin- sections were dropped here without a trace: order-
+      // based ids made a removed callout orphan the LAST callout's strokes,
+      // which then vanished.
       const orphans = strokes.filter(s => {
         if (!isRenderable(s)) return false
         // Mirror the 'unknown' → 'paper-top' remap in `grouped` so legacy
         // strokes anchored to 'unknown' aren't surfaced as orphans when the
         // paper-top sentinel exists.
         const sid = s.sectionId === 'unknown' ? 'paper-top' : s.sectionId
-        if (sid && next.has(sid)) return false
-        if (sid && /^(callout|editor|plugin)-/.test(sid)) return false
-        return true
+        return !(sid && next.has(sid))
       })
       onOrphansChange(orphans)
     }
@@ -382,10 +394,26 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
 
   return (
     <>
-      {Array.from(grouped.entries()).map(([sid, { paths, bounds }]) => {
-        const target = targets.get(sid)
-        if (!target) return null
-        const geom = sectionGeom.get(sid) ?? { borderTop: 0, borderLeft: 0, leftFromPaper: paperPaddingLeft, topFromPaper: 0 }
+      {Array.from(grouped.entries()).map(([sid, group]) => {
+        let target = targets.get(sid)
+        let geom = sectionGeom.get(sid) ?? { borderTop: 0, borderLeft: 0, leftFromPaper: paperPaddingLeft, topFromPaper: 0 }
+        let { paths, bounds } = group
+        let portalKey = `stroke-portal:${sid}`
+        if (!target) {
+          // Orphan. Active layer: reported via onOrphansChange, the caller draws it.
+          if (onOrphansChange) return null
+          // Reference layer: draw it at its stored paper coordinates inside
+          // paper-top, by giving every path paper-top's live offset as its
+          // section offset (visual y = sectionTop + y − offset = y).
+          const host = targets.get(ORPHAN_HOST)
+          const hostGeom = sectionGeom.get(ORPHAN_HOST)
+          if (!host || !hostGeom) return null
+          target = host
+          geom = hostGeom
+          paths = paths.map(p => ({ ...p, sectionOffsetY: hostGeom.topFromPaper }))
+          bounds = { ...bounds, sectionOffsetY: hostGeom.topFromPaper }
+          portalKey = `stroke-portal-orphan:${sid}`
+        }
         return createPortal(
           <>
             {/* Highlighter strokes first, in their own SVG (lower z-index, page
@@ -422,7 +450,12 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
               hiddenId={preview?.id}
               selectedIds={selectedIds}
             />
-            {lineEditEnabled && onLineEdit && (
+            {/* Stays mounted while a drag is in progress: a pen drag switches
+                AnnotationLayer into stylus/draw mode on its first pointermove
+                (handleStylusDetected), which turns lineEditEnabled off. Unmounting
+                then would drop the live preview while the committed path stays
+                hidden (hiddenId), so the line was invisible until release. */}
+            {(lineEditEnabled || (preview && paths.some(p => p.id === preview.id))) && onLineEdit && (
               <SectionLineHandles
                 paths={paths}
                 paperWidth={paperWidth}
@@ -451,7 +484,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
           </>,
           target,
           // Stable React reconciliation key per section
-          `stroke-portal:${sid}`,
+          portalKey,
         )
       })}
     </>
@@ -560,6 +593,40 @@ function SectionLineHandles({
   onCommit: (strokeId: string, points: EditPoint[]) => void
 }) {
   const lines = useMemo(() => paths.filter((p) => p.line), [paths])
+  const svgRef = useRef<SVGSVGElement>(null)
+
+  // iOS Safari scrolls the page under an Apple Pencil drag unless the touch
+  // events are cancelled; preventDefault on pointerdown is not enough, and
+  // React's touch listeners are passive. Cancel stylus touches that start on a
+  // hit shape (the svg box itself is pointer-events: none), and their moves.
+  // Finger touches pass through, so a finger on a line still scrolls.
+  const hasLines = lines.length > 0
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const isStylus = (e: TouchEvent) =>
+      Array.from(e.changedTouches).some((t) => (t as Touch & { touchType?: string }).touchType === 'stylus')
+    let dragging = false
+    const onStart = (e: TouchEvent) => {
+      if (!isStylus(e)) return
+      dragging = true
+      e.preventDefault()
+    }
+    const onMove = (e: TouchEvent) => {
+      if (dragging && isStylus(e)) e.preventDefault()
+    }
+    const onEnd = () => { dragging = false }
+    svg.addEventListener('touchstart', onStart, { passive: false })
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onEnd)
+    window.addEventListener('touchcancel', onEnd)
+    return () => {
+      svg.removeEventListener('touchstart', onStart)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onEnd)
+      window.removeEventListener('touchcancel', onEnd)
+    }
+  }, [hasLines])
 
   const startDrag = (
     event: React.PointerEvent<SVGElement>,
@@ -568,6 +635,10 @@ function SectionLineHandles({
   ) => {
     const original = datum.line
     if (!original) return
+    // Fingers scroll/pan/pinch; only pen and mouse drag lines. Without this a
+    // one-finger pan that starts on a line moved the line until the browser
+    // took over the gesture (pointercancel).
+    if (event.pointerType === 'touch') return
     event.preventDefault()
     event.stopPropagation()
 
@@ -609,6 +680,7 @@ function SectionLineHandles({
 
   return (
     <svg
+      ref={svgRef}
       className="annotation-line-handles"
       viewBox={`0 0 ${paperWidth} ${clippedHeight}`}
       preserveAspectRatio="none"
@@ -640,7 +712,10 @@ function SectionLineHandles({
                 y1={a.y}
                 x2={b.x}
                 y2={b.y}
-                stroke={color}
+                // Colours go through style, not presentation attributes:
+                // var() in SVG presentation attributes is not reliably resolved
+                // (suspected cause of an invisible drag preview on iPad Safari).
+                style={{ stroke: color }}
                 strokeWidth={datum.width * 2}
                 strokeLinecap="round"
               />
@@ -662,10 +737,8 @@ function SectionLineHandles({
                 cx={points[index].x}
                 cy={points[index].y}
                 r={7}
-                fill="hsl(var(--background))"
-                stroke={color}
                 strokeWidth={2}
-                style={{ pointerEvents: 'auto', cursor: 'grab' }}
+                style={{ fill: 'hsl(var(--background))', stroke: color, pointerEvents: 'auto', cursor: 'grab' }}
                 onPointerDown={(e) => startDrag(e, datum, index)}
               />
             ))}

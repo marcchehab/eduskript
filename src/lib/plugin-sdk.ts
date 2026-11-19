@@ -249,11 +249,19 @@ export const PLUGIN_SDK_SOURCE = `
   }, { passive: false });
 
   document.addEventListener('touchmove', function(e) {
-    if (e.touches.length >= 2 && prevDist > 0) {
+    if (e.touches.length >= 2) {
       e.preventDefault();
       var dx = e.touches[0].screenX - e.touches[1].screenX;
       var dy = e.touches[0].screenY - e.touches[1].screenY;
       var dist = Math.sqrt(dx * dx + dy * dy);
+      // The second finger can land outside the iframe: the browser keeps
+      // routing the gesture here, but there is no touchstart with 2 touches
+      // (seen in Chromium). Start the pinch on the first 2-touch touchmove.
+      if (!(prevDist > 0)) {
+        prevDist = dist;
+        pendingRatio = 1;
+        return;
+      }
       // Accumulate incremental ratio (multiplicative) across touchmoves within one frame
       pendingRatio *= dist / prevDist;
       prevDist = dist;
@@ -297,6 +305,17 @@ export const PLUGIN_SDK_SOURCE = `
   else window.addEventListener('load', report);
 })();
 `;
+
+/**
+ * Wheel deltaY for a synthetic ctrl+wheel that zooms the page by `ratio`.
+ * Must invert annotation-layer.tsx handleZoomWheel, which applies
+ * `zoom * 1.002 ** -deltaY` (and clamps zoom to 0.5..10, so very large
+ * pinches stop at 10). Used by plugin-container.tsx for plugin:zoomTouchMove.
+ */
+export function pinchRatioToWheelDeltaY(ratio: number): number {
+  if (!(ratio > 0) || !Number.isFinite(ratio)) return 0
+  return -Math.log(ratio) / Math.log(1.002)
+}
 
 /**
  * Content-Security-Policy for plugin iframes.

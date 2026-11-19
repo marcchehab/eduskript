@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTheme } from 'next-themes'
 import { useSession } from 'next-auth/react'
 import { useUserData } from '@/lib/userdata/hooks'
 import { useCurrentSite } from '@/contexts/current-site-context'
-import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
+import { buildPluginSrcdoc, pinchRatioToWheelDeltaY } from '@/lib/plugin-sdk'
 import { ShareListOptions } from './share-list-options'
 import { PLUGIN_SHARE_UPDATED, reportScore, type ShareEntry, type ShareResults } from '@/lib/plugin-share'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
@@ -171,12 +171,9 @@ export function PluginContainer({
       }
 
       if (msg.type === 'plugin:zoomTouchMove' && msg.ratio) {
-        // Convert incremental touch pinch ratio to synthetic ctrl+wheel.
-        // ratio > 1 means fingers spreading (zoom in) → negative deltaY.
-        // The parent handler does: delta = -deltaY * 0.01, newZoom = current * (1 + delta)
-        // We want newZoom = current * ratio, so (1 + delta) = ratio, delta = ratio - 1
-        // Therefore deltaY = -(ratio - 1) / 0.01 = -(ratio - 1) * 100
-        const deltaY = -(msg.ratio - 1) * 100
+        // Convert incremental touch pinch ratio to synthetic ctrl+wheel so
+        // that page zoom follows the finger ratio. See pinchRatioToWheelDeltaY.
+        const deltaY = pinchRatioToWheelDeltaY(msg.ratio)
         // centerX/centerY are in screen coordinates (immune to CSS transforms).
         // Convert to parent viewport client coords using window.screenX/screenY
         // plus chrome offsets (outerWidth/Height - innerWidth/Height).
@@ -431,34 +428,48 @@ export function PluginContainer({
     }
   }, [pluginHtml])
 
+  // Every state renders inside the same wrapper div carrying dataAttrs
+  // (data-section-id). SectionAnchoredStrokes portals stroke SVGs into it:
+  // swapping the wrapper for a different element crashed the page
+  // (NotFoundError removeChild) when a plugin timed out, and an error box
+  // without data-section-id dropped the strokes anchored to it.
+
   // Invalid src format
   if (!validSrc) {
     return (
-      <div className="my-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-        <p className="font-medium">Invalid plugin src: &quot;{src}&quot;</p>
-        <p className="mt-1 text-xs opacity-75">
-          Format: &lt;plugin src=&quot;ownerPageSlug/pluginSlug&quot;&gt;&lt;/plugin&gt;
-        </p>
+      <div className="my-4" {...dataAttrs}>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          <p className="font-medium">Invalid plugin src: &quot;{src}&quot;</p>
+          <p className="mt-1 text-xs opacity-75">
+            Format: &lt;plugin src=&quot;ownerPageSlug/pluginSlug&quot;&gt;&lt;/plugin&gt;
+          </p>
+        </div>
       </div>
     )
   }
 
-  // Error/loading states
-  if (fetchError || status === 'error') {
-    if (!isTeacher) {
-      return (
-        <div className="my-4 rounded-lg border border-muted bg-muted/30 p-4 text-sm text-muted-foreground">
-          This interactive element is not available right now.
-        </div>
-      )
-    }
-    return (
-      <div className="my-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+  const failed = !!fetchError || status === 'error' || status === 'unresponsive'
+  let notice: ReactNode = null
+  if (failed && !isTeacher) {
+    notice = (
+      <div className="rounded-lg border border-muted bg-muted/30 p-4 text-sm text-muted-foreground">
+        This interactive element is not available right now.
+      </div>
+    )
+  } else if (status === 'unresponsive' && !fetchError) {
+    notice = (
+      <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+        <p className="font-medium">Plugin &quot;{src}&quot; is unresponsive</p>
+      </div>
+    )
+  } else if (failed) {
+    notice = (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
         <p className="font-medium">Plugin &quot;{src}&quot; could not be shown</p>
         <p className="mt-1 text-xs opacity-75">
           {fetchError
             ? 'It does not exist (deleted or renamed?).'
-            : 'It did not finish loading within 5 seconds, probably because of an error in its code.'}{' '}
+            : 'It did not finish loading within 5 seconds, probably because of an error in its code. It still appears if it finishes loading later.'}{' '}
           Students see &quot;This interactive element is not available right now.&quot;
         </p>
         <div className="mt-2 flex gap-3 text-xs">
@@ -484,19 +495,14 @@ export function PluginContainer({
     )
   }
 
-  if (status === 'unresponsive') {
-    return (
-      <div className="my-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-        <p className="font-medium">Plugin &quot;{src}&quot; is unresponsive</p>
-      </div>
-    )
-  }
-
-  const srcdoc = pluginHtml ? buildPluginSrcdoc(pluginHtml, resolvedTheme) : undefined
+  // After a timeout the iframe stays mounted (hidden), so a slow plugin whose
+  // plugin:ready arrives late still switches to 'ready' and shows up.
+  const srcdoc = pluginHtml && !fetchError ? buildPluginSrcdoc(pluginHtml, resolvedTheme) : undefined
 
   return (
     <div className="my-4" {...dataAttrs}>
-      {status === 'loading' && (
+      {notice}
+      {status === 'loading' && !fetchError && (
         <div className="flex items-center justify-center rounded-lg border border-muted bg-muted/20 p-8 text-sm text-muted-foreground"
           style={{ height: iframeHeight }}
         >
@@ -515,7 +521,7 @@ export function PluginContainer({
             border: 'none',
             width: '100%',
             height: iframeHeight,
-            display: status === 'loading' ? 'none' : 'block',
+            display: status === 'ready' ? 'block' : 'none',
             colorScheme: resolvedTheme === 'dark' ? 'dark' : 'light',
           }}
           title={`Plugin: ${src}`}
