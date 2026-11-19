@@ -1,13 +1,17 @@
 import type { ReactNode } from 'react'
 import type { TikzResult } from '@/lib/tikz/render.server'
+import { TikzImages } from './tikz-images.client'
 
 /**
  * A rendered ```tikz block: two static SVG images (light and dark), toggled by
  * the same CSS as ```plot (.plot-light / .plot-dark in globals.css).
  *
  * It has to be an <img>: <ai-feedback> composites the section's <img> elements
- * into the picture it sends to the vision model, and a data-URL SVG cannot read
- * the page theme, hence the two variants.
+ * into the picture it sends to the vision model, and an SVG loaded as an image
+ * cannot read the page theme, hence the two variants.
+ *
+ * The sources are files in the teacher bucket (store.server.ts), so a page
+ * carries two URLs per diagram.
  */
 export function TikzImageView({ result }: { result: TikzResult }) {
   if ('error' in result) return <TikzError message={result.error} />
@@ -15,10 +19,7 @@ export function TikzImageView({ result }: { result: TikzResult }) {
   const { light, dark, width, height, alt, caption } = result.image
   return (
     <span className="my-4 block">
-      {/* eslint-disable-next-line @next/next/no-img-element -- data-URL SVG, nothing for the image optimizer to do */}
-      <img src={light} alt={alt} width={width} height={height} decoding="async" className="plot-light mx-auto h-auto w-full max-w-full" style={{ maxWidth: `${width}px` }} />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={dark} alt={alt} width={width} height={height} decoding="async" className="plot-dark mx-auto h-auto w-full max-w-full" style={{ maxWidth: `${width}px` }} />
+      <TikzImages light={light} dark={dark} width={width} height={height} alt={alt} />
       {caption && <span className="mt-2 block text-center text-sm italic text-muted-foreground">{caption}</span>}
     </span>
   )

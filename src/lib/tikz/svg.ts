@@ -3,9 +3,9 @@
  *
  * 1. Text → paths. The raw SVG sets text in the Computer Modern web fonts
  *    (`<text font-family="cmr10">`), which only works where the page loads
- *    those fonts. Ours ends up in an <img> as a data URL, which loads nothing,
- *    so every glyph is replaced by its outline.
- * 2. Theme. A data-URL SVG cannot read the page CSS, so there are two images:
+ *    those fonts. Ours is shown in an <img>, where an SVG loads nothing, so
+ *    every glyph is replaced by its outline.
+ * 2. Theme. An SVG in an <img> cannot read the page CSS, so there are two images:
  *    the light one as TeX drew it, and a dark one with black and white swapped
  *    for the dark page's ink and background. Other colours stay.
  */

@@ -1,5 +1,5 @@
 /**
- * Server-side TikZ rendering: TeX document → light and dark SVG data URLs.
+ * Server-side TikZ rendering: TeX document → a light and a dark SVG file.
  *
  * TeX runs as WebAssembly (node-tikzjax, no TeX installation) in a worker
  * thread. The worker is not optional: TeX is a programming language, and
@@ -7,8 +7,9 @@
  * The worker is killed after TIMEOUT_MS and a fresh one starts on the next call.
  * node-tikzjax must not run two jobs at once, so jobs queue up.
  *
- * Results (errors included) are kept in a per-process LRU. Public pages are
- * rendered into the ISR cache, so TeX normally runs once per change.
+ * Pictures are written to the store (store.server.ts) and referenced by URL;
+ * results (errors included) are also kept in a per-process LRU. TeX therefore
+ * runs once per distinct diagram, across pages, restarts and deploys.
  *
  * Node-only. Import it from server code only (the page renderer, /api/tikz).
  */
@@ -18,11 +19,12 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { parse as parseFont } from 'opentype.js'
 import { svgToDataUrl } from '@/lib/plot/svg'
-import { buildTikzDocument } from './document'
+import { buildTikzDocument, type TikzDocument } from './document'
+import { loadStoredPicture, storePicture, tikzStoreEnabled, type StoredPicture } from './store.server'
 import { compactSvg, darkSvg, sizeSvg, svgSize, textToPaths, TIKZ_SCALE, type GlyphFont } from './svg'
 
 export interface TikzImage {
-  /** data:image/svg+xml URLs. */
+  /** URLs of the two SVG files in the store; data URLs when there is no store. */
   light: string
   dark: string
   /** Display size in px. */
@@ -174,13 +176,52 @@ export function texErrorFromLog(log: string): string | undefined {
   return unique.length > 0 ? unique.join('\n') : undefined
 }
 
-const cache = new Map<string, TikzResult>()
+/** What is cached per TeX document: the picture without alt text and caption, which belong to the block. */
+type Rendered = { picture: StoredPicture } | { error: string }
 
-function remember(key: string, result: TikzResult): TikzResult {
+const cache = new Map<string, Rendered>()
+const inFlight = new Map<string, Promise<Rendered>>()
+
+function remember(key: string, result: Rendered): Rendered {
   cache.delete(key)
   cache.set(key, result)
   if (cache.size > CACHE_ENTRIES) cache.delete(cache.keys().next().value as string)
   return result
+}
+
+async function renderDocument(document: TikzDocument): Promise<Rendered> {
+  const stored = await loadStoredPicture(document.key)
+  if (stored) return { picture: stored }
+
+  const reply = await runJob({
+    input: `\\begin{document}\n${document.body}\n\\end{document}`,
+    packages: document.packages,
+    libraries: document.libraries,
+    preamble: document.preamble,
+  })
+  if ('error' in reply) return { error: texErrorFromLog(reply.log) ?? reply.error }
+
+  const size = svgSize(reply.svg)
+  if (!size) return { error: 'TeX produced no picture.' }
+
+  const { svg: outlined, missingFonts } = textToPaths(reply.svg, loadFont)
+  if (missingFonts.length > 0) return { error: `Font not available: ${missingFonts.join(', ')}.` }
+
+  const width = Math.round(size.width * TIKZ_SCALE)
+  const height = Math.round(size.height * TIKZ_SCALE)
+  const light = compactSvg(sizeSvg(outlined, width, height))
+  const dark = darkSvg(light)
+
+  if (tikzStoreEnabled()) {
+    try {
+      return { picture: await storePicture(document.key, { light, dark }, { width, height }) }
+    } catch (error) {
+      // The page must not fail because the bucket is down: inline the picture this once.
+      console.error('[tikz] could not store picture, inlining it:', error)
+      return { picture: { light: svgToDataUrl(light), dark: svgToDataUrl(dark), width, height } }
+    }
+  }
+  return { picture: { light: svgToDataUrl(light), dark: svgToDataUrl(dark), width, height } }
 }
 
 /** Render a ```tikz fence body. `skriptPreamble` is the content of the skript's tikz-preamble.tex, if any. */
@@ -189,41 +230,33 @@ export async function renderTikz(source: string, skriptPreamble = ''): Promise<T
   if ('error' in built) return { error: built.error }
   const { document } = built
 
-  const cached = cache.get(document.key)
-  if (cached) return remember(document.key, cached)
-
-  const reply = await runJob({
-    input: `\\begin{document}\n${document.body}\n\\end{document}`,
-    packages: document.packages,
-    libraries: document.libraries,
-    preamble: document.preamble,
-  })
-
-  if ('error' in reply) {
-    return remember(document.key, { error: texErrorFromLog(reply.log) ?? reply.error })
+  let rendered = cache.get(document.key)
+  if (rendered) remember(document.key, rendered)
+  else {
+    // The same diagram twice on a page (or two requests at once) runs TeX once.
+    let pending = inFlight.get(document.key)
+    if (!pending) {
+      pending = renderDocument(document).finally(() => inFlight.delete(document.key))
+      inFlight.set(document.key, pending)
+    }
+    rendered = await pending
+    // An inlined picture (store unreachable) is not kept, so the next render tries the store again.
+    if ('error' in rendered || !tikzStoreEnabled() || !rendered.picture.light.startsWith('data:')) remember(document.key, rendered)
   }
 
-  const size = svgSize(reply.svg)
-  if (!size) return remember(document.key, { error: 'TeX produced no picture.' })
-
-  const { svg: outlined, missingFonts } = textToPaths(reply.svg, loadFont)
-  if (missingFonts.length > 0) {
-    return remember(document.key, { error: `Font not available: ${missingFonts.join(', ')}.` })
-  }
-  const width = Math.round(size.width * TIKZ_SCALE)
-  const height = Math.round(size.height * TIKZ_SCALE)
-  const light = compactSvg(sizeSvg(outlined, width, height))
-
-  return remember(document.key, {
+  if ('error' in rendered) return rendered
+  return {
     image: {
-      light: svgToDataUrl(light),
-      dark: svgToDataUrl(darkSvg(light)),
-      width,
-      height,
+      ...rendered.picture,
       alt: document.alt ?? document.caption ?? 'TikZ diagram',
       caption: document.caption,
     },
-  })
+  }
+}
+
+/** For tests: forget everything rendered in this process. */
+export function clearTikzCache(): void {
+  cache.clear()
 }
 
 /** For tests: stop the worker so the process can exit. */
