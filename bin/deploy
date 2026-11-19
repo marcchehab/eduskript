@@ -1,13 +1,41 @@
 #!/usr/bin/env bash
-# Validate, then deploy to eduskript-prod. Kamal's own hooks run inside the
-# Kamal container (no node/pnpm there), so the checks live here instead.
-#   bin/deploy            full checks (type-check, lint, tests) + deploy
-#   bin/deploy --quick    skip tests (type-check + lint only)
+# Validate, deploy to eduskript-prod, then push — one step, so what runs live
+# is always on origin too. Kamal's own hooks run inside the Kamal container
+# (no node/pnpm there), so the checks live here instead.
+#   bin/deploy            full checks (type-check, lint, tests) + deploy + push
+#   bin/deploy --quick    skip tests (type-check + lint only); the push then
+#                         runs the pre-push hook, i.e. the full checks
+# Refuses to start with uncommitted changes or when origin has commits that
+# are missing here: both would deploy something origin will never match.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [ -n "$(git status --porcelain)" ]; then
+  echo "bin/deploy: uncommitted changes — commit or stash first." >&2
+  git status --short >&2
+  exit 1
+fi
+git fetch --quiet origin "$branch"
+if [ -n "$(git rev-list "HEAD..origin/$branch")" ]; then
+  echo "bin/deploy: origin/$branch has commits missing here — pull first:" >&2
+  git log --oneline "HEAD..origin/$branch" >&2
+  exit 1
+fi
+
 if [ "${1:-}" = "--quick" ]; then
   pnpm db:generate && pnpm type-check && pnpm lint
+  push=(git push origin "$branch")
 else
   pnpm pre-push
+  # The pre-push hook would repeat exactly the checks that just passed.
+  push=(git push --no-verify origin "$branch")
 fi
-exec bin/kamal deploy
+
+bin/kamal deploy
+
+if ! "${push[@]}"; then
+  echo "bin/deploy: DEPLOYED BUT NOT PUSHED — live is ahead of origin/$branch. Fix and push." >&2
+  exit 1
+fi
+echo "bin/deploy: deployed and pushed $(git rev-parse --short HEAD)."
