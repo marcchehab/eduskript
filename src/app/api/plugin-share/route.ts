@@ -204,10 +204,10 @@ export async function GET(request: NextRequest) {
   let visible = new Set(memberships.map((m) => m.studentId))
   if (source === CLASS_LIST) {
     const rows = await prisma.class.findMany({
-      // Archived classes are hidden from every class picker.
+      // Archived and deleted (isActive: false) classes are hidden from every class picker.
       where: isOwner
-        ? { teacherId: owner, isImplicit: false, archivedAt: null }
-        : { id: { in: own.map((m) => m.classId) }, archivedAt: null },
+        ? { teacherId: owner, isImplicit: false, isActive: true, archivedAt: null }
+        : { id: { in: own.map((m) => m.classId) }, isActive: true, archivedAt: null },
       select: { id: true, name: true },
       orderBy: { createdAt: 'desc' },
     })
