@@ -23,6 +23,7 @@
  * `data-banner-key`; after hydration useSyncExternalStore unmounts it.
  */
 
+import { mathText } from '@/components/markdown/math-html'
 import { useCallback, useSyncExternalStore } from 'react'
 import { X } from 'lucide-react'
 import { resolveHighlightColor, resolveTextColor } from '@/lib/color-palette'
@@ -59,6 +60,8 @@ function extractText(node: unknown): string {
   if (typeof node === 'string') return node
   if (Array.isArray(node)) return node.map(extractText).join('')
   if (node && typeof node === 'object' && 'props' in node) {
+    const tex = mathText(node.props)
+    if (tex !== undefined) return tex
     return extractText((node as { props?: { children?: unknown } }).props?.children)
   }
   return ''
