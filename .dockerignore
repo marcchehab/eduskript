@@ -78,3 +78,8 @@ MIGRATION-VPS.md
 public/pyodide
 # Same for the Excalidraw fonts (~14 MB, Dockerfile stage `excalidraw-assets`).
 public/excalidraw
+
+# Local tooling, never needed in the image (.claude alone was 8.6 GB of build context)
+.claude
+playwright-report
+test-results
