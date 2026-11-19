@@ -102,6 +102,7 @@ export const sanitizeSchema = {
     'survey', // <Survey> region marker — wraps <Question>s for anonymous-submission flow
     'mermaid-diagram',
     'function-plot', // ```plot fence; body rides in data-spec
+    'tikz-figure', // ```tikz fence; body rides in data-source
     'molecule', // SMILES structural formula, rendered by /api/render/molecule.svg
     'audio', // <audio controls src="clip.mp3">; src resolved by filename in markdown-components AudioComponent
     'source', // <source src="clip.mp3"> inside <audio>; src resolved the same way
@@ -169,6 +170,7 @@ export const sanitizeSchema = {
     'flag-icon': ['dataCode', 'data-code'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'function-plot': ['dataSpec', 'data-spec'],
+    'tikz-figure': ['dataSource', 'data-source'],
     'molecule': ['smiles', 'name', 'width', 'height', 'display-width', 'displayWidth', 'align', 'wrap'],
     // autoplay/loop are known HTML media properties, so property-information
     // hands them over camelCased (autoPlay) and as booleans — allow both

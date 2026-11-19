@@ -239,6 +239,32 @@ Weil der Plot als statisches `<img>` gerendert wird, erfasst ein `<ai-feedback>`
 
 ---
 
+## TikZ-Diagramme
+
+Ein ```` ```tikz ````-Code-Block enthält ein TikZ-Bild: Zustandsdiagramme, Bänder, Bäume, Geometrie. TeX läuft auf dem Server (keine Installation nötig), das Ergebnis ist ein statisches Bild mit einer hellen und einer dunklen Variante. Es funktioniert auch in Callouts, Listen und `<flex-item>`.
+
+```tikz
+% alt: Automat mit zwei Zuständen
+\begin{tikzpicture}[auto, node distance=2.6cm]
+  \node[state, initial] (q0) {$q_0$};
+  \node[state, accepting, right=of q0] (q1) {$q_1$};
+  \path[->] (q0) edge[bend left] node {a} (q1)
+              (q1) edge[bend left] node {b} (q0);
+\end{tikzpicture}
+```
+
+- **Bibliotheken:** `automata`, `positioning`, `arrows.meta` und `calc` sind immer geladen. Für weitere steht eine Zeile `\usetikzlibrary{shapes.geometric}` irgendwo im Block. Die Bibliothek `patterns` (schraffierte Füllungen) wird nicht unterstützt: die Fläche bleibt leer.
+- **Pakete:** `\usepackage{...}` geht für amsmath, amssymb, amsfonts, amstext, array, pgfplots, tikz-cd, circuitikz, chemfig und tikz-3dplot. Andere Pakete gibt es nicht.
+- **Kurzform:** Ein Block ohne `\begin{tikzpicture}` wird in eine solche Umgebung gesetzt.
+- **Alt-Text und Bildunterschrift:** Kommentarzeilen `% alt: ...` und `% caption: ...`.
+- **Gemeinsame Präambel:** Lade eine Datei `tikz-preamble.tex` in die Dateien des Skripts. Sie wird jedem tikz-Block dieses Skripts vorangestellt und ist der Ort für `\definecolor`, `\tikzset`-Stile und `\newcommand`-Makros. Ein Block, der mit einem ihrer Makros beginnt (z.B. `\zd{...}`), wird unverändert verwendet.
+- **Dark Mode:** Schwarze Linien und Schrift werden hell, Weiss wird zur Seitenfarbe, helle Füllungen werden abgedunkelt. Andere Farben bleiben.
+- **Fehler:** Ein TeX-Fehler erscheint anstelle des Bildes, mit der Zeile, in der er auftrat.
+
+Die Schrift ist Computer Modern, Umlaute kannst du direkt tippen. Wie ein Plot ist das Bild ein `<img>`; `<ai-feedback>` erfasst es also zusammen mit darauf gezeichneten Stiftstrichen.
+
+---
+
 ## Plotten mit Python (matplotlib)
 
 Der native `plot`-Block oben deckt die meisten «zeichne diese Funktion»-Bedürfnisse ab. Für alles, was zuerst echte Berechnung braucht — Daten plotten, eine numerische Simulation, eine matplotlib-Figur mit Subplots — verwende stattdessen einen normalen Python-Editor:
@@ -310,6 +336,7 @@ Details und die durchsuchbare Auswahl: [PhET-Simulationen](https://eduskript.org
 | Theme-Farbe | `\textcolor{cyan}{x}` |
 | Kleiner Abstand | `\,` |
 | Nativer Funktionsplot | ` ```plot `-Code-Block |
+| TikZ-Diagramm | ` ```tikz `-Code-Block |
 | Python/matplotlib-Plot | ` ```python editor output-only ` |
 | GeoGebra-Applet | `<geogebra material-id="..." />` |
 | PhET-Simulation | `<phet sim="calculus-grapher" locale="de" />` |

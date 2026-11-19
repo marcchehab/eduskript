@@ -447,6 +447,7 @@ const FENCE_KINDS: Completion[] = [
   { label: 'python-check', type: 'keyword', info: 'Hidden asserts for a python editor: python-check for="id"', apply: 'python-check for=""', boost: 1 },
   { label: 'plot', type: 'keyword', info: 'Function plot from one entry per line', boost: 1 },
   { label: 'mermaid', type: 'keyword', info: 'Mermaid diagram', boost: 1 },
+  { label: 'tikz', type: 'keyword', info: 'TikZ picture, rendered on the server', boost: 1 },
   { label: 'expected', type: 'keyword', info: 'Expected output inside a <question type="text">' },
   ...['python', 'javascript', 'typescript', 'sql', 'html', 'css', 'json', 'yaml', 'java', 'cpp', 'rust', 'go', 'php', 'bash', 'markdown']
     .map((lang) => ({ label: lang, type: 'keyword', info: 'Syntax highlighting only' })),
@@ -515,6 +516,7 @@ const BLOCK_SNIPPETS: Completion[] = [
   { label: '```html editor', type: 'keyword', info: 'HTML with live preview', apply: '```html editor\n\n```' },
   { label: '```plot', type: 'keyword', info: 'Function plot', apply: '```plot\nx: -5..5\ngrid\nf(x) = x^2\n```' },
   { label: '```mermaid', type: 'keyword', info: 'Diagram from text', apply: '```mermaid\nflowchart TD\n    A --> B\n```' },
+  { label: '```tikz', type: 'keyword', info: 'TikZ picture', apply: '```tikz\n\\begin{tikzpicture}\n  \\draw[->] (0,0) -- (2,1);\n\\end{tikzpicture}\n```' },
   { label: '> [!note]', type: 'keyword', info: 'Callout', apply: '> [!note] ' },
   { label: '$$', type: 'keyword', info: 'Display math', apply: '$$\n\n$$' },
 ]
@@ -777,7 +779,7 @@ function fenceInfoCompletions(context: CompletionContext, info: string): Complet
           ...EDITOR_FLAGS.filter(f => f.label !== 'editor' && (lang === 'python' || !pythonOnly.has(f.label))),
         ]
       : [EDITOR_FLAGS[0], ...CODE_BLOCK_FLAGS]
-  } else if (lang === 'plot' || lang === 'mermaid' || lang === 'expected') return null
+  } else if (lang === 'plot' || lang === 'mermaid' || lang === 'tikz' || lang === 'expected') return null
   else flags = CODE_BLOCK_FLAGS
 
   // Don't offer what's already on the line.

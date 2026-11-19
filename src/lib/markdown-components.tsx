@@ -58,6 +58,10 @@ import { PricingTable } from '@/components/markdown/pricing-table'
 import { PingTerminal } from '@/components/markdown/ping-terminal'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
 import { FunctionPlot } from '@/components/markdown/function-plot'
+import { TikzServerFigure } from '@/components/markdown/tikz-image'
+import { TikzFigureClient } from '@/components/markdown/tikz-figure.client'
+import { TIKZ_PREAMBLE_FILE } from '@/lib/tikz/document'
+import type { TikzResult } from '@/lib/tikz/render.server'
 import { MoleculeDiagram } from '@/components/markdown/molecule'
 import { LoginCodes } from '@/components/markdown/login-codes'
 import { OnlyFor } from '@/components/markdown/only-for'
@@ -295,6 +299,7 @@ interface CreateMarkdownComponentsOptions {
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
   isExam?: boolean  // Exam page: hide code-block copy buttons by default
   pageLanguage?: string | null  // Site language (e.g. "de-CH"); default language of <newsletter>
+  tikzRender?: (source: string) => Promise<TikzResult>  // Server renderer only: runs TeX during the render; without it ```tikz blocks go through /api/tikz
 }
 
 /**
@@ -320,7 +325,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onYoutubeLayoutChange, onTagAttributeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues, pageLanguage } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onYoutubeStartTimeChange, onYoutubeLayoutChange, onTagAttributeChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues, pageLanguage, tikzRender } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -1049,6 +1054,11 @@ export function createMarkdownComponents(
     'function-plot': (props: { 'data-spec'?: string; dataSpec?: string }) => (
       <FunctionPlot spec={props['data-spec'] ?? props.dataSpec ?? ''} />
     ),
+    'tikz-figure': (props: { 'data-source'?: string; dataSource?: string }) => {
+      const source = props['data-source'] ?? props.dataSource ?? ''
+      if (tikzRender) return <TikzServerFigure source={source} render={tikzRender} />
+      return <TikzFigureClient source={source} skriptId={skriptId} preambleUrl={resolveFile(files, TIKZ_PREAMBLE_FILE)?.url} />
+    },
     'muxvideo': (props: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) => (
       <PrintFallback label="Video"><MuxVideoComponent {...props} /></PrintFallback>
     ),

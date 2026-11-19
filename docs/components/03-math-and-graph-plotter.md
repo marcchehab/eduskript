@@ -239,6 +239,32 @@ Because the plot renders as a static `<img>`, an `<ai-feedback>` tag placed belo
 
 ---
 
+## TikZ diagrams
+
+A ```` ```tikz ```` fenced code block holds a TikZ picture — state diagrams, tapes, trees, geometry. TeX runs on the server (no installation needed) and the result is a static image with a light and a dark variant. It works inside callouts, lists and `<flex-item>`.
+
+```tikz
+% alt: Automaton with two states
+\begin{tikzpicture}[auto, node distance=2.6cm]
+  \node[state, initial] (q0) {$q_0$};
+  \node[state, accepting, right=of q0] (q1) {$q_1$};
+  \path[->] (q0) edge[bend left] node {a} (q1)
+              (q1) edge[bend left] node {b} (q0);
+\end{tikzpicture}
+```
+
+- **Libraries:** `automata`, `positioning`, `arrows.meta` and `calc` are always loaded. For others, put a `\usetikzlibrary{shapes.geometric}` line anywhere in the block. The `patterns` library (hatched fills) is not supported: the area stays empty.
+- **Packages:** `\usepackage{...}` works for amsmath, amssymb, amsfonts, amstext, array, pgfplots, tikz-cd, circuitikz, chemfig and tikz-3dplot. Other packages are not available.
+- **Short form:** a block without `\begin{tikzpicture}` is wrapped in one.
+- **Alt text and caption:** comment lines `% alt: ...` and `% caption: ...`.
+- **Shared preamble:** upload a file named `tikz-preamble.tex` to the skript's files. It is put in front of every tikz block of that skript — the place for `\definecolor`, `\tikzset` styles and `\newcommand` macros. A block that starts with one of its macros (e.g. `\zd{...}`) is used as it is.
+- **Dark mode:** black lines and text turn light, white turns into the page colour and pale fills are dimmed. Other colours stay as they are.
+- **Errors:** a TeX error is shown in place of the picture, with the line it happened at.
+
+Text is set in Computer Modern, and umlauts can be typed directly. Like a plot, the picture is an `<img>`, so `<ai-feedback>` captures it together with pen strokes drawn on it.
+
+---
+
 ## Plotting with Python (matplotlib)
 
 The native `plot` block above covers most "graph this function" needs. For anything that needs real computation first — plotting data, a numerical simulation, a matplotlib figure with subplots — use a regular Python editor instead:
@@ -310,6 +336,7 @@ Details and the searchable picker: [PhET Simulations](https://eduskript.org/en/c
 | Themed color | `\textcolor{cyan}{x}` |
 | Small space | `\,` |
 | Native function plot | ` ```plot ` fenced block |
+| TikZ diagram | ` ```tikz ` fenced block |
 | Python/matplotlib plot | ` ```python editor output-only ` |
 | GeoGebra applet | `<geogebra material-id="..." />` |
 | PhET simulation | `<phet sim="calculus-grapher" locale="de" />` |

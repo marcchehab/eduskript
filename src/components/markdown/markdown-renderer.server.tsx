@@ -4,6 +4,7 @@ import { pageKaraClues } from '@/lib/kara/world'
 import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createEmptySkriptFiles, skriptFileNames } from '@/lib/skript-files'
 import { getSkriptFiles } from '@/lib/skript-files.server'
+import { renderTikzForSkript } from '@/lib/tikz/skript.server'
 import { extractStableLinkIds } from '@/lib/page-stable-link'
 import { resolveStableLinks } from '@/lib/page-stable-link.server'
 import { getPageNeighbours } from '@/lib/page-nav.server'
@@ -55,7 +56,7 @@ export async function ServerMarkdownRenderer({ content: rawContent, skriptId, pa
   const pageNav = skriptId && pageId && /<page-nav\b/.test(content) ? await getPageNeighbours(skriptId, pageId) : undefined
   // <evidence-board> shows the clue definitions of this page's levels.
   const karaClues = /<evidence-board\b/.test(content) ? pageKaraClues(content) : undefined
-  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam, pageNav, karaClues, pageLanguage })
+  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam, pageNav, karaClues, pageLanguage, tikzRender: (source) => renderTikzForSkript(source, files) })
 
   // 3. Pre-resolve `/p/{id}` stable links to canonical URLs in one batched
   //    DB query so public HTML ships with real hrefs. Done here (server) so

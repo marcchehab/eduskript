@@ -86,7 +86,7 @@ const MAX_REPARSE_GENERATIONS = 8
 const VERBATIM_TAGS = new Set([
   'code', 'pre', 'kbd', 'samp', 'script', 'style', 'textarea', 'title',
   'svg', 'math', 'iframe',
-  'plugin', 'kara-archive', 'code-editor', 'mermaid-diagram', 'function-plot',
+  'plugin', 'kara-archive', 'code-editor', 'mermaid-diagram', 'function-plot', 'tikz-figure',
   'ping', 'login-codes', 'leaderboard',
 ])
 
