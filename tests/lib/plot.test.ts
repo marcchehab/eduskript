@@ -151,7 +151,7 @@ describe('plot in the markdown pipeline', () => {
     expect(out).not.toContain('<code')
   })
 
-  it('works inside a callout, where mermaid still fails', async () => {
+  it('works inside a callout', async () => {
     const out = await html('> [!note] Title\n> ```plot\n> f(x) = x\n> ```')
     expect(out).toContain('data:image/svg+xml,')
   })

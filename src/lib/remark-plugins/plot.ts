@@ -20,7 +20,7 @@ interface ParentNode extends Node {
  * without any escaping dance — the reason plots are a fence and not a tag with
  * attributes.
  *
- * Unlike remarkMermaid this walks every container, so a plot inside a callout,
+ * This walks every container, so a plot inside a callout,
  * a list item or a <flex-item> is transformed too.
  *
  * Example:
