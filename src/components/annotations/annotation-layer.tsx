@@ -86,7 +86,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { AlertTriangle, User, Users, MessageSquare, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode, type CanvasStroke } from './simple-canvas'
@@ -131,6 +131,23 @@ import { clampZoom, pinchLeftDeadZone, pinchOrigin, pinchStep, recordEdit, stepH
 import { DEFAULT_PENS, loadPens, savePens, addPen, removePen, reorderPens, setPenColor, setPenSize, type PenConfig, type PenType } from '@/lib/annotations/pens'
 
 const log = createLogger('annotations:layer')
+
+// Pen takeover (first contact of a pen without hover draws, see the stylus
+// detection effect): elements where the first pen tap keeps its native
+// behaviour instead of starting a stroke.
+const PEN_TAKEOVER_SKIP = [
+  'a', 'button', 'input', 'textarea', 'select', 'label', 'summary', '[contenteditable]',
+  '[role="button"]', '[role="slider"]', '.cm-editor', 'code-editor', 'iframe', 'plugin',
+  '[data-sticky-note-id]', '[data-snap-id]',
+].join(', ')
+
+/** True when a pen pointerdown on `target` should start a stroke right away. */
+function penTakeoverTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element) || !target.closest('#paper')) return false
+  // On the canvas itself (a pen picked in the toolbar) SimpleCanvas already draws.
+  if (target.closest('.annotation-content-wrapper')) return false
+  return !target.closest(PEN_TAKEOVER_SKIP)
+}
 
 /** Ctrl/⌘+wheel zoom: commit the `zoom` state this long after the last wheel event. */
 const WHEEL_ZOOM_COMMIT_MS = 150
@@ -1472,9 +1489,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     const isReady = !annotationLoading && !snapsLoading && !snapOverridesLoading
 
     if (isReady) {
-      initialLoadTriggeredRef.current = true
-      // Small delay to ensure all data is processed before showing
+      // Small delay to ensure all data is processed before showing. The
+      // trigger flag is set when the timer FIRES: setting it here let a
+      // loading flag that flipped within the 50 ms clear the timer (cleanup)
+      // while the early return above blocked every re-run, so the canvas
+      // never mounted (pen selectable, nothing draws, until a lucky reload).
       const timer = setTimeout(() => {
+        initialLoadTriggeredRef.current = true
         setInitialLoadComplete(true)
       }, 50)
       return () => clearTimeout(timer)
@@ -1534,6 +1555,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   // Multi-finger tap in progress (stylus mode), and when a gesture last had
   // two or more fingers down (keeps stylus mode on, see handleDocumentTouch).
   const tapRef = useRef<TapGesture | null>(null)
+  const penTakeoverAtRef = useRef(0)
   const lastMultiTouchAtRef = useRef(0)
 
   // Canvas width matches paper width exactly including padding
@@ -3231,25 +3253,82 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
   }, [stylusModeActive, mode])
 
-  // Document-level stylus detection when not in stylus mode
+  // Document-level stylus detection when not in stylus mode.
+  //
+  // A hovering pen sends pointermove before it touches, so stylus mode is on
+  // (canvas has pointer-events) by the time it lands. A pen without hover
+  // (older Apple Pencil, most Android pens) first touches with the canvas
+  // still click-through: its pointerdown targets the page text. For that
+  // first contact on the paper (pen takeover):
+  //  1. flushSync turns stylus + draw mode on, so the canvas takes pointer
+  //     events before this event handler returns;
+  //  2. canvas.setPointerCapture moves the rest of this touch (moves, up) to
+  //     the canvas;
+  //  3. a copy of the pointerdown is dispatched on the canvas, so SimpleCanvas
+  //     starts the stroke at the contact point.
+  // The touchstart listener below stops the browser from scrolling/selecting
+  // with that touch. Interactive elements (PEN_TAKEOVER_SKIP) keep the old
+  // behaviour: the first tap only switches modes.
   useEffect(() => {
     if (stylusModeActive) return // Only listen when stylus mode is not active
 
     const handleDocumentPointer = (e: PointerEvent) => {
-      if (e.pointerType === 'pen') {
-        lastPenEventTimeRef.current = Date.now()
+      if (e.pointerType !== 'pen') return
+      lastPenEventTimeRef.current = Date.now()
+      const canvas = e.type === 'pointerdown' && penTakeoverTarget(e.target)
+        ? document.querySelector<HTMLCanvasElement>('#paper canvas.annotation-canvas')
+        : null
+      if (!canvas) {
         handleStylusDetected()
+        return
       }
+      e.preventDefault()
+      e.stopPropagation()
+      penTakeoverAtRef.current = Date.now()
+      flushSync(() => handleStylusDetected())
+      try {
+        canvas.setPointerCapture(e.pointerId)
+      } catch {
+        // Pointer no longer active (lifted already): nothing to draw
+        return
+      }
+      canvas.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, cancelable: true, composed: true,
+        pointerId: e.pointerId, pointerType: 'pen', isPrimary: e.isPrimary,
+        clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY,
+        pressure: e.pressure, tiltX: e.tiltX, tiltY: e.tiltY, twist: e.twist,
+        width: e.width, height: e.height, button: e.button, buttons: e.buttons,
+      }))
     }
 
-    // Listen for both hover (pointermove) and touch (pointerdown)
+    // Listen for both hover (pointermove) and touch (pointerdown). Capture
+    // phase, so the takeover runs before the page content sees the event.
     document.addEventListener('pointermove', handleDocumentPointer)
-    document.addEventListener('pointerdown', handleDocumentPointer)
+    document.addEventListener('pointerdown', handleDocumentPointer, { capture: true })
     return () => {
       document.removeEventListener('pointermove', handleDocumentPointer)
-      document.removeEventListener('pointerdown', handleDocumentPointer)
+      document.removeEventListener('pointerdown', handleDocumentPointer, { capture: true })
     }
   }, [stylusModeActive, handleStylusDetected])
+
+  // Pen takeover, part 2: no scrolling / text selection / callout for the
+  // touch the pen takeover drew with. pointerdown fires before touchstart
+  // (Safari and Chrome), so the takeover timestamp is set by now; iOS also
+  // marks the pencil touch as touchType 'stylus' (covers the opposite order).
+  // Non-passive on #paper only: finger scrolls starting on the paper wait for
+  // this (trivial) handler on the main thread.
+  useEffect(() => {
+    if (!paperElement) return
+    const handleTouchStart = (e: TouchEvent) => {
+      const recent = Date.now() - penTakeoverAtRef.current < 300
+      const stylus = !stylusModeActiveRef.current &&
+        Array.from(e.changedTouches).some(t => (t as Touch & { touchType?: string }).touchType === 'stylus') &&
+        penTakeoverTarget(e.target)
+      if (recent || stylus) e.preventDefault()
+    }
+    paperElement.addEventListener('touchstart', handleTouchStart, { passive: false })
+    return () => paperElement.removeEventListener('touchstart', handleTouchStart)
+  }, [paperElement])
 
   // Keep updating pen timestamp while drawing (stylus mode active)
   // This is handled directly in the canvas event handlers for better performance
@@ -3262,6 +3341,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     let hasSwitched = false
 
     const handleDocumentMouseMove = (e: PointerEvent) => {
+      // A hovering pen keeps the cooldown fresh. Some platforms (Chromium on
+      // Linux with a tablet) send a 'mouse' pointermove next to every pen
+      // hover move; without this the cooldown (only refreshed by canvas
+      // handlers while drawing) ran out mid-hover and stylus mode flipped off
+      // and on: crosshair flashing back to the arrow.
+      if (e.pointerType === 'pen') {
+        lastPenEventTimeRef.current = Date.now()
+        return
+      }
       if (e.pointerType === 'mouse') {
         const now = Date.now()
         const timeSinceLastPen = now - lastPenEventTimeRef.current
