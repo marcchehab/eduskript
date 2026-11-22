@@ -40,6 +40,7 @@
 
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { anchorDebugColor, anchorDebugEnabled } from '@/lib/annotations/anchor-debug'
 import { getSvgPathFromStroke, isHighlighterStroke, strokeOutline } from '@/lib/annotations/svg-path'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useZoom } from '@/contexts/zoom-context'
@@ -787,6 +788,8 @@ function SectionStrokeSvg({
   /** Lasso-selected strokes — get the `.annotation-selected` halo (globals.css). */
   selectedIds?: Set<string>
 }) {
+  // Anchor-group debug view (?anchordebug), see anchor-debug.ts.
+  const debugAnchors = anchorDebugEnabled()
   // Strokes drawn at different sectionOffsetY values (e.g. user drew, then layout
   // shifted, then drew again before saving) need their own translate so each lands
   // in section-local space.
@@ -852,7 +855,7 @@ function SectionStrokeSvg({
               key={p.id}
               transform={dy ? `translate(0 ${dy})` : undefined}
               d={p.d}
-              fill={p.color}
+              fill={(debugAnchors && anchorDebugColor(p.id)) || p.color}
               className={selectedIds?.has(p.id) ? 'annotation-selected' : undefined}
               opacity={p.id === hiddenId ? 0 : markedForDeletion?.has(p.id) ? 0.3 : 1}
             />

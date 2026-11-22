@@ -15,6 +15,32 @@ import { compileMarkdown, sanitizeSchema } from '@/lib/markdown-compiler'
 
 describe('Rehype Plugins', () => {
   describe('rehypeHeadingSectionIds', () => {
+    it('anchors top-level paragraphs and lists, not nested ones; inner blocks keep their ids', async () => {
+      const markdown = [
+        'Intro', '', '## Teil', '', 'Eins', '', '- a', '- b', '', '```py', 'x', '```', '', 'Zwei',
+        '', '> [!note] T', '> drin',
+      ].join('\n')
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkRehype, { allowDangerousHtml: true })
+        .use(rehypeRaw)
+        .use(rehypeSlug)
+        .use(rehypeHeadingSectionIds)
+      const hast: any = await processor.run(processor.parse(markdown))
+      const ids: string[] = []
+      const walk = (n: any) => {
+        const id = n.properties?.['data-section-id']
+        if (id && id !== 'paper-top') ids.push(id)
+        n.children?.forEach(walk)
+      }
+      walk(hast)
+      expect(ids).toEqual([
+        // The blockquote is plain here (no callout plugin in this pipeline).
+        'p@top#1', 'h2-@teil', 'p@h2-@teil#1', 'list@h2-@teil#1', 'pre@h2-@teil#1', 'p@h2-@teil#2',
+        'quote@h2-@teil#1',
+      ])
+    })
+
     it('numbers repeated plugins so each gets its own top and end anchor (legacy ids kept in the map)', async () => {
       const markdown = [
         '<plugin src="a/graph" id="one"></plugin>',
@@ -36,7 +62,8 @@ describe('Rehype Plugins', () => {
       const ids: string[] = []
       const walk = (n: any) => {
         const id = n.properties?.['data-section-id']
-        if (id && id !== 'paper-top') ids.push(id)
+        // Raw parse wraps each plugin in a top-level <p> (own anchor, p@top#n).
+        if (id && id !== 'paper-top' && !id.startsWith('p@')) ids.push(id)
         n.children?.forEach(walk)
       }
       walk(hast)

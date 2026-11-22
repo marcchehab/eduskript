@@ -75,6 +75,7 @@
 import { forwardPointer, pointerInputFrameAt } from '@/lib/plugin-pointer-forward'
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useState } from 'react'
 import { determineSectionFromY, liveSectionYShift, measureSectionOffsetY, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
+import { recordStrokeGroup, startStrokeGroup, type GroupStart } from '@/lib/annotations/anchor-debug'
 import { HIGHLIGHTER_OPACITY_LIGHT, strokeOutline } from '@/lib/annotations/svg-path'
 import { safeRandomUUID } from '@/lib/uuid'
 import {
@@ -118,6 +119,11 @@ const TELEMETRY_SAMPLE_RATE = 10
  * instead, so ink just under a plugin/callout/editor follows the content
  * below it when the element resizes. The sentinel sits after the margin, so
  * such strokes are stored with a small negative offset from their anchor.
+ * Without a sentinel: an enclosing anchor that contains the point wins (ink
+ * on list text below a code block inside that list), else the next anchor
+ * below (ink in the gap between two paragraphs follows the lower one, so a
+ * taller upper paragraph after a font-size change doesn't pull it into its
+ * text). Also stored with a negative offset.
  * The `-end` suffix is the convention of heading-section-ids.ts and
  * measureHeadingPositions; any other id is taken as-is from the DOM.
  *
@@ -128,6 +134,11 @@ export function pickAnchorElement(clientY: number, root: ParentNode): HTMLElemen
   let best: HTMLElement | null = null
   let bestTop = -Infinity
   let bestBottom = -Infinity
+  // Deepest anchor whose box contains the point; first anchor below it.
+  let inside: HTMLElement | null = null
+  let insideTop = -Infinity
+  let below: HTMLElement | null = null
+  let belowTop = Infinity
   for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-section-id]'))) {
     const r = el.getBoundingClientRect()
     if (r.top <= clientY && r.top >= bestTop) {
@@ -135,14 +146,66 @@ export function pickAnchorElement(clientY: number, root: ParentNode): HTMLElemen
       bestTop = r.top
       bestBottom = r.bottom
     }
+    if (r.top <= clientY && clientY < r.bottom && r.top >= insideTop) {
+      inside = el
+      insideTop = r.top
+    }
+    if (r.top > clientY && r.top < belowTop) {
+      below = el
+      belowTop = r.top
+    }
   }
   if (!best) return null
   if (bestBottom > bestTop && clientY >= bestBottom) {
     const id = best.getAttribute('data-section-id')
     const end = id ? root.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(`${id}-end`)}"]`) : null
     if (end) return end
+    return inside ?? below ?? best
   }
   return best
+}
+
+/**
+ * Stroke groups: a stroke that starts shortly after the previous one and
+ * close to it takes the previous stroke's anchor instead of picking its own,
+ * so a word, formula or arrow written across a block boundary stays on one
+ * anchor and moves as one piece when the text reflows (font size).
+ * Conditions (paper px / ms): starts at most STROKE_GROUP_MAX_GAP_MS after the
+ * previous stroke ended, its start point lies within STROKE_GROUP_MAX_DIST of
+ * the previous stroke's bounding box, and the group's height stays within
+ * STROKE_GROUP_MAX_HEIGHT (about a dozen lines), so continuous writing down a
+ * page does not chain everything onto the first block. Only decided at
+ * pointerdown; stored strokes are never re-anchored, and the group itself is
+ * not stored.
+ */
+export const STROKE_GROUP_MAX_GAP_MS = 1500
+export const STROKE_GROUP_MAX_DIST = 80
+export const STROKE_GROUP_MAX_HEIGHT = 500
+
+export interface LastStroke {
+  endAt: number
+  left: number
+  right: number
+  top: number
+  bottom: number
+  /** Vertical extent of the group the stroke belongs to. */
+  groupTop: number
+  groupBottom: number
+}
+
+/** 'join', or why the stroke starts a new group (shown by anchor-debug.ts). */
+export function strokeGroupDecision(last: LastStroke | null, x: number, y: number, now: number): 'join' | GroupStart {
+  if (!last) return 'first'
+  if (now - last.endAt > STROKE_GROUP_MAX_GAP_MS) return 'time'
+  const dx = Math.max(last.left - x, 0, x - last.right)
+  const dy = Math.max(last.top - y, 0, y - last.bottom)
+  if (Math.hypot(dx, dy) > STROKE_GROUP_MAX_DIST) return 'distance'
+  if (Math.max(last.groupBottom, y) - Math.min(last.groupTop, y) > STROKE_GROUP_MAX_HEIGHT) return 'height'
+  return 'join'
+}
+
+export function joinsStrokeGroup(last: LastStroke | null, x: number, y: number, now: number): boolean {
+  return strokeGroupDecision(last, x, y, now) === 'join'
 }
 
 /**
@@ -345,7 +408,14 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       paperTop: number | null
       shifts: number[]
       lastShift: number
+      /** Took the previous stroke's anchor (joinsStrokeGroup). */
+      grouped: boolean
+      /** Group number and why it started (anchor-debug.ts). */
+      group: number
+      groupStart: GroupStart
     } | null>(null)
+    // Previous committed stroke + its anchor, for joinsStrokeGroup.
+    const lastStrokeRef = useRef<(LastStroke & { sectionId: string; el: HTMLElement; group: number; groupStart: GroupStart }) | null>(null)
     const onLassoSelectRef = useRef(onLassoSelect)
     onLassoSelectRef.current = onLassoSelect
 
@@ -900,12 +970,19 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (currentModeRef.current === 'draw') {
         // Anchor from LIVE positions at pen-down. Falls back to the cached
         // headingPositions only when no section element is in the DOM.
+        // A stroke right after a nearby one joins its group: same anchor.
+        const last = lastStrokeRef.current?.el.isConnected ? lastStrokeRef.current : null
+        const decision = strokeGroupDecision(last, x, y, Date.now())
+        const grouped = decision === 'join'
+        const group = grouped ? last!.group : startStrokeGroup()
+        const groupStart = grouped ? last!.groupStart : (decision as GroupStart)
         const root: ParentNode = document.getElementById('paper') ?? document
-        const el = pickAnchorElement(e.clientY, root)
-        const sectionId =
-          el?.getAttribute('data-section-id') ||
-          determineSectionFromY(y, headingPositionsRef.current) ||
-          'paper-top'
+        const el = grouped ? last!.el : pickAnchorElement(e.clientY, root)
+        const sectionId = grouped
+          ? last!.sectionId
+          : el?.getAttribute('data-section-id') ||
+            determineSectionFromY(y, headingPositionsRef.current) ||
+            'paper-top'
         strokeAnchorRef.current = {
           el,
           sectionId,
@@ -913,6 +990,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           paperTop: measureSectionOffsetY(sectionId, (canvas.offsetParent as HTMLElement | null) ?? null),
           shifts: [0],
           lastShift: 0,
+          grouped,
+          group,
+          groupStart,
         }
       }
       if (currentModeRef.current === 'erase') {
@@ -1438,6 +1518,26 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           })
         }
 
+        // Remember this stroke for joinsStrokeGroup (paper coords, commit layout).
+        if (anchor?.el) {
+          let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity
+          for (const pt of currentPathRef.current) {
+            if (pt.x < left) left = pt.x
+            if (pt.x > right) right = pt.x
+            if (pt.y < top) top = pt.y
+            if (pt.y > bottom) bottom = pt.y
+          }
+          const prev = anchor.grouped ? lastStrokeRef.current : null
+          lastStrokeRef.current = {
+            endAt: strokeEndTime, left, right, top, bottom,
+            groupTop: prev ? Math.min(prev.groupTop, top) : top,
+            groupBottom: prev ? Math.max(prev.groupBottom, bottom) : bottom,
+            sectionId, el: anchor.el, group: anchor.group, groupStart: anchor.groupStart,
+          }
+        } else {
+          lastStrokeRef.current = null
+        }
+
         // Compute average position for stroke grouping and quick section lookups
         let avgX = 0, avgY = 0
         for (const pt of currentPathRef.current) {
@@ -1448,8 +1548,10 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         avgY /= pointCount
 
         // Save the path with all original points and pressure data intact
+        const strokeId = safeRandomUUID()
+        if (anchor) recordStrokeGroup(strokeId, anchor.group, anchor.groupStart)
         pathsRef.current.push({
-          id: safeRandomUUID(),
+          id: strokeId,
           points: currentPathRef.current,
           mode: currentModeRef.current,
           color: strokeColor,

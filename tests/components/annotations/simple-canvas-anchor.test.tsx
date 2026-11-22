@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, afterEach, afterAll, beforeAll } from 'vitest'
 import { render, fireEvent, cleanup } from '@testing-library/react'
-import { SimpleCanvas, pickAnchorElement, rebaseStrokePoints, type CanvasStroke } from '@/components/annotations/simple-canvas'
+import { SimpleCanvas, pickAnchorElement, rebaseStrokePoints, joinsStrokeGroup, STROKE_GROUP_MAX_GAP_MS, STROKE_GROUP_MAX_HEIGHT, type CanvasStroke, type LastStroke } from '@/components/annotations/simple-canvas'
 
 const fakeCtx = new Proxy({}, { get: () => () => {} })
 const getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
@@ -74,9 +74,24 @@ describe('pickAnchorElement', () => {
     expect(idAt(root, 530)).toBe('plugin-teacher-vektor-labor-end')
   })
 
-  it('without an -end sentinel a point below the element keeps the element', () => {
+  it('without an -end sentinel, ink in the gap below an element anchors to the next one', () => {
     const root = page()
-    expect(idAt(root, 150)).toBe('h2-intro')
+    expect(idAt(root, 150)).toBe('plugin-teacher-vektor-labor')
+  })
+
+  it('ink below a nested anchor but inside its container anchors to the container', () => {
+    const root = document.createElement('div')
+    section(root, 'list@top#1', { top: 0, height: 200 })
+    section(root, 'pre@top#1', { top: 50, height: 50 }) // inside the list
+    section(root, 'p@top#1', { top: 220, height: 40 })
+    expect(idAt(root, 60)).toBe('pre@top#1')
+    expect(idAt(root, 150)).toBe('list@top#1')
+    expect(idAt(root, 210)).toBe('p@top#1')
+  })
+
+  it('ink below the last element keeps the last element', () => {
+    const root = page()
+    expect(idAt(root, 700)).toBe('h2-subtraktion')
   })
 
   it('takes whatever id the element carries (no id format assumed)', () => {
@@ -193,5 +208,27 @@ describe('SimpleCanvas — anchor at pointerdown, layout shift during the stroke
     expect(s.sectionId).toBe('h2-subtraktion')
     expect(s.sectionOffsetY).toBe(793)
     expect(s.points.map(p => p.y - s.sectionOffsetY)).toEqual([20, 20, 20])
+  })
+})
+
+describe('joinsStrokeGroup', () => {
+  // Previous stroke: a word 100..200 x 300..320, ended at t=1000.
+  const last: LastStroke = { endAt: 1000, left: 100, right: 200, top: 300, bottom: 320, groupTop: 300, groupBottom: 320 }
+
+  it('joins a stroke that starts soon after and close by', () => {
+    expect(joinsStrokeGroup(last, 210, 310, 1500)).toBe(true) // next letter
+    expect(joinsStrokeGroup(last, 150, 345, 1500)).toBe(true) // just below
+  })
+
+  it('does not join after the time limit, when far away, or without a previous stroke', () => {
+    expect(joinsStrokeGroup(last, 210, 310, 1000 + STROKE_GROUP_MAX_GAP_MS + 1)).toBe(false)
+    expect(joinsStrokeGroup(last, 400, 310, 1500)).toBe(false)
+    expect(joinsStrokeGroup(null, 210, 310, 1500)).toBe(false)
+  })
+
+  it('stops a group from growing taller than STROKE_GROUP_MAX_HEIGHT', () => {
+    const tall = { ...last, top: 400, bottom: 420, groupTop: 400 - STROKE_GROUP_MAX_HEIGHT + 20, groupBottom: 420 }
+    expect(joinsStrokeGroup(tall, 150, 430, 1500)).toBe(false)
+    expect(joinsStrokeGroup({ ...tall, groupTop: tall.groupTop + 20 }, 150, 430, 1500)).toBe(true)
   })
 })

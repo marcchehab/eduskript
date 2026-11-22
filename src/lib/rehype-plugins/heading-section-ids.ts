@@ -39,6 +39,8 @@ export function stableHeadingSlug(text: string): string {
  * - table (tables)
  * - flex (side-by-side layout container) - subsumes its descendants
  * - solution - end sentinel only (see below)
+ * - other top-level blocks: p, ul/ol, h4-h6, blockquote, div (`p@<scope>#n`,
+ *   `list@…`, `h4@…`, `quote@…`, `block@…`; no legacy id)
  *
  * ID FORMAT (since 2026-11-19). New strokes store these:
  * - heading: `h2-@<slug>`; h3: `h3-@<h2 key>/<slug>` (scoped to the preceding
@@ -85,6 +87,11 @@ export function stableHeadingSlug(text: string): string {
  * passes title/teacher/children only), so there is no top anchor. Skipped
  * inside `<p>` (a div there is invalid HTML).
  */
+// Top-level blocks anchored by kind (see the last rule in the visitor).
+const ROOT_BLOCK_KIND: Record<string, string> = {
+  p: 'p', ul: 'list', ol: 'list', h4: 'h4', h5: 'h5', h6: 'h6', blockquote: 'quote', div: 'block',
+}
+
 export function rehypeHeadingSectionIds() {
   return (tree: Root) => {
     // Always-present synthetic "first section" at the top of the rendered
@@ -247,6 +254,21 @@ export function rehypeHeadingSectionIds() {
         if (p && typeof index === 'number' && !(p.type === 'element' && p.tagName === 'p')) {
           inserts.push({ parent: p, index, sectionId: blockId('solution') })
         }
+        return
+      }
+
+      // Other top-level blocks (since 2026-11-21, no legacy id): paragraphs,
+      // lists, h4-h6, plain blockquotes, divs (display-math wrapper from
+      // rehypeMathBlockWrapper, alignment divs). A stroke in a long text
+      // section anchors to the block it is drawn on, not the heading, so a
+      // different font size (text reflow) only moves it by the reflow inside
+      // that one block. Only direct children of the root: blocks inside
+      // callouts, lists or flex stay part of their container's anchor.
+      // Existing strokes keep their stored anchor. No SKIP: figures, code
+      // blocks etc. inside must still be visited, or their ids (and the
+      // legacy counters) would change.
+      if (p?.type === 'root' && ROOT_BLOCK_KIND[node.tagName]) {
+        node.properties['data-section-id'] = blockId(ROOT_BLOCK_KIND[node.tagName])
         return
       }
     })

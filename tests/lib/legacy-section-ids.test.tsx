@@ -186,8 +186,9 @@ describe.each([
     const map = legacyMapOf(newTree)
 
     const oldAnchors = anchors(oldTree)
-    // New since 2026-11-19, no legacy counterpart: <solution> end sentinels.
-    const newAnchors = anchors(newTree).filter(([, id]) => !id.startsWith('solution@'))
+    // No legacy counterpart: <solution> end sentinels (since 2026-11-19),
+    // top-level paragraphs and lists (since 2026-11-21).
+    const newAnchors = anchors(newTree).filter(([, id]) => !/^(solution|p|list)@/.test(id))
 
     expect(newAnchors.length).toBe(oldAnchors.length)
     oldAnchors.forEach(([tag, legacyId], i) => {

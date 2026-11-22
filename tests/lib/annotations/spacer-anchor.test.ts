@@ -134,8 +134,10 @@ describe('new spacers keep their block when the teacher edits', () => {
     const before = blockChildren(await render(md))
     const i = before.findIndex(b => b.textContent === 'three')
     const s = spacer({ afterBlockIndex: i, ...computeSpacerAnchor(before, i) })
-    expect(s.anchorSectionId).toBe('h2-@a')
-    expect(s.anchorBlockOffset).toBe(3)
+    // Paragraphs are anchors themselves (since 2026-11-21); p@h2-@a#3 is
+    // "two" after the insert, so the text match has to correct it.
+    expect(s.anchorSectionId).toBe('p@h2-@a#3')
+    expect(s.anchorBlockOffset).toBe(0)
     const after = blockChildren(await render(md.replace('one', 'zero\n\none')))
     expect(after[resolveSpacerBlockIndex(after, s)].textContent).toBe('three')
   })

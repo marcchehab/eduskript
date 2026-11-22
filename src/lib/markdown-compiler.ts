@@ -60,11 +60,13 @@ export { remarkPlugins }
 // explicitly (with the map) after this list.
 export const rehypePlugins: PluggableList = [
   rehypeSlug,
-  rehypeHeadingSectionIds,
-  rehypeColorTitle,
   // Must run BEFORE rehypeKatex: preserves block-math source positions in a
   // wrapper div for the editor↔preview cursor sync (see source-line.ts).
+  // Also before rehypeHeadingSectionIds, which anchors that wrapper (KaTeX
+  // replaces the <pre> inside, so an id on the <pre> would be lost).
   rehypeMathBlockWrapper,
+  rehypeHeadingSectionIds,
+  rehypeColorTitle,
   rehypeKatex,
   // Must run AFTER rehypeKatex so it can rewrite the spans KaTeX emits for
   // \textcolor{NAME}{…} into themed class names.
