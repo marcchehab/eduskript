@@ -145,6 +145,7 @@
       keyInput.type = 'text'; keyInput.removeAttribute('min'); keyInput.removeAttribute('max');
       keyInput.value = 'PYTHON'; keyLabel.textContent = STRINGS[lang].vigenereKey;
     }
+    applyTheme(isDark ? 'dark' : 'light');
     compute();
   }
 
