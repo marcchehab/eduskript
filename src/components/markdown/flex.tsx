@@ -24,7 +24,7 @@ interface FlexItemProps {
   children: ReactNode
   className?: string
   style?: CSSProperties
-  width?: string
+  width?: string | number
   grow?: boolean | string
   // Editor preview cursor-sync + section attrs survive component substitution.
   'data-source-line-start'?: string
@@ -39,7 +39,10 @@ interface FlexItemProps {
  * exactly at any container width and any item count (33/33/34), and 50% x 4
  * still wraps into 2 x 2. Other units (px, rem) pass through unchanged.
  */
-function itemWidth(width: string): string {
+function itemWidth(raw: string | number): string {
+  // hast parses a purely numeric width attribute (width="30", e.g. mid-typing
+  // in the editor) into a number; treat that as px like HTML does.
+  const width = typeof raw === 'number' ? `${raw}px` : String(raw)
   const percent = width.trim().match(/^(\d+(?:\.\d+)?)%$/)?.[1]
   if (percent === undefined) return width
   return `calc(${percent}% - var(--flex-gap, 0px) * ${1 - Number(percent) / 100})`
@@ -51,10 +54,12 @@ function itemWidth(width: string): string {
  * space equally regardless of content length (otherwise flex-grow sizes from
  * intrinsic content width first and you get lopsided columns).
  */
-export function FlexItem({ children, className, style, width, grow = true, ...dataAttrs }: FlexItemProps) {
+export function FlexItem({ children, className, style, width, grow, ...dataAttrs }: FlexItemProps) {
   // Markdown passes attributes as raw strings (e.g. grow="false"), which is
-  // truthy in JS — coerce before using as a boolean.
-  const doesGrow = typeof grow === 'string' ? grow !== 'false' : grow
+  // truthy in JS — coerce before using as a boolean. An item with a width keeps
+  // it (no grow) unless grow is set explicitly; otherwise it also took a share
+  // of the free space and width="30%" next to a plain item ended up ~65%.
+  const doesGrow = grow === undefined ? !width : typeof grow === 'string' ? grow !== 'false' : grow
   return (
     <div
       className={cn(
