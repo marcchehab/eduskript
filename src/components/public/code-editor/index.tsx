@@ -1122,6 +1122,12 @@ export const CodeEditor = memo(function CodeEditor({
     if (canvasRef.current) void getComputedStyle(canvasRef.current).transform
     instantTransformRef.current = false
   }, [canvasTransform])
+  // Remember the view while a turtle canvas is shown (pans, zooms, "Show
+  // everything"), so the next run starts from it (centerTurtleOrigin).
+  // In memory only: a page reload centres the origin again.
+  useEffect(() => {
+    if (canvasRef.current?.querySelector(':scope > canvas')) turtleViewRef.current = canvasTransform
+  }, [canvasTransform])
 
   // Store the original initial files for reset functionality
   // This is the source of truth from the markdown and should never change
@@ -1365,6 +1371,8 @@ export const CodeEditor = memo(function CodeEditor({
   // Cleared after the commit (layout effect next to canvasTransform), so
   // later pans / "Show everything" animate again.
   const instantTransformRef = useRef(false)
+  // Last view on a turtle canvas in this editor; null until the first run.
+  const turtleViewRef = useRef<{ x: number; y: number; scale: number } | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const outputPanelRef = useRef<HTMLDivElement>(null)
 
@@ -4102,14 +4110,15 @@ export const CodeEditor = memo(function CodeEditor({
     if (!container) return
     const { width, height } = container.getBoundingClientRect()
     if (!width || !height) return
-    const next = { x: (width - TURTLE_CANVAS_SIZE) / 2, y: (height - TURTLE_CANVAS_SIZE) / 2, scale: 1 }
+    // Keep the user's pan/zoom from the previous run; centre on the first one.
+    const next = turtleViewRef.current ?? { x: (width - TURTLE_CANVAS_SIZE) / 2, y: (height - TURTLE_CANVAS_SIZE) / 2, scale: 1 }
     // Also write the style directly: React commits the state a little later,
     // and Skulpt may append its canvas before that (it then showed for a
     // frame at the old transform). Same value as the render below.
     const el = canvasRef.current
     if (el) {
       el.style.transition = 'none'
-      el.style.transform = `translate(${next.x}px, ${next.y}px) scale(1)`
+      el.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.scale})`
     }
     instantTransformRef.current = true
     setCanvasTransform(next)
