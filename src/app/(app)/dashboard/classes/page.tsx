@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import {
   Plus,
   Users,
@@ -16,7 +15,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Upload,
   AlertCircle,
   CheckCircle,
   ArrowUpDown,
@@ -111,7 +109,7 @@ export default function ClassesPage() {
   // Per-class state for bulk import
   const [emailInputs, setEmailInputs] = useState<Record<string, string>>({})
   const [importing, setImporting] = useState<Record<string, boolean>>({})
-  // "Send invite emails" checkbox next to Add Students (default on; per class)
+  // "Also send them an email with the class link" checkbox next to Add (default on; per class)
   const [sendInvitesOnAdd, setSendInvitesOnAdd] = useState<Record<string, boolean>>({})
   const [sendingInvites, setSendingInvites] = useState<Record<string, boolean>>({})
 
@@ -529,42 +527,11 @@ export default function ClassesPage() {
     }
   }
 
-  const handleToggleAnonymous = async (classId: string, allowAnonymous: boolean) => {
-    try {
-      setUpdatingAnonymous({ ...updatingAnonymous, [classId]: true })
-
-      const response = await fetch(`/api/classes/${classId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ allowAnonymous }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update class')
-      }
-
-      // Update local state
-      setClasses((prev) =>
-        prev.map((c) =>
-          c.id === classId ? { ...c, allowAnonymous } : c
-        )
-      )
-    } catch (error) {
-      console.error('Error updating class:', error)
-      setDialogType('error')
-      setDialogTitle('Failed to Update')
-      setDialogMessage('Could not update the anonymous students setting. Please try again.')
-      setDialogOpen(true)
-    } finally {
-      setUpdatingAnonymous({ ...updatingAnonymous, [classId]: false })
-    }
-  }
-
   /**
-   * PATCH join settings (nicknameLogin, shortInviteCode) and take over what the
-   * server returns: turning nickname login on also turns allowAnonymous on.
+   * PATCH join settings (allowAnonymous, nicknameLogin, shortInviteCode) and take
+   * over what the server returns: the route keeps the two flags consistent.
    */
-  const patchJoinSettings = async (classId: string, body: { nicknameLogin?: boolean; shortInviteCode?: boolean }) => {
+  const patchJoinSettings = async (classId: string, body: { allowAnonymous?: boolean; nicknameLogin?: boolean; shortInviteCode?: boolean }) => {
     try {
       setUpdatingAnonymous((prev) => ({ ...prev, [classId]: true }))
       const response = await fetch(`/api/classes/${classId}`, {
@@ -929,113 +896,97 @@ export default function ClassesPage() {
                         {/* Exams: status counts + link to grading */}
                         <ClassExams classId={classItem.id} />
 
-                        {/* Add Students Section */}
+                        {/* How students join: one choice instead of the two
+                            switches allowAnonymous + nicknameLogin (the PATCH route
+                            keeps them consistent). 'email' = only pre-authorized
+                            emails can join (join route); 'link' = anyone with the
+                            link signs in with email or Microsoft; 'nickname' =
+                            src/lib/nickname-login.ts. */}
                         <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-base font-semibold flex items-center gap-2">
-                              <Upload className="w-4 h-4" />
-                              Add Students
-                            </Label>
+                          <Label className="text-base font-semibold">How do students join?</Label>
+                          <div className="space-y-1 text-sm">
+                            {([
+                              ['email', 'Only students I add by email'],
+                              ['link', 'With the class link: sign in with email or Microsoft'],
+                              ['nickname', 'With the class link: pick a nickname + password'],
+                            ] as const).map(([value, label]) => {
+                              const current = !classItem.allowAnonymous ? 'email' : classItem.nicknameLogin ? 'nickname' : 'link'
+                              return (
+                                <label key={value} className="flex items-center gap-2 cursor-pointer py-0.5">
+                                  <input
+                                    type="radio"
+                                    name={`join-mode-${classItem.id}`}
+                                    className="accent-primary"
+                                    checked={current === value}
+                                    disabled={updatingAnonymous[classItem.id]}
+                                    onChange={() =>
+                                      patchJoinSettings(
+                                        classItem.id,
+                                        value === 'email'
+                                          ? { allowAnonymous: false }
+                                          : value === 'link'
+                                            ? { allowAnonymous: true, nicknameLogin: false }
+                                            : { nicknameLogin: true }
+                                      )
+                                    }
+                                  />
+                                  {label}
+                                </label>
+                              )
+                            })}
                           </div>
-                          {/* Join settings. The question sits above the text that
-                              depends on it, and both texts take two lines, so
-                              switching moves nothing (the switch used to sit at the
-                              card bottom and jump under the cursor). No = only
-                              students whose email the teacher added can join (join
-                              route, pre-authorization); they get the invitation on
-                              sign-in (ClassInvitationModal). */}
-                          <div className="rounded-md border bg-muted/40 text-sm">
-                            <div className="flex items-center justify-between gap-4 px-3 py-2 border-b">
-                              <label htmlFor={`anonymous-${classItem.id}`}>
-                                Can students join this class anonymously?
-                              </label>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium w-7 text-right">
-                                  {classItem.allowAnonymous ? 'Yes' : 'No'}
+
+                          {classItem.allowAnonymous && (
+                            <div className="space-y-2 pl-6">
+                              <p className="text-sm font-medium">Class link</p>
+                              <div className="flex items-stretch rounded-md border overflow-hidden max-w-xl">
+                                <span className="flex-1 px-3 py-2 font-mono text-sm truncate bg-muted/40">
+                                  {typeof window !== 'undefined' ? window.location.host : ''}/join/{classItem.inviteCode}
                                 </span>
-                                <Switch
-                                  id={`anonymous-${classItem.id}`}
-                                  checked={classItem.allowAnonymous}
-                                  onCheckedChange={(checked) => handleToggleAnonymous(classItem.id, checked)}
-                                  disabled={updatingAnonymous[classItem.id]}
-                                />
-                              </div>
-                            </div>
-                            <div className="p-3 flex items-center justify-between gap-3 min-h-[4.5rem]">
-                              <p className="text-muted-foreground">
-                                {classItem.allowAnonymous ? (
-                                  <>Share the invite link, or add school emails below. Students not on your list join with a pseudonym.</>
-                                ) : (
-                                  <>Only students you add below can join. They see the invitation when they sign in.</>
-                                )}
-                              </p>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="shrink-0 w-40"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (classItem.allowAnonymous) {
-                                    copyInviteLink(classItem.inviteCode)
-                                  } else {
-                                    navigator.clipboard.writeText(`${window.location.origin}/auth/signin`)
-                                    setCopiedCode(`signin-${classItem.id}`)
-                                    setTimeout(() => setCopiedCode(null), 2000)
-                                  }
-                                }}
-                              >
-                                {copiedCode === (classItem.allowAnonymous ? classItem.inviteCode : `signin-${classItem.id}`) ? (
-                                  <Check className="w-4 h-4 mr-1 text-green-600" />
-                                ) : (
-                                  <LinkIcon className="w-4 h-4 mr-1" />
-                                )}
-                                {classItem.allowAnonymous ? 'Copy invite link' : 'Copy sign-in link'}
-                              </Button>
-                            </div>
-                            {classItem.allowAnonymous && (
-                              <>
-                                <div className="flex items-center justify-between gap-4 px-3 py-2 border-t">
-                                  <label htmlFor={`nickname-${classItem.id}`}>
-                                    Can students join without email (nickname + password)?
-                                  </label>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium w-7 text-right">
-                                      {classItem.nicknameLogin ? 'Yes' : 'No'}
-                                    </span>
-                                    <Switch
-                                      id={`nickname-${classItem.id}`}
-                                      checked={!!classItem.nicknameLogin}
-                                      onCheckedChange={(checked) => patchJoinSettings(classItem.id, { nicknameLogin: checked })}
-                                      disabled={updatingAnonymous[classItem.id]}
-                                    />
-                                  </div>
-                                </div>
-                                <div className="px-3 pb-3 space-y-2">
-                                  <p className="text-muted-foreground">
-                                    Join link:{' '}
-                                    <span className="font-mono text-foreground">{typeof window !== 'undefined' ? window.location.host : ''}/join/{classItem.inviteCode}</span>
-                                    {classItem.nicknameLogin && <> · Students pick a nickname and password there and sign in again with them on any device. You can reset passwords below.</>}
-                                  </p>
-                                  {classItem.inviteCode.length > 6 && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      disabled={updatingAnonymous[classItem.id]}
-                                      onClick={() =>
-                                        dialog.showConfirm(
-                                          'Replace the invite code with a short 6-character one? The current invite link stops working.',
-                                          () => patchJoinSettings(classItem.id, { shortInviteCode: true }),
-                                          { title: 'Shorter invite code', confirmText: 'Replace' }
-                                        )
-                                      }
-                                    >
-                                      Use a shorter code
-                                    </Button>
+                                <button
+                                  type="button"
+                                  className="px-3 border-l text-sm flex items-center gap-1 hover:bg-muted"
+                                  onClick={() => copyInviteLink(classItem.inviteCode)}
+                                >
+                                  {copiedCode === classItem.inviteCode ? (
+                                    <Check className="w-4 h-4 text-green-600" />
+                                  ) : (
+                                    <LinkIcon className="w-4 h-4" />
                                   )}
-                                </div>
-                              </>
-                            )}
-                          </div>
+                                  Copy
+                                </button>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {classItem.nicknameLogin
+                                  ? 'Students open the link and pick a nickname and password. With them they sign in again on any device. Forgotten passwords: reset below.'
+                                  : 'Students open the link and sign in. They are in the class.'}
+                              </p>
+                              {classItem.inviteCode.length > 6 && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={updatingAnonymous[classItem.id]}
+                                  onClick={() =>
+                                    dialog.showConfirm(
+                                      'Replace the link with a shorter one? The current link stops working.',
+                                      () => patchJoinSettings(classItem.id, { shortInviteCode: true }),
+                                      { title: 'Shorten link', confirmText: 'Shorten' }
+                                    )
+                                  }
+                                >
+                                  Shorten link
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Pre-authorize emails (join route checks them); the
+                            email with a join link is optional. */}
+                        <div className="space-y-2">
+                          <Label className="text-base font-semibold">
+                            Add students by email{classItem.allowAnonymous ? ' (optional)' : ''}
+                          </Label>
                           <Textarea
                             value={emailInputs[classItem.id] || ''}
                             onChange={(e) =>
@@ -1044,22 +995,22 @@ export default function ClassesPage() {
                                 [classItem.id]: e.target.value,
                               })
                             }
-                            placeholder="Paste text containing student emails (formatting doesn't matter much, we usually find them)"
-                            rows={4}
+                            placeholder="Paste text with student emails (formatting doesn't matter, we find them)"
+                            rows={3}
                             className="font-mono text-sm"
                           />
+                          <p className="text-sm text-muted-foreground">
+                            They join when they sign in with that email. The addresses are not stored on the server.
+                          </p>
                           <div className="flex items-center justify-between gap-4">
-                            <p className="text-xs text-muted-foreground">
-                              Students see the class invitation when they sign in. With invite emails on, each address also gets a one-click join link (the address is not stored on the server). Enrolled students who shared their identity are highlighted below.
-                            </p>
-                            <label className="flex items-center gap-2 text-sm shrink-0 cursor-pointer">
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
                               <Checkbox
                                 checked={sendInvitesOnAdd[classItem.id] ?? true}
                                 onCheckedChange={(checked) =>
                                   setSendInvitesOnAdd({ ...sendInvitesOnAdd, [classItem.id]: checked === true })
                                 }
                               />
-                              Send invite emails
+                              Also send them an email with the class link
                             </label>
                             <Button
                               onClick={() => handleAddStudents(classItem.id)}
@@ -1068,7 +1019,7 @@ export default function ClassesPage() {
                               }
                               size="sm"
                             >
-                              {importing[classItem.id] ? 'Adding...' : 'Add Students'}
+                              {importing[classItem.id] ? 'Adding...' : 'Add'}
                             </Button>
                           </div>
                         </div>
@@ -1083,8 +1034,8 @@ export default function ClassesPage() {
                           {students.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-4">
                               {classItem.allowAnonymous
-                                ? 'No students enrolled yet. Add student emails above or share the invite link.'
-                                : 'No students enrolled yet. Add student emails above; students join when they sign in.'}
+                                ? 'No students yet. Share the class link.'
+                                : 'No students yet. Add their emails above.'}
                             </p>
                           ) : (
                             <div className="border rounded-lg overflow-hidden">
