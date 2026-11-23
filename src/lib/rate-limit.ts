@@ -98,6 +98,17 @@ export class RateLimiter {
   }
 
   /**
+   * Seconds until the identifier may try again, or 0 if it is not blocked.
+   * Does not count as a request (for limits that only count failures).
+   */
+  blockedFor(identifier: string): number {
+    const entry = store[`${this.name}:${identifier}`]
+    const now = Date.now()
+    if (!entry || entry.resetAt < now || entry.count < this.options.maxRequests) return 0
+    return Math.ceil((entry.resetAt - now) / 1000)
+  }
+
+  /**
    * Resets the rate limit for an identifier (use carefully!)
    * @param identifier - Unique identifier to reset
    */

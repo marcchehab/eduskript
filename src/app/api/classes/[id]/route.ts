@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { generateInviteCode } from '@/lib/invite-code'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { eventBus } from '@/lib/events'
 import { archiveClassExams } from '@/lib/exam-records'
@@ -42,15 +43,17 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { name, description, allowAnonymous, lockdownMode, archived } = body
+    const { name, description, allowAnonymous, nicknameLogin, lockdownMode, archived, shortInviteCode } = body
 
     // Build update data
     const updateData: {
       name?: string
       description?: string | null
       allowAnonymous?: boolean
+      nicknameLogin?: boolean
       lockdownMode?: boolean
       archivedAt?: Date | null
+      inviteCode?: string
     } = {}
 
     if (name !== undefined) {
@@ -66,6 +69,20 @@ export async function PATCH(
 
     if (allowAnonymous !== undefined) {
       updateData.allowAnonymous = allowAnonymous === true
+      // Nickname login is a way of joining anonymously (src/lib/nickname-login.ts).
+      if (!updateData.allowAnonymous) updateData.nicknameLogin = false
+    }
+
+    if (nicknameLogin !== undefined && updateData.nicknameLogin === undefined) {
+      updateData.nicknameLogin = nicknameLogin === true
+      if (updateData.nicknameLogin) updateData.allowAnonymous = true
+    }
+
+    // Replace an older 16-character code with a short one. The old invite
+    // link stops working. A collision with another class's code (31^6 codes)
+    // is not retried: the update fails with 500 and the teacher clicks again.
+    if (shortInviteCode === true) {
+      updateData.inviteCode = generateInviteCode()
     }
 
     if (lockdownMode !== undefined) {
@@ -122,6 +139,7 @@ export async function PATCH(
         description: updatedClass.description,
         inviteCode: updatedClass.inviteCode,
         allowAnonymous: updatedClass.allowAnonymous,
+        nicknameLogin: updatedClass.nicknameLogin,
         lockdownMode: updatedClass.lockdownMode,
         archivedAt: updatedClass.archivedAt,
         memberCount: updatedClass._count.memberships,

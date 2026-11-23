@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
-import { randomBytes } from 'crypto'
+import { generateInviteCode } from '@/lib/invite-code'
 
 // GET /api/classes - List teacher's classes
 export async function GET(request: NextRequest) {
@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
         description: c.description,
         inviteCode: c.inviteCode,
         allowAnonymous: c.allowAnonymous,
+        nicknameLogin: c.nicknameLogin,
         lockdownMode: c.lockdownMode,
         archivedAt: c.archivedAt,
         memberCount: c._count.memberships,
@@ -141,13 +142,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Class name is required' }, { status: 400 })
     }
 
-    // Generate a unique invite code (16-character hex)
+    // Generate a unique invite code (6 characters, src/lib/invite-code.ts)
     let inviteCode: string
     let attempts = 0
     const maxAttempts = 5
 
     while (attempts < maxAttempts) {
-      inviteCode = randomBytes(8).toString('hex')
+      inviteCode = generateInviteCode()
 
       // Check if code already exists
       const existing = await prisma.class.findUnique({

@@ -52,6 +52,7 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'Oktober 2026', change: 'Abschnitt «Technische Daten»: IP-Hash beim Import von Dokumenten ohne Konto ergänzt.' },
   { date: 'Oktober 2026', change: 'Sicherungen genauer beschrieben: Dateien werden neu jede Nacht verschlüsselt in Winterthur gesichert, gelöschte Dateien bleiben dort höchstens 30 Tage. Aufbewahrung der Datenbank-Sicherungen präzisiert (auf dem Server rund 14 Tage, verschlüsselt in Winterthur höchstens 6 Monate).' },
   { date: 'November 2026', change: 'Anmeldung per E-Mail-Code und Klasseneinladungen per E-Mail ergänzt. Dafür gehen E-Mails auch an Schülerinnen und Schüler (SMTP über Infomaniak); ihre Adresse wird weiterhin nicht gespeichert, nur das Pseudonym.' },
+  { date: 'November 2026', change: 'Klassen mit Nickname-Anmeldung ergänzt: Schülerinnen und Schüler treten mit selbst gewähltem Spitznamen und Passwort bei, ohne E-Mail-Adresse. Das Konto wird mit der Klasse gelöscht.' },
   { date: 'Oktober 2026', change: 'Brevo entfernt. E-Mails an Lehrpersonen gehen per SMTP über Infomaniak in der Schweiz, ohne Öffnungs- oder Klick-Tracking. Produkt-Updates für neue Lehrpersonen nur mit Einwilligung; bestehende können sich jederzeit abmelden. Besucherinnen und Besucher ohne Konto können Produkt-Updates mit ihrer E-Mail-Adresse abonnieren (mit Bestätigung per Mail).' },
 ]
 
@@ -193,6 +194,19 @@ export default function DatenschutzPage() {
               spätestens nach 10 Minuten (Code) bzw. 14 Tagen (Einladung)
               gelöscht werden. Wer in einer Einladung «Keine Einladungen mehr»
               wählt, wird mit dem Pseudonym auf eine Sperrliste gesetzt.
+            </p>
+            <p className="mt-2">
+              <strong>Nickname-Anmeldung:</strong> In Klassen, in denen die
+              Lehrperson sie einschaltet, treten Schülerinnen und Schüler ohne
+              E-Mail-Adresse bei: mit einem selbst gewählten Spitznamen und
+              einem Passwort. Gespeichert werden der Spitzname, das Passwort
+              als Hash (bcrypt) und die Arbeitsdaten; es gibt keine E-Mail-Adresse
+              und keine Kennung eines Anmeldedienstes. Wir empfehlen, keinen
+              echten Namen als Spitznamen zu wählen. Ein solches Konto gehört
+              zu genau einer Klasse: Löscht die Lehrperson die Klasse oder
+              entfernt sie die Schülerin oder den Schüler, wird das Konto mit
+              allen Arbeitsdaten gelöscht. Ist die Klasse archiviert, ist keine
+              Anmeldung mehr möglich.
             </p>
 
             <h3 className={h3}>Technische Daten</h3>

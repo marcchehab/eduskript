@@ -41,6 +41,13 @@ export async function POST(req: NextRequest) {
 
   const { name } = parsed.data
 
+  // Nickname accounts (src/lib/nickname-login.ts) sign in with their nickname;
+  // renaming here would leave `name` and the sign-in nickname apart.
+  const own = await prisma.user.findUnique({ where: { id: session.user.id }, select: { nicknameClassId: true } })
+  if (own?.nicknameClassId) {
+    return NextResponse.json({ error: 'You sign in with this nickname, so it cannot be changed.' }, { status: 409 })
+  }
+
   await prisma.user.update({
     where: { id: session.user.id },
     data: { name },

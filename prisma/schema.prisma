@@ -113,6 +113,12 @@ model User {
   // during an exam (device crash). Flagged so the toolbar can offer "Transfer
   // answers" to the student's real account afterwards. See exam-recovery / transfer route.
   isTemporary             Boolean   @default(false) @map("is_temporary")
+  // Nickname student (src/lib/nickname-login.ts): no email, signs in with class
+  // code + nickname + password. Lives and dies with its class (cascade).
+  // nickname = lowercased, unique per class; the typed spelling is in `name`.
+  nickname                String?
+  nicknameClassId         String?   @map("nickname_class_id")
+  nicknameClass           Class?    @relation("NicknameStudents", fields: [nicknameClassId], references: [id], onDelete: Cascade)
   gdprConsentAt           DateTime? // Timestamp of GDPR consent acceptance
   // Product-update mails (src/lib/product-updates/*). Opt-in only: false by
   // default, set at signup (unchecked checkbox), in account settings, or via the
@@ -238,6 +244,7 @@ model User {
   pluginTemplates PluginTemplate[]
 
   @@unique([oauthProvider, oauthProviderId]) // Students identified by OAuth provider
+  @@unique([nicknameClassId, nickname])
   @@map("users")
 }
 
@@ -697,6 +704,9 @@ model Class {
   // Exam Browser to view the teacher's site. Enforced client-side via middleware
   // gate (src/proxy.ts → /api/internal/check-lockdown). Anonymous visitors bypass.
   lockdownMode   Boolean   @default(false) @map("lockdown_mode")
+  // Students without email join via /join/<code> with nickname + password
+  // (src/lib/nickname-login.ts). Only offered together with allowAnonymous.
+  nicknameLogin  Boolean   @default(false) @map("nickname_login")
   // Archived (src/lib/exam-records.ts): read-only, hidden from class pickers
   // and students, its exams copied into ExamRecord. null = active.
   archivedAt     DateTime? @map("archived_at")
@@ -712,6 +722,7 @@ model Class {
   preAuthorizedStudents PreAuthorizedStudent[]
   pageUnlocks           PageUnlock[]           @relation("ClassUnlocks") // Pages unlocked for this class
   examStates            ExamState[]            @relation("ClassExamStates") // Exam states per class
+  nicknameStudents      User[]                 @relation("NicknameStudents")
 
   @@index([teacherId])
   @@index([inviteCode])

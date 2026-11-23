@@ -34,6 +34,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/rate-limit', () => ({
   inviteCodeRateLimiter: {
     check: vi.fn(() => ({ allowed: true, remaining: 5 })),
+    blockedFor: vi.fn(() => 0),
   },
   getClientIdentifier: vi.fn(() => 'test-client'),
 }))
@@ -61,6 +62,7 @@ const mockParams = (inviteCode: string) => ({ params: Promise.resolve({ inviteCo
 describe('Class Join API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(inviteCodeRateLimiter.blockedFor).mockReturnValue(0)
     vi.mocked(inviteCodeRateLimiter.check).mockReturnValue({
       allowed: true,
       remaining: 5,
@@ -71,12 +73,7 @@ describe('Class Join API', () => {
   describe('POST /api/classes/join/[inviteCode]', () => {
     describe('Rate Limiting', () => {
       it('should return 429 when rate limit exceeded', async () => {
-        vi.mocked(inviteCodeRateLimiter.check).mockReturnValue({
-          allowed: false,
-          remaining: 0,
-          retryAfter: 60,
-          resetAt: Date.now() + 60000,
-        })
+        vi.mocked(inviteCodeRateLimiter.blockedFor).mockReturnValue(60)
 
         const request = createPostRequest('ABC123')
         const response = await POST(request, mockParams('ABC123'))
@@ -407,12 +404,7 @@ describe('Class Join API', () => {
   describe('GET /api/classes/join/[inviteCode]', () => {
     describe('Rate Limiting', () => {
       it('should return 429 when rate limit exceeded', async () => {
-        vi.mocked(inviteCodeRateLimiter.check).mockReturnValue({
-          allowed: false,
-          remaining: 0,
-          retryAfter: 60,
-          resetAt: Date.now() + 60000,
-        })
+        vi.mocked(inviteCodeRateLimiter.blockedFor).mockReturnValue(60)
 
         const request = createGetRequest('ABC123')
         const response = await GET(request, mockParams('ABC123'))

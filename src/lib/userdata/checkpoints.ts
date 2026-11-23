@@ -64,3 +64,33 @@ export async function postCheckpoint(input: CheckpointPayload): Promise<PostChec
     return { id: null }
   }
 }
+
+/**
+ * The newest checkpoint payload of the signed-in user for one component on
+ * one site, or null (none, not signed in, network error). Kinds with an editor
+ * snapshot only: run, check, manual, handin. Two requests (list, then the one
+ * payload). Used by the code editor to restore on a device without a local
+ * record (src/components/public/code-editor/index.tsx).
+ */
+export async function fetchLatestOwnCheckpoint(
+  pageId: string,
+  componentId: string,
+  siteId: string
+): Promise<unknown | null> {
+  if (!isSyncableSite(siteId)) return null
+  try {
+    const params = new URLSearchParams({ pageId, componentId, siteId })
+    const res = await fetch(`/api/user-data/checkpoints?${params}`)
+    if (!res.ok) return null
+    const { checkpoints } = (await res.json()) as { checkpoints?: Array<{ id: string; kind: string }> }
+    const latest = checkpoints?.find((c) => ['run', 'check', 'manual', 'handin'].includes(c.kind))
+    if (!latest) return null
+    const detail = await fetch(`/api/user-data/checkpoints/${encodeURIComponent(latest.id)}`)
+    if (!detail.ok) return null
+    const { checkpoint } = (await detail.json()) as { checkpoint?: { payload?: unknown } }
+    return checkpoint?.payload ?? null
+  } catch (error) {
+    log('Latest checkpoint fetch failed', { error })
+    return null
+  }
+}

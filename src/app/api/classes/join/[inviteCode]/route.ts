@@ -4,6 +4,28 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { inviteCodeRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
+import { normalizeInviteCode } from '@/lib/invite-code'
+
+/**
+ * Rate limit against invite-code enumeration, per IP. Only unknown codes
+ * count (recordMiss): a whole class opens a valid link from one school IP
+ * (NAT) within a minute, which the old per-request limit (10/min) blocked.
+ * Once blocked, every request is refused, hits too, so a blocked IP can't
+ * tell hits from misses.
+ */
+function blockedResponse(request: NextRequest) {
+  const retryAfter = inviteCodeRateLimiter.blockedFor(getClientIdentifier(request))
+  if (!retryAfter) return null
+  return NextResponse.json(
+    { error: `Too many attempts. Please try again in ${retryAfter} seconds.`, retryAfter },
+    { status: 429 }
+  )
+}
+
+function unknownCode(request: NextRequest) {
+  inviteCodeRateLimiter.check(getClientIdentifier(request))
+  return NextResponse.json({ error: 'Invalid invite code' }, { status: 404 })
+}
 
 interface RouteParams {
   params: Promise<{
@@ -14,21 +36,9 @@ interface RouteParams {
 // POST /api/classes/join/[inviteCode] - Student joins a class
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    // Rate limiting to prevent invite code enumeration
-    const identifier = getClientIdentifier(request)
-    const rateLimit = inviteCodeRateLimiter.check(identifier)
-
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        {
-          error: `Too many attempts. Please try again in ${rateLimit.retryAfter} seconds.`,
-          retryAfter: rateLimit.retryAfter
-        },
-        { status: 429 }
-      )
-    }
-
-    const { inviteCode } = await params
+    const blocked = blockedResponse(request)
+    if (blocked) return blocked
+    const inviteCode = normalizeInviteCode((await params).inviteCode)
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
@@ -72,12 +82,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     })
 
-    if (!classRecord) {
-      return NextResponse.json(
-        { error: 'Invalid invite code' },
-        { status: 404 }
-      )
-    }
+    if (!classRecord) return unknownCode(request)
 
     if (!classRecord.isActive || classRecord.archivedAt) {
       return NextResponse.json(
@@ -206,21 +211,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 // GET /api/classes/join/[inviteCode] - Preview class info before joining
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    // Rate limiting to prevent invite code enumeration
-    const identifier = getClientIdentifier(request)
-    const rateLimit = inviteCodeRateLimiter.check(identifier)
-
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        {
-          error: `Too many attempts. Please try again in ${rateLimit.retryAfter} seconds.`,
-          retryAfter: rateLimit.retryAfter
-        },
-        { status: 429 }
-      )
-    }
-
-    const { inviteCode} = await params
+    const blocked = blockedResponse(request)
+    if (blocked) return blocked
+    const inviteCode = normalizeInviteCode((await params).inviteCode)
 
     // Find the class by invite code
     const classRecord = await prisma.class.findUnique({
@@ -240,12 +233,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     })
 
-    if (!classRecord) {
-      return NextResponse.json(
-        { error: 'Invalid invite code' },
-        { status: 404 }
-      )
-    }
+    if (!classRecord) return unknownCode(request)
 
     if (!classRecord.isActive || classRecord.archivedAt) {
       return NextResponse.json(
@@ -304,7 +292,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         description: classRecord.description,
         teacherName: classRecord.teacher.name,
         memberCount: classRecord._count.memberships,
-        allowAnonymous: classRecord.allowAnonymous
+        allowAnonymous: classRecord.allowAnonymous,
+        nicknameLogin: classRecord.allowAnonymous && classRecord.nicknameLogin
       },
       isPreAuthorized,
       isAlreadyMember

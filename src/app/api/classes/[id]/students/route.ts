@@ -53,7 +53,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             name: true,
             email: true,
             studentPseudonym: true,
-            lastSeenAt: true
+            lastSeenAt: true,
+            nicknameClassId: true
           }
         }
       },
@@ -103,6 +104,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         consentedAt: m.consentedAt,
         joinedAt: m.joinedAt,
         lastSeenAt: m.student.lastSeenAt,
+        // Nickname account of this class (src/lib/nickname-login.ts): the
+        // teacher can reset its password, and removal deletes the account.
+        nicknameAccount: m.student.nicknameClassId === classId,
         ...(pageId && { hasAnnotationsOnPage: studentsWithAnnotations.has(m.student.id) })
       }))
     })

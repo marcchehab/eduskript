@@ -153,6 +153,7 @@ export const RESERVED_SLUGS = [
   'settings',
   'profile',
   'classes',
+  'join',
   'consent',
   'subscribe',
   'unsubscribe',

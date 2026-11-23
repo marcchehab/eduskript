@@ -28,7 +28,7 @@ import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, us
 import { userDataService, syncEngine } from '@/lib/userdata'
 import { registerEditor, getMountedIds, subscribeToMounted } from './mounted-registry'
 import { OrphanRow } from './orphan-row'
-import { postCheckpoint } from '@/lib/userdata/checkpoints'
+import { fetchLatestOwnCheckpoint, postCheckpoint } from '@/lib/userdata/checkpoints'
 import { useSyncedUserData, useUserDataContext, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
@@ -706,7 +706,7 @@ export const CodeEditor = memo(function CodeEditor({
   // Waits for isDbReady: before that the logged-in user isn't set yet and the
   // read hits the (empty) anonymous store — skript/global files then looked
   // gone after a reload.
-  const { isDbReady } = useUserDataContext()
+  const { isDbReady, userId: dataUserId } = useUserDataContext()
   useEffect(() => {
     if (!isPython || !isDbReady) return
     const loadImports = async () => {
@@ -2080,6 +2080,33 @@ export const CodeEditor = memo(function CodeEditor({
     if (data.canvasTransform) setCanvasTransform(data.canvasTransform)
   }, [activeFileIndex])
 
+  // New device: no local record for this editor → load the newest own server
+  // checkpoint (Run / Check / Save / hand-in) once. Keystrokes stay local-only
+  // (see useUserData above), so a device that never pressed one of those
+  // buttons has nothing to restore and keeps the starter. Skipped in exams
+  // (their live record syncs via the sync engine) and in snapshot view.
+  // Applied only while the editor still shows the starter code: if the
+  // student typed while the two requests ran, their typing wins.
+  const checkpointRestoreTried = useRef(false)
+  useEffect(() => {
+    if (checkpointRestoreTried.current || isLoading || !hasLoadedData.current) return
+    if (savedData?.files || isViewingSnapshot || exam || !pageId) return
+    if (!dataUserId || dataUserId === 'anonymous') return
+    checkpointRestoreTried.current = true
+    const siteId = siteIdRef.current
+    void fetchLatestOwnCheckpoint(pageId, componentId, siteId).then(async (payload) => {
+      const data = payload as CodeEditorData | null
+      if (!data || !Array.isArray(data.files) || data.files.length === 0) return
+      if (JSON.stringify(filesRef.current) !== JSON.stringify(originalInitialFiles.current)) return
+      const view = editorViewRef.current
+      const shown = originalInitialFiles.current[activeFileIndex]?.content
+      if (view && shown !== undefined && view.state.doc.toString() !== shown) return
+      applyDataToEditor(data)
+      restoredNonStarter.current = true
+      await userDataService.save(pageId, componentId, data, { siteId })
+    })
+  }, [isLoading, savedData, isViewingSnapshot, exam, pageId, componentId, dataUserId, activeFileIndex, applyDataToEditor])
+
   // Hydrate the editor from the student's checkpoint payload whenever the
   // viewed student or their latest snapshot changes. Track what we last
   // applied so reusing the snapshot reference (e.g. on re-render) doesn't
@@ -2299,7 +2326,7 @@ export const CodeEditor = memo(function CodeEditor({
         highlightWhitespace(),
         EditorView.theme({
           '.cm-highlightSpace': {
-            backgroundImage: 'radial-gradient(circle at 50% 55%, color-mix(in srgb, currentColor 35%, transparent) 12%, transparent 13%)',
+            backgroundImage: 'radial-gradient(circle at 50% 55%, color-mix(in srgb, currentColor 18%, transparent) 9%, transparent 10%)',
           },
         }),
       ] : []),

@@ -19,7 +19,9 @@
  * ## Student Authentication
  *
  * Students sign in via an email code or a class-invite link ('email-code'
- * provider; only HMAC(email) is stored) or via OAuth. Account type for NEW
+ * provider; only HMAC(email) is stored) or via OAuth. In classes with
+ * nickname login they can also use class code + nickname + password, no email
+ * at all ('nickname' provider, src/lib/nickname-login.ts). Account type for NEW
  * accounts comes from the signup context (src/lib/signup-context.ts):
  *
  * ```
@@ -55,6 +57,7 @@
 
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
+import { signInWithNickname, signUpWithNickname } from '@/lib/nickname-login'
 import GithubProvider from 'next-auth/providers/github'
 import AzureADProvider from 'next-auth/providers/azure-ad'
 import bcrypt from 'bcryptjs'
@@ -153,6 +156,29 @@ export const authOptions: NextAuthOptions = {
         if (!email || !code || !/^\d{6}$/.test(code)) throw new Error('EMAIL_CODE_INVALID')
         const user = await loginWithCode(email, code, credentials?.context)
         return { id: user.id, email: user.email, name: user.name, image: user.image }
+      },
+    }),
+    // Nickname students (src/lib/nickname-login.ts): class code + nickname +
+    // password, no email. create='1' signs up (join page), otherwise signs in.
+    // Errors are thrown as NicknameError codes for the join page to show.
+    CredentialsProvider({
+      id: 'nickname',
+      name: 'nickname',
+      credentials: {
+        code: { label: 'Class code', type: 'text' },
+        nickname: { label: 'Nickname', type: 'text' },
+        password: { label: 'Password', type: 'password' },
+        create: { label: 'Create', type: 'text' },
+      },
+      async authorize(credentials, req) {
+        const forwarded = req?.headers?.['x-forwarded-for']
+        const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0].trim()
+          || (req?.headers?.['x-real-ip'] as string | undefined) || 'unknown'
+        const input = { code: credentials?.code, nickname: credentials?.nickname, password: credentials?.password }
+        const user = credentials?.create === '1'
+          ? await signUpWithNickname({ ...input, ip })
+          : await signInWithNickname(input)
+        return { id: user.id, email: null, name: user.name, image: null }
       },
     }),
     ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET

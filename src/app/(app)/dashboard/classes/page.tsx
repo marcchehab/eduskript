@@ -63,6 +63,7 @@ interface Student {
   email: string
   joinedAt: string
   lastSeenAt: string | null
+  nicknameAccount?: boolean
 }
 
 interface EmailMapping {
@@ -75,6 +76,7 @@ interface Class {
   description: string | null
   inviteCode: string
   allowAnonymous: boolean
+  nicknameLogin?: boolean
   memberCount: number
   preAuthorizedCount: number
   archivedAt?: string | null
@@ -252,7 +254,7 @@ export default function ClassesPage() {
   }
 
   const copyInviteLink = (inviteCode: string) => {
-    const inviteUrl = `${window.location.origin}/classes/join/${inviteCode}`
+    const inviteUrl = `${window.location.origin}/join/${inviteCode}`
     navigator.clipboard.writeText(inviteUrl)
     setCopiedCode(inviteCode)
     setTimeout(() => setCopiedCode(null), 2000)
@@ -399,8 +401,11 @@ export default function ClassesPage() {
     }
   }
 
-  const handleUnenrollStudent = async (classId: string, studentId: string, studentName: string) => {
-    dialog.showConfirm(`Are you sure you want to unenroll ${studentName} from this class?`, async () => {
+  const handleUnenrollStudent = async (classId: string, studentId: string, studentName: string, nicknameAccount = false) => {
+    const question = nicknameAccount
+      ? `Remove ${studentName}? This nickname account exists only for this class, so it is deleted together with all its work.`
+      : `Are you sure you want to unenroll ${studentName} from this class?`
+    dialog.showConfirm(question, async () => {
       try {
         const response = await fetch(`/api/classes/${classId}/students/${studentId}`, {
           method: 'DELETE',
@@ -553,6 +558,59 @@ export default function ClassesPage() {
     } finally {
       setUpdatingAnonymous({ ...updatingAnonymous, [classId]: false })
     }
+  }
+
+  /**
+   * PATCH join settings (nicknameLogin, shortInviteCode) and take over what the
+   * server returns: turning nickname login on also turns allowAnonymous on.
+   */
+  const patchJoinSettings = async (classId: string, body: { nicknameLogin?: boolean; shortInviteCode?: boolean }) => {
+    try {
+      setUpdatingAnonymous((prev) => ({ ...prev, [classId]: true }))
+      const response = await fetch(`/api/classes/${classId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!response.ok) throw new Error('Failed to update class')
+      const { class: updated } = await response.json()
+      setClasses((prev) =>
+        prev.map((c) =>
+          c.id === classId
+            ? { ...c, allowAnonymous: updated.allowAnonymous, nicknameLogin: updated.nicknameLogin, inviteCode: updated.inviteCode }
+            : c
+        )
+      )
+    } catch (error) {
+      console.error('Error updating class:', error)
+      setDialogType('error')
+      setDialogTitle('Failed to Update')
+      setDialogMessage('Could not update the join settings. Please try again.')
+      setDialogOpen(true)
+    } finally {
+      setUpdatingAnonymous((prev) => ({ ...prev, [classId]: false }))
+    }
+  }
+
+  /** Nickname accounts (src/lib/nickname-login.ts): new random password, shown once. */
+  const handleResetPassword = (classId: string, student: Student) => {
+    dialog.showConfirm(`Set a new password for ${student.displayName}? The old one stops working.`, async () => {
+      try {
+        const response = await fetch(`/api/classes/${classId}/students/${student.id}/password`, { method: 'POST' })
+        if (!response.ok) throw new Error('Failed to reset password')
+        const { password } = await response.json()
+        setDialogType('success')
+        setDialogTitle('New Password')
+        setDialogMessage(`New password for ${student.displayName}: ${password}\n\nIt is shown only now. The student signs in with nickname and this password on the class link.`)
+        setDialogOpen(true)
+      } catch (error) {
+        console.error('Error resetting password:', error)
+        setDialogType('error')
+        setDialogTitle('Failed to Reset')
+        setDialogMessage('Could not reset the password. Please try again.')
+        setDialogOpen(true)
+      }
+    }, { title: 'Reset password', confirmText: 'Reset' })
   }
 
   /** Archive (true) or restore (false) a class; PATCH /api/classes/[id] { archived }. */
@@ -934,6 +992,49 @@ export default function ClassesPage() {
                                 {classItem.allowAnonymous ? 'Copy invite link' : 'Copy sign-in link'}
                               </Button>
                             </div>
+                            {classItem.allowAnonymous && (
+                              <>
+                                <div className="flex items-center justify-between gap-4 px-3 py-2 border-t">
+                                  <label htmlFor={`nickname-${classItem.id}`}>
+                                    Can students join without email (nickname + password)?
+                                  </label>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium w-7 text-right">
+                                      {classItem.nicknameLogin ? 'Yes' : 'No'}
+                                    </span>
+                                    <Switch
+                                      id={`nickname-${classItem.id}`}
+                                      checked={!!classItem.nicknameLogin}
+                                      onCheckedChange={(checked) => patchJoinSettings(classItem.id, { nicknameLogin: checked })}
+                                      disabled={updatingAnonymous[classItem.id]}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="px-3 pb-3 space-y-2">
+                                  <p className="text-muted-foreground">
+                                    Join link:{' '}
+                                    <span className="font-mono text-foreground">{typeof window !== 'undefined' ? window.location.host : ''}/join/{classItem.inviteCode}</span>
+                                    {classItem.nicknameLogin && <> · Students pick a nickname and password there and sign in again with them on any device. You can reset passwords below.</>}
+                                  </p>
+                                  {classItem.inviteCode.length > 6 && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={updatingAnonymous[classItem.id]}
+                                      onClick={() =>
+                                        dialog.showConfirm(
+                                          'Replace the invite code with a short 6-character one? The current invite link stops working.',
+                                          () => patchJoinSettings(classItem.id, { shortInviteCode: true }),
+                                          { title: 'Shorter invite code', confirmText: 'Replace' }
+                                        )
+                                      }
+                                    >
+                                      Use a shorter code
+                                    </Button>
+                                  )}
+                                </div>
+                              </>
+                            )}
                           </div>
                           <Textarea
                             value={emailInputs[classItem.id] || ''}
@@ -1057,7 +1158,11 @@ export default function ClassesPage() {
                                             <span className="text-xs text-muted-foreground font-mono">
                                               {shortPseudonym}
                                             </span>
-                                            {!isIdentified && (
+                                            {student.nicknameAccount ? (
+                                              <span className="text-xs text-muted-foreground">
+                                                • nickname account
+                                              </span>
+                                            ) : !isIdentified && (
                                               <span className="text-xs text-muted-foreground">
                                                 • anonymous
                                               </span>
@@ -1067,14 +1172,23 @@ export default function ClassesPage() {
                                         <td className="p-3 text-sm text-muted-foreground">
                                           {new Date(student.joinedAt).toLocaleDateString()}
                                         </td>
-                                        <td className="p-3 text-right">
+                                        <td className="p-3 text-right whitespace-nowrap">
+                                          {student.nicknameAccount && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => handleResetPassword(classItem.id, student)}
+                                            >
+                                              Reset password
+                                            </Button>
+                                          )}
                                           <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => handleUnenrollStudent(classItem.id, student.id, student.displayName)}
+                                            onClick={() => handleUnenrollStudent(classItem.id, student.id, student.displayName, student.nicknameAccount)}
                                             className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
                                           >
-                                            Unenroll
+                                            {student.nicknameAccount ? 'Remove' : 'Unenroll'}
                                           </Button>
                                         </td>
                                       </tr>

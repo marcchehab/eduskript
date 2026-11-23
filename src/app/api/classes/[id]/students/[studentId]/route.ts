@@ -13,7 +13,9 @@ interface RouteParams {
 /**
  * DELETE /api/classes/[id]/students/[studentId]
  *
- * Unenroll a student from a class
+ * Unenroll a student from a class. A nickname account of this class
+ * (src/lib/nickname-login.ts) exists only for the class, so it is deleted
+ * together with all its data (cascades).
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
@@ -40,6 +42,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         { status: 403 }
       )
     }
+
+    const deleted = await prisma.user.deleteMany({ where: { id: studentId, nicknameClassId: classId } })
+    if (deleted.count > 0) return NextResponse.json({ success: true, accountDeleted: true })
 
     // Delete the class membership
     await prisma.classMembership.deleteMany({

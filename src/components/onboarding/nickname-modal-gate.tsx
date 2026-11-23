@@ -18,10 +18,8 @@ import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { NicknameModal, NICKNAME_PROMPT_FLAG } from './nickname-modal'
 
-// Lazy initialiser reads localStorage once on mount — avoids the
-// useEffect+setState pattern that the react-hooks/set-state-in-effect rule
-// (rightly) flags as cascading-render.
-function shouldOpenInitially(): boolean {
+// Reads the dismissal flag; false on the server and when storage is blocked.
+function promptNotSeen(): boolean {
   if (typeof window === 'undefined') return false
   try {
     return window.localStorage.getItem(NICKNAME_PROMPT_FLAG) !== '1'
@@ -33,9 +31,11 @@ function shouldOpenInitially(): boolean {
 export function NicknameModalGate() {
   const { data: session, status } = useSession()
   const [dismissed, setDismissed] = useState(false)
-  // Latched at mount; toggling localStorage at runtime doesn't matter here
-  // because dismissal also flips `dismissed` synchronously.
-  const [shouldOpen] = useState(shouldOpenInitially)
+  // Read on every render, not latched at mount: the nickname join form
+  // (src/components/auth/nickname-login-form.tsx) sets the flag right before a
+  // client-side navigation, while this gate stays mounted. Those students chose
+  // their nickname already, and it is their sign-in name (no renaming).
+  const shouldOpen = promptNotSeen()
 
   if (dismissed || !shouldOpen) return null
   if (status !== 'authenticated') return null

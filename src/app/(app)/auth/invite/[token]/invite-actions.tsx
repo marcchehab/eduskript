@@ -18,7 +18,7 @@ export function InviteActions({ token, inviteCode }: { token: string; inviteCode
     const result = await signIn('email-code', { inviteToken: token, redirect: false })
     if (result?.ok && !result.error) {
       // Membership + identity consent run through the regular join page.
-      router.push(`/classes/join/${inviteCode}`)
+      router.push(`/join/${inviteCode}`)
       return
     }
     setError('This invite link is invalid or has expired.')
