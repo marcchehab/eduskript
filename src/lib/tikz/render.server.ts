@@ -36,7 +36,9 @@ export interface TikzImage {
 
 export type TikzResult = { image: TikzImage } | { error: string }
 
-const TIMEOUT_MS = 8_000
+// TIKZ_TIMEOUT_MS overrides it: the test suite runs real TeX next to ~250
+// other test files, where a render can take longer than on an idle server.
+const TIMEOUT_MS = Number(process.env.TIKZ_TIMEOUT_MS) || 8_000
 const CACHE_ENTRIES = 500
 
 /** Directory of the installed node-tikzjax package (TeX files and fonts live there). */

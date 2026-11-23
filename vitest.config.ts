@@ -8,6 +8,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    // Real-TeX tikz tests share the CPU with the whole suite; 8 s (the
+    // production render limit, src/lib/tikz/render.server.ts) is not enough
+    // there. Below the tests' own 30 s timeout.
+    env: { TIKZ_TIMEOUT_MS: '25000' },
     // Default 5s fails bcrypt and first dynamic imports of route modules when
     // the machine is loaded (full run, load average above core count).
     testTimeout: 30_000,

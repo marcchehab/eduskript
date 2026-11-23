@@ -6,7 +6,8 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo, useMem
 import { nanoid } from 'nanoid'
 import { createPortal } from 'react-dom'
 import { useTheme } from 'next-themes'
-import { EditorView, keymap } from '@codemirror/view'
+import { EditorView, keymap, highlightWhitespace } from '@codemirror/view'
+import { expandIndentTabs, pythonIndentTabs } from '@/lib/code-editor/indent-tabs'
 import { EditorState, Annotation, Compartment, Prec } from '@codemirror/state'
 import { indentUnit } from '@codemirror/language'
 import { indentWithTab, undo } from '@codemirror/commands'
@@ -2290,6 +2291,18 @@ export const CodeEditor = memo(function CodeEditor({
       // Python convention: 4-space indentation; 2 spaces for JS/SQL
       indentUnit.of(language === 'python' ? '    ' : '  '),
       EditorState.tabSize.of(language === 'python' ? 4 : 2),
+      // Python: tabs in indentation become spaces (paste, loaded code), and
+      // spaces/tabs are visible as faint middle dots / arrows (theme below).
+      // See src/lib/code-editor/indent-tabs.ts.
+      ...(language === 'python' ? [
+        pythonIndentTabs(4),
+        highlightWhitespace(),
+        EditorView.theme({
+          '.cm-highlightSpace': {
+            backgroundImage: 'radial-gradient(circle at 50% 55%, color-mix(in srgb, currentColor 35%, transparent) 12%, transparent 13%)',
+          },
+        }),
+      ] : []),
       // Vertical indent guides (VSCode/Monaco-style). The active block's guide
       // is highlighted as the cursor moves — makes "which line belongs to which
       // block" obvious, the main indentation pain point for students.
@@ -2440,7 +2453,9 @@ export const CodeEditor = memo(function CodeEditor({
     }
 
     const state = EditorState.create({
-      doc: filesRef.current[activeFileIndex]?.content || initialCode,
+      doc: language === 'python'
+        ? expandIndentTabs(filesRef.current[activeFileIndex]?.content || initialCode)
+        : filesRef.current[activeFileIndex]?.content || initialCode,
       extensions,
     })
 
@@ -2992,7 +3007,9 @@ export const CodeEditor = memo(function CodeEditor({
       : importContent(activeTab.scope === 'skript' ? skriptImports : globalImports, activeTab.scope, activeTab.name)
     const view = editorViewRef.current
     // Skip if content matches — avoids cursor disruption on unrelated import changes
-    if (view.state.doc.toString() === content) return
+    // (Python: the doc has its indentation tabs expanded, pythonIndentTabs.)
+    const doc = view.state.doc.toString()
+    if (doc === content || (language === 'python' && doc === expandIndentTabs(content))) return
     const transaction = view.state.update({
       changes: {
         from: 0,
@@ -3002,7 +3019,7 @@ export const CodeEditor = memo(function CodeEditor({
       annotations: programmaticChange.of(true)
     })
     view.dispatch(transaction)
-  }, [activeFileIndex, activeTab, files, skriptImports, globalImports, importContent])
+  }, [activeFileIndex, activeTab, files, skriptImports, globalImports, importContent, language])
 
   // Apply a Kara marker that waited for its tab (onKaraLine). Declared after
   // the content-sync effect above so it runs after the doc swap; a local tab
