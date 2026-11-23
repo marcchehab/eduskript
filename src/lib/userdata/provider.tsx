@@ -26,6 +26,8 @@ import { useCurrentSite } from '@/contexts/current-site-context'
 const log = createLogger('userdata:provider')
 
 const LAST_USER_KEY = 'eduskript-last-user-id'
+// See handleUserChange: how long the IndexedDB setup may block user-data loads.
+const DB_READY_TIMEOUT_MS = 5000
 
 interface UserDataContextValue {
   /** Current sync status */
@@ -93,6 +95,16 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
       if (userChangeHandledRef.current) return
       userChangeHandledRef.current = true
 
+      // IndexedDB.open can hang without settling (seen in Safari). isDbReady
+      // gates every useSyncedUserData load, so a hang left the whole page
+      // without user data. After DB_READY_TIMEOUT_MS mark it ready anyway:
+      // the hooks then load what they can, the chain below keeps running and
+      // finishes later if the database ever answers.
+      const readyTimer = setTimeout(() => {
+        log.warn(`User data setup did not finish within ${DB_READY_TIMEOUT_MS} ms; continuing without waiting`)
+        setIsDbReady(true)
+      }, DB_READY_TIMEOUT_MS)
+
       try {
         const currentUserId = userId ?? 'anonymous'
 
@@ -122,6 +134,7 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
       } catch (error) {
         log.error('Failed to handle user change:', error)
       } finally {
+        clearTimeout(readyTimer)
         setIsDbReady(true)
         userChangeHandledRef.current = false
       }

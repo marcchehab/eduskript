@@ -126,6 +126,8 @@ export interface AnnotationLayer {
 interface AnnotationToolbarProps {
   mode: AnnotationMode
   onModeChange: (mode: AnnotationMode) => void
+  /** True right after pen detection switched to draw mode (this tap's own pointerdown). */
+  penAutoActivatedRecently?: () => boolean
   onClear: () => void
   /** Undo/redo the last stroke edit (also two-/three-finger tap, Ctrl+Z). */
   onUndo?: () => void
@@ -205,6 +207,7 @@ const ERASER_VARIANTS: Array<{ value: EraserVariant; label: string; hint: string
 export function AnnotationToolbar({
   mode,
   onModeChange,
+  penAutoActivatedRecently,
   onClear,
   onUndo,
   onRedo,
@@ -444,9 +447,10 @@ export function AnnotationToolbar({
     }
     setShowPenControls(null)
 
-    // Clicking the active pen deactivates it.
+    // Clicking the active pen deactivates it, unless draw mode was only just
+    // switched on by this same pen tap (pen detection on pointerdown).
     const isActive = mode === 'draw' && activePenId === id
-    if (isActive) {
+    if (isActive && !penAutoActivatedRecently?.()) {
       onModeChange('view')
     } else {
       onPenSelect(id)

@@ -376,6 +376,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     null,
     syncOptions
   )
+  // Read by performSaveWithOptions (setTimeout closures).
+  const annotationLoadingRef = useRef(annotationLoading)
+  annotationLoadingRef.current = annotationLoading
+
 
   // Debug: log when annotationData (active layer) changes
   useEffect(() => {
@@ -2587,6 +2591,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     if (isClearingRef.current) return
 
     if (!currentCanvasData || !currentPageVersion) return
+
+    // Strokes drawn before the stored annotations loaded (the canvas mounts
+    // before the load, see the portal below): saving now would replace the
+    // stored strokes with only the new ones. Retry until the load is done;
+    // the load effect then merges the stored strokes into the canvas first.
+    // If the load never finishes (IndexedDB hangs) nothing is saved.
+    if (!overrideOptions && annotationLoadingRef.current) {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = setTimeout(() => { void performSaveRef.current?.() }, 1000)
+      return
+    }
     unsavedChangesRef.current = false
 
     // If heading positions haven't been calculated yet, try to calculate them now
@@ -3249,9 +3264,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
     // Switch to draw mode only if in view mode (preserve erase mode)
     if (mode === 'view') {
+      autoDrawAtRef.current = Date.now()
       setMode('draw')
     }
   }, [stylusModeActive, mode])
+  // When pen detection last switched view → draw. A pen tap on a toolbar pen
+  // fires pointerdown (detection: draw mode on) before click; the toolbar
+  // must not read that click as "tap the active pen to turn it off".
+  const autoDrawAtRef = useRef(0)
+  const penAutoActivatedRecently = useCallback(() => Date.now() - autoDrawAtRef.current < 1000, [])
 
   // Document-level stylus detection when not in stylus mode.
   //
@@ -3866,8 +3887,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         </LayerVisibilityProvider>
       </div>
 
-      {/* Canvas portaled directly into #paper - always matches paper bounds */}
-      {paperElement && pageHeight > 0 && initialLoadComplete && createPortal(
+      {/* Canvas portaled directly into #paper - always matches paper bounds.
+          Not gated on initialLoadComplete: the toolbar works from hydration,
+          and a canvas that waited for the user-data loads (session +
+          IndexedDB + three hooks; seconds on a slow tablet, forever when
+          IndexedDB.open hangs) left "pen selected, nothing draws". Strokes
+          drawn before the stored ones arrive are merged with them (load
+          effect, heldStrokeIdsRef) and their save waits for the load
+          (performSaveWithOptions). */}
+      {paperElement && pageHeight > 0 && createPortal(
         <div
           ref={canvasWrapperRef}
           // While a highlighter is active the wrapper (a z-index stacking
@@ -3956,7 +3984,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           JS recalc. Strokes whose sectionId doesn't currently resolve to a live
           element are surfaced via onOrphansChange and rendered in the
           paper-anchored fallback above. */}
-      {paperElement && pageHeight > 0 && initialLoadComplete && activeLayerVisible && (
+      {paperElement && pageHeight > 0 && activeLayerVisible && (
         <SectionAnchoredStrokes
           strokes={displayedStrokes}
           paperWidth={paperWidth}
@@ -4195,6 +4223,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       <AnnotationToolbar
         mode={mode}
         onModeChange={setMode}
+        penAutoActivatedRecently={penAutoActivatedRecently}
         onClear={handleClearAll}
         onUndo={() => applyHistory('undo')}
         onRedo={() => applyHistory('redo')}
