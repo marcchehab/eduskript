@@ -239,6 +239,9 @@ function preloadSkulpt(): Promise<void> {
   return loadScript('/js/skulpt.min.js').then(() => loadScript('/js/skulpt-stdlib.js'))
 }
 
+// Skulpt turtle canvas size (Sk.TurtleGraphics); origin at its centre.
+const TURTLE_CANVAS_SIZE = 2000
+
 /**
  * Bounding box (CSS px, relative to the canvas element's top-left) of the
  * actually-painted pixels on a canvas. Skulpt's turtle canvas is a fixed
@@ -1110,6 +1113,15 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Canvas pan and zoom state
   const [canvasTransform, setCanvasTransform] = useState(defaultData.canvasTransform ?? { x: 0, y: 0, scale: 1 })
+  // After an instant (untransitioned) transform commit: read the computed
+  // style so the browser takes the new transform while `transition: none` is
+  // still set. Without the read, a re-render that turns the transition back on
+  // before the next style flush made the browser animate the jump anyway.
+  useLayoutEffect(() => {
+    if (!instantTransformRef.current) return
+    if (canvasRef.current) void getComputedStyle(canvasRef.current).transform
+    instantTransformRef.current = false
+  }, [canvasTransform])
 
   // Store the original initial files for reset functionality
   // This is the source of truth from the markdown and should never change
@@ -1349,6 +1361,10 @@ export const CodeEditor = memo(function CodeEditor({
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   // Watches for Skulpt's turtle canvas during a run (see runPythonCode).
   const turtleObserverRef = useRef<MutationObserver | null>(null)
+  // Set by centerTurtleOrigin: render that transform without the transition.
+  // Cleared after the commit (layout effect next to canvasTransform), so
+  // later pans / "Show everything" animate again.
+  const instantTransformRef = useRef(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const outputPanelRef = useRef<HTMLDivElement>(null)
 
@@ -3336,21 +3352,25 @@ export const CodeEditor = memo(function CodeEditor({
       // detached, invisible canvas.
       if (canvas) {
         Sk.TurtleGraphics = {
-          width: 2000,
-          height: 2000,
+          width: TURTLE_CANVAS_SIZE,
+          height: TURTLE_CANVAS_SIZE,
           target: canvas,
         }
 
-        // Skulpt creates the canvas lazily (after importing turtle — slow on
-        // a cold run), so a fixed-delay fit often found an empty div and
-        // reset to {0,0,1}, leaving the turtle origin (1000,1000) near the
-        // pane's bottom-right. Instead: centre the origin as soon as the
-        // first canvas appears; frame the full drawing when the run ends.
+        // Centre the turtle origin before Skulpt creates its canvas (lazily,
+        // after importing turtle — slow on a cold run), so the canvas appears
+        // already in place. Before, it appeared at the previous transform
+        // (often {0,0}: origin near the pane's bottom-right) and then slid to
+        // the centre. Centred again, instantly, when the canvas appears, in
+        // case the pane changed size meanwhile. The view then stays put while
+        // the turtle draws and after the run (no re-framing at the end: the
+        // jump was disliked); "Show everything" in the toolbar frames on demand.
+        centerTurtleOrigin()
         const target = canvas
         const observer = new MutationObserver(() => {
           if (target.querySelector('canvas')) {
             observer.disconnect()
-            resetCanvasView()
+            centerTurtleOrigin()
           }
         })
         observer.observe(target, { childList: true })
@@ -3360,7 +3380,8 @@ export const CodeEditor = memo(function CodeEditor({
       const finishTurtle = () => {
         turtleObserverRef.current?.disconnect()
         turtleObserverRef.current = null
-        if (canvas?.querySelector('canvas')) fitToView()
+        // Output-only editors show just the figure (code collapsed): frame it.
+        if (outputOnly && canvas?.querySelector('canvas')) fitToView()
       }
 
       const promise = Sk.misceval.asyncToPromise(() => {
@@ -4074,6 +4095,26 @@ export const CodeEditor = memo(function CodeEditor({
     // effect would run once at mount with a null ref and never attach.
   }, [canvasVisible, showGraphics])
 
+  // Turtle origin (canvas centre) to the pane centre at scale 1, without the
+  // transform transition. Needs no canvas: Skulpt's is TURTLE_CANVAS_SIZE.
+  const centerTurtleOrigin = () => {
+    const container = canvasContainerRef.current
+    if (!container) return
+    const { width, height } = container.getBoundingClientRect()
+    if (!width || !height) return
+    const next = { x: (width - TURTLE_CANVAS_SIZE) / 2, y: (height - TURTLE_CANVAS_SIZE) / 2, scale: 1 }
+    // Also write the style directly: React commits the state a little later,
+    // and Skulpt may append its canvas before that (it then showed for a
+    // frame at the old transform). Same value as the render below.
+    const el = canvasRef.current
+    if (el) {
+      el.style.transition = 'none'
+      el.style.transform = `translate(${next.x}px, ${next.y}px) scale(1)`
+    }
+    instantTransformRef.current = true
+    setCanvasTransform(next)
+  }
+
   const resetCanvasView = () => {
     // Reset to centered position
     const canvas = canvasRef.current
@@ -4082,8 +4123,11 @@ export const CodeEditor = memo(function CodeEditor({
       const turtleCanvas = canvas.querySelector('canvas')
       if (turtleCanvas) {
         const containerRect = container.getBoundingClientRect()
-        const canvasWidth = turtleCanvas.width
-        const canvasHeight = turtleCanvas.height
+        // Layout size, not the bitmap size (.width/.height): they differ when
+        // the canvas bitmap is scaled for the device pixel ratio, and the
+        // origin then landed off-centre.
+        const canvasWidth = turtleCanvas.offsetWidth || turtleCanvas.width
+        const canvasHeight = turtleCanvas.offsetHeight || turtleCanvas.height
         const centerX = (containerRect.width - canvasWidth) / 2
         const centerY = (containerRect.height - canvasHeight) / 2
         setCanvasTransform({ x: centerX, y: centerY, scale: 1 })
@@ -5229,7 +5273,7 @@ export const CodeEditor = memo(function CodeEditor({
                 style={{
                   transform: `translate(${canvasTransform.x}px, ${canvasTransform.y}px) scale(${canvasTransform.scale})`,
                   transformOrigin: '0 0',
-                  transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+                  transition: isDragging || instantTransformRef.current ? 'none' : 'transform 0.1s ease-out'
                 }}
               />
             </div>
