@@ -15,6 +15,11 @@ import { PRIMARY_SITE_ORDER } from '@/lib/sites'
  *    (or signs in on a new device) has a link too.
  *
  * Three queries plus one per teacher without activity (usually 0–2).
+ *
+ * `href` is absolute: the site's verified primary domain (teacher domain, or
+ * the org's domain for an org site), else <app origin>/<slug>. A relative
+ * /<slug> broke when the dashboard itself was opened on a custom domain
+ * (www.informatikgarten.ch/informatikgarten → 404).
  */
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -35,7 +40,11 @@ export async function GET() {
     }),
   ])
 
-  const select = { id: true, slug: true, pageName: true, pageIcon: true, userId: true } as const
+  const select = {
+    id: true, slug: true, pageName: true, pageIcon: true, userId: true,
+    teacherCustomDomains: { where: { isVerified: true, isPrimary: true }, select: { domain: true }, take: 1 },
+    organization: { select: { customDomains: { where: { isVerified: true, isPrimary: true }, select: { domain: true }, take: 1 } } },
+  } as const
   const activeSites = await prisma.site.findMany({
     where: { id: { in: activity.map((a) => a.siteId) } },
     select,
@@ -53,8 +62,16 @@ export async function GET() {
     )
   )
 
-  const sites = [...activeSites, ...defaultSites.filter((s) => s !== null)].map(
-    ({ id, slug, pageName, pageIcon }) => ({ id, slug, pageName, pageIcon })
-  )
+  const origin = (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '')
+  const sites = [...activeSites, ...defaultSites.filter((s) => s !== null)].map((s) => {
+    const domain = s.teacherCustomDomains[0]?.domain ?? s.organization?.customDomains[0]?.domain
+    return {
+      id: s.id,
+      slug: s.slug,
+      pageName: s.pageName,
+      pageIcon: s.pageIcon,
+      href: domain ? `https://${domain}` : `${origin}/${s.slug}`,
+    }
+  })
   return NextResponse.json({ sites })
 }

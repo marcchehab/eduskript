@@ -110,7 +110,7 @@ export function DashboardSidebar() {
   const [adminOrgs, setAdminOrgs] = useState<OrgWithRole[]>([])
   const [sites, setSites] = useState<UserSite[]>([])
   // Students: sites they work on (/api/student/sites), for the "Back to" links.
-  const [studentSites, setStudentSites] = useState<{ id: string; slug: string; pageName: string | null; pageIcon: string | null }[]>([])
+  const [studentSites, setStudentSites] = useState<{ id: string; slug: string; pageName: string | null; pageIcon: string | null; href: string }[]>([])
 
   // Determine which navigation to show based on account type
   const isStudent = session?.user?.accountType === 'student'
@@ -212,7 +212,7 @@ export function DashboardSidebar() {
     }
     for (const s of studentSites) {
       if (backSites.some((b) => b.slug === s.slug)) continue
-      backSites.push({ slug: s.slug, name: s.pageName || s.slug, pageIcon: s.pageIcon, href: `/${s.slug}` })
+      backSites.push({ slug: s.slug, name: s.pageName || s.slug, pageIcon: s.pageIcon, href: s.href })
     }
   }
   const topSite = backSites[0]
@@ -245,7 +245,7 @@ export function DashboardSidebar() {
 
   // Students go back to the teacher site they came from; everyone else home.
   const signOutUrl = isStudent
-    ? (topSite ? `/${topSite.slug}` : session?.user?.signedUpFromPageSlug ? `/${session.user.signedUpFromPageSlug}` : '/')
+    ? (topSite ? topSite.href : session?.user?.signedUpFromPageSlug ? `/${session.user.signedUpFromPageSlug}` : '/')
     : '/'
 
   return (
