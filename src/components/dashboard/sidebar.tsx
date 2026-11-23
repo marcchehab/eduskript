@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen, UserCog, Palette, Mail } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen, UserCog, Palette, Mail } from 'lucide-react'
 import { NotebookCog } from '@/components/icons/settings-icons'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from './theme-toggle'
@@ -109,6 +109,8 @@ export function DashboardSidebar() {
   const [lastTeacherPage, setLastTeacherPage] = useState<{ slug: string; name: string; pageIcon?: string | null; href?: string } | null>(null)
   const [adminOrgs, setAdminOrgs] = useState<OrgWithRole[]>([])
   const [sites, setSites] = useState<UserSite[]>([])
+  // Students: sites they work on (/api/student/sites), for the "Back to" links.
+  const [studentSites, setStudentSites] = useState<{ id: string; slug: string; pageName: string | null; pageIcon: string | null }[]>([])
 
   // Determine which navigation to show based on account type
   const isStudent = session?.user?.accountType === 'student'
@@ -158,6 +160,14 @@ export function DashboardSidebar() {
     return () => window.removeEventListener('sidebar:refresh', handler)
   }, [isTeacher, session?.user?.id])
 
+  useEffect(() => {
+    if (!isStudent || !session?.user?.id) return
+    fetch('/api/student/sites')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.sites) setStudentSites(data.sites) })
+      .catch(() => { /* best-effort */ })
+  }, [isStudent, session?.user?.id])
+
   // Fetch the teacher's own sites (usually one; superadmin can grant more).
   useEffect(() => {
     if (!isTeacher || !session?.user?.id) return
@@ -185,12 +195,47 @@ export function DashboardSidebar() {
 
   // Brand at the top: students see the teacher site they came from (as the
   // old top bar did), everyone else Eduskript.
-  const brandName = isStudent && lastTeacherPage ? lastTeacherPage.name : 'Eduskript'
-  const brandHref = isStudent && lastTeacherPage ? (lastTeacherPage.href || `/${lastTeacherPage.slug}`) : '/dashboard'
-  const brandIcon = isStudent && lastTeacherPage?.pageIcon && lastTeacherPage.pageIcon !== 'default' ? (
+  // Students: "Back to" links. The site of the last visited page (this
+  // browser, localStorage, written by components/public/layout.tsx) comes
+  // first and links to that exact page; then the server list (sites with the
+  // student's data, then their class teachers' sites), which also covers a
+  // new device or a nickname student who has not opened a page yet.
+  const backSites: { slug: string; name: string; pageIcon: string | null; href: string }[] = []
+  if (isStudent) {
+    if (lastTeacherPage) {
+      backSites.push({
+        slug: lastTeacherPage.slug,
+        name: lastTeacherPage.name,
+        pageIcon: lastTeacherPage.pageIcon ?? null,
+        href: lastTeacherPage.href || `/${lastTeacherPage.slug}`,
+      })
+    }
+    for (const s of studentSites) {
+      if (backSites.some((b) => b.slug === s.slug)) continue
+      backSites.push({ slug: s.slug, name: s.pageName || s.slug, pageIcon: s.pageIcon, href: `/${s.slug}` })
+    }
+  }
+  const topSite = backSites[0]
+  const siteIcon = (site: { name: string; pageIcon: string | null }, size: 'sm' | 'lg') => {
+    const box = size === 'lg' ? 'w-10 h-10' : 'w-7 h-7'
+    return site.pageIcon && site.pageIcon !== 'default' ? (
+      <div className={cn(box, 'rounded-md overflow-hidden shrink-0 bg-background')}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={site.pageIcon} alt="" className="w-full h-full object-cover" />
+      </div>
+    ) : (
+      <div className={cn(box, 'rounded-md border border-border flex items-center justify-center shrink-0 text-[10px] font-semibold text-muted-foreground')}>
+        {initials(site.name)}
+      </div>
+    )
+  }
+
+  const brandName = topSite ? topSite.name : 'Eduskript'
+  const brandHref = topSite ? topSite.href : '/dashboard'
+  const brandIcon = topSite?.pageIcon && topSite.pageIcon !== 'default' ? (
     <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={lastTeacherPage.pageIcon} alt="" className="w-full h-full object-cover" />
+      <img src={topSite.pageIcon} alt="" className="w-full h-full object-cover" />
     </div>
   ) : (
     <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
@@ -200,7 +245,7 @@ export function DashboardSidebar() {
 
   // Students go back to the teacher site they came from; everyone else home.
   const signOutUrl = isStudent
-    ? (lastTeacherPage ? `/${lastTeacherPage.slug}` : session?.user?.signedUpFromPageSlug ? `/${session.user.signedUpFromPageSlug}` : '/')
+    ? (topSite ? `/${topSite.slug}` : session?.user?.signedUpFromPageSlug ? `/${session.user.signedUpFromPageSlug}` : '/')
     : '/'
 
   return (
@@ -260,19 +305,27 @@ export function DashboardSidebar() {
       </div>
 
       <div className="p-4 flex-1 min-h-0 flex flex-col">
-        {isStudent && lastTeacherPage && (
-          <Link
-            href={lastTeacherPage.href || `/${lastTeacherPage.slug}`}
-            className={cn(
-              'mb-3 flex items-center px-2 py-1 text-sm rounded-lg transition-colors',
-              'text-muted-foreground hover:bg-muted hover:text-foreground',
-              isCollapsed ? 'justify-center' : 'gap-3'
-            )}
-            title={`Back to ${lastTeacherPage.name}`}
-          >
-            <CornerUpLeft className="w-4 h-4 shrink-0" />
-            {!isCollapsed && <span className="truncate max-w-36">Back to {lastTeacherPage.name}</span>}
-          </Link>
+        {backSites.length > 0 && (
+          <div className="mb-3">
+            <SectionHeader title="Back to" isCollapsed={isCollapsed} />
+            <div className="space-y-1">
+              {backSites.map((site) => (
+                <Link
+                  key={site.slug}
+                  href={site.href}
+                  className={cn(
+                    'flex items-center px-2 py-1.5 text-sm rounded-lg transition-colors',
+                    'text-foreground hover:bg-muted',
+                    isCollapsed ? 'justify-center' : 'gap-3'
+                  )}
+                  title={`Back to ${site.name}`}
+                >
+                  {siteIcon(site, 'sm')}
+                  {!isCollapsed && <span className="truncate font-medium">{site.name}</span>}
+                </Link>
+              ))}
+            </div>
+          </div>
         )}
 
         <nav className="space-y-1 flex-1 min-h-0 overflow-y-auto">
