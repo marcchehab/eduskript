@@ -115,7 +115,8 @@ export function DraggableCollection({
                 <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
               )}
             </div>
-            <div className="flex-1 min-w-0">
+            {/* pr-6 keeps the title clear of the absolute delete button. */}
+            <div className={cn("flex-1 min-w-0", onDelete && "pr-6")}>
               {!isViewOnly && onUpdated ? (
                 <CollectionTitleInlineEditor
                   collectionId={id}
@@ -126,7 +127,7 @@ export function DraggableCollection({
                 <h3 className={cn(
                   "font-medium text-sm truncate",
                   isViewOnly ? "text-muted-foreground" : "text-foreground"
-                )}>
+                )} title={title}>
                   {title}
                 </h3>
               )}
@@ -221,11 +222,12 @@ export function DraggableSkript({
                 <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
               )}
             </div>
-            <div className="flex-1 min-w-0">
+            {/* pr-6 keeps the title clear of the absolute edit link. */}
+            <div className={cn("flex-1 min-w-0", !isViewOnly && slug && "pr-6")}>
               <h3 className={cn(
                 "font-medium text-sm truncate",
                 isViewOnly ? "text-muted-foreground" : "text-foreground"
-              )}>
+              )} title={title}>
                 {title}
               </h3>
               {description && (

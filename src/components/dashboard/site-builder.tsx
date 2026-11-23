@@ -803,10 +803,11 @@ export function CollectionTitleInlineEditor({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
-      title="Rename collection"
+      className="font-medium text-sm hover:underline flex items-center gap-1 w-fit max-w-full min-w-0"
+      aria-label={`Rename collection "${title}"`}
     >
-      {title}
+      {/* Long names truncate here; full name as tooltip. */}
+      <span className="truncate" title={title}>{title}</span>
       <Edit className="w-3 h-3 shrink-0" />
     </button>
   );
