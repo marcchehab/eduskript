@@ -250,9 +250,17 @@ export function rehypeHeadingSectionIds() {
       }
 
       // <solution>: end sentinel only, no legacy id (new since 2026-11-19).
+      // data-solution-id keys the "Done" checkbox state (solution.tsx): the
+      // author's `id` attribute if set, else this position-based id. The
+      // position id survives edits of the solution and new h2 sections, but
+      // shifts when a solution is inserted above it in the same h2 section
+      // and changes when the h2 is renamed; stored states are then orphaned.
       if (node.tagName === 'solution') {
         if (p && typeof index === 'number' && !(p.type === 'element' && p.tagName === 'p')) {
-          inserts.push({ parent: p, index, sectionId: blockId('solution') })
+          const id = blockId('solution')
+          const own = node.properties?.id
+          node.properties = { ...node.properties, 'data-solution-id': own ? `id:${String(own)}` : id }
+          inserts.push({ parent: p, index, sectionId: id })
         }
         return
       }

@@ -1468,8 +1468,9 @@ export function createMarkdownComponents(
       const slot = teacherSlot(props)
       if (slot != null) return <TeacherSolutionSlot slot={slot} pageId={pageId} />
       const teacher = props.teacher != null && props.teacher !== false && props.teacher !== 'false'
+      const solutionId = (props['data-solution-id'] ?? props['dataSolutionId']) as string | undefined
       return (
-        <Solution title={title} pageId={pageId} teacher={teacher}>
+        <Solution title={title} pageId={pageId} teacher={teacher} solutionId={solutionId}>
           {props.children as React.ReactNode}
         </Solution>
       )

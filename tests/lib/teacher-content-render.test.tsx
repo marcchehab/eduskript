@@ -8,6 +8,8 @@ import { createEmptySkriptFiles } from '@/lib/skript-files'
 // No DB: the page has no skriptId, so no files are looked up anyway.
 vi.mock('@/lib/skript-files.server', () => ({ getSkriptFiles: async () => createEmptySkriptFiles() }))
 vi.mock('next-auth/react', () => ({ useSession: () => ({ status: 'unauthenticated', data: null }) }))
+// <solution>'s "Done" checkbox state (solution.tsx); no UserDataProvider here.
+vi.mock('@/lib/userdata', () => ({ useSyncedUserData: () => ({ data: null, updateData: vi.fn(), isLoading: false }) }))
 
 const PAGE = [
   '# Wahrheitstabelle',

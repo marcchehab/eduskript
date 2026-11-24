@@ -510,3 +510,46 @@ function findAllNodes(tree: any, predicate: (node: any) => boolean): any[] {
   visit(tree)
   return found
 }
+
+describe('<solution> progress id (data-solution-id)', () => {
+  // The "Done" checkbox stores its state under this id (solution.tsx), so it
+  // must survive editing the solution and inserting sections above it.
+  async function solutionIds(md: string): Promise<string[]> {
+    const ids: string[] = []
+    const tree = await compileMarkdown(md, {
+      components: {
+        solution: (props: Record<string, unknown>) => {
+          ids.push(String(props['data-solution-id'] ?? props['dataSolutionId']))
+          return null
+        },
+      } as never,
+    })
+    // Render the component functions the tree references.
+    const walk = (n: any): void => {
+      if (!n || typeof n !== 'object') return
+      if (Array.isArray(n)) return n.forEach(walk)
+      if (typeof n.type === 'function') return walk(n.type(n.props))
+      if (n.props?.children !== undefined) walk(n.props.children)
+    }
+    walk(tree)
+    return ids
+  }
+
+  const page = (extra = '', body = 'x = 1') =>
+    `${extra}## Aufgaben\n\nTask 1\n\n<solution title="L1">\n${body}\n</solution>\n\nTask 2\n\n<solution title="L2">\ny = 2\n</solution>\n`
+
+  it('is stable when the solution changes or a section is inserted above', async () => {
+    const base = await solutionIds(page())
+    expect(base).toHaveLength(2)
+    expect(new Set(base).size).toBe(2)
+    expect(await solutionIds(page('', 'x = 42, ganz anders'))).toEqual(base)
+    expect(await solutionIds(page('## Neu\n\nA\n\n<solution>\nz\n</solution>\n\n'))).toEqual(
+      expect.arrayContaining(base),
+    )
+  })
+
+  it('uses the author id when set', async () => {
+    const ids = await solutionIds('## A\n\n<solution id="v1">\nx\n</solution>\n')
+    expect(ids).toEqual(['id:v1'])
+  })
+})

@@ -6,6 +6,10 @@ import { useIsExamPage } from '@/contexts/exam-page-context'
 import { usePrintState } from '@/lib/print/print-mode'
 import { isEmptyContent, useRegisterSolution } from '@/lib/print/solutions'
 import { useCanEditPage } from '@/lib/print/can-edit'
+import { useSyncedUserData } from '@/lib/userdata'
+import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
+import { useTeacherClass } from '@/contexts/teacher-class-context'
+import { SolutionProgressBar, type SolutionProgress } from './solution-progress-bar'
 
 /**
  * Whether a <solution> is visible on this page: always, except on exam pages,
@@ -65,8 +69,36 @@ export function SolutionPrintLine({ label }: { label: string | null }) {
  * above it and, once it is collapsed again (reload, print), land on whatever
  * follows.
  */
-export function Solution({ title, pageId, teacher = false, children }: { title?: string; pageId?: string; teacher?: boolean; children?: ReactNode }) {
+export function Solution({ title, pageId, teacher = false, solutionId, children }: { title?: string; pageId?: string; teacher?: boolean; solutionId?: string; children?: ReactNode }) {
   const [open, setOpen] = useState(false)
+  // "Done" checkbox (student progress, shown to the teacher as a class bar
+  // above the solution). Opening ticks it automatically; once the student
+  // clicks the checkbox (`manual`), opening no longer changes anything.
+  // Needs the id from heading-section-ids.ts; teacher solutions have none.
+  const componentId = solutionId && !teacher ? `solution-${solutionId}` : ''
+  const { data: progress, updateData: saveProgress } = useSyncedUserData<SolutionProgress>(
+    pageId && componentId ? pageId : '',
+    componentId,
+    null
+  )
+  const { isViewing: isViewingSnapshot } = useStudentSnapshot(componentId)
+  const { selectedClass, isTeacher } = useTeacherClass()
+  const tracked = !!(pageId && componentId) && !isViewingSnapshot
+  const done = progress?.done === true
+  const toggleOpen = () => {
+    const opening = !open
+    setOpen(opening)
+    if (!opening || !tracked) return
+    if (!progress?.manual) {
+      if (!done || !progress?.opened) void saveProgress({ done: true, opened: true, manual: false })
+    } else if (!progress.opened) {
+      void saveProgress({ ...progress, opened: true })
+    }
+  }
+  // A manual tick counts as opened (teacher bar: done), an untick keeps it.
+  const toggleDone = () => {
+    void saveProgress({ done: !done, opened: !done || !!progress?.opened, manual: true })
+  }
   const { active } = usePrintState()
   const visibility = useSolutionVisibility(pageId, teacher)
   const anchor = useRef<HTMLDivElement>(null)
@@ -99,20 +131,43 @@ export function Solution({ title, pageId, teacher = false, children }: { title?:
   if (!visibility.online) return null
 
   return (
-    <div className="my-4 rounded-lg border border-green-600/30 bg-green-500/5">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-green-700 dark:text-green-400"
-      >
-        <ChevronRight className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} />
-        <CheckCircle2 className="h-4 w-4" />
-        <span>{label}</span>
-        {teacher && <TeacherOnlyBadge />}
-      </button>
-      {open && <div className="border-t border-green-600/20 px-4 py-2">{children}</div>}
-    </div>
+    <>
+      {tracked && isTeacher && selectedClass && (
+        <SolutionProgressBar
+          classId={selectedClass.id}
+          className={selectedClass.name}
+          pageId={pageId!}
+          componentId={componentId}
+        />
+      )}
+      <div className="my-4 rounded-lg border border-green-600/30 bg-green-500/5">
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={toggleOpen}
+            aria-expanded={open}
+            className="flex flex-1 items-center gap-2 px-4 py-2 text-left text-sm font-medium text-green-700 dark:text-green-400"
+          >
+            <ChevronRight className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} />
+            <CheckCircle2 className="h-4 w-4" />
+            <span>{label}</span>
+            {teacher && <TeacherOnlyBadge />}
+          </button>
+          {tracked && (
+            <label className="flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={done}
+                onChange={toggleDone}
+                className="h-4 w-4 cursor-pointer accent-green-600"
+              />
+              Done
+            </label>
+          )}
+        </div>
+        {open && <div className="border-t border-green-600/20 px-4 py-2">{children}</div>}
+      </div>
+    </>
   )
 }
 
