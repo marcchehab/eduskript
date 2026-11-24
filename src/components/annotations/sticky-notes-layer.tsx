@@ -26,13 +26,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { nanoid } from 'nanoid'
-import { Inter } from 'next/font/google'
+import { inter } from '@/lib/fonts'
 
 // Pinned at module load — Next.js generates a hashed family name at build
 // time, so this is a static value the runtime can't re-resolve. Using
 // system-ui or var() left the body font subject to OS/host inheritance,
 // which is exactly what changed across sections.
-const stickyNoteBodyFont = Inter({ subsets: ['latin'], display: 'swap' })
+const stickyNoteBodyFont = inter
 import {
   StickyNote as StickyNoteIcon,
   Trash2,

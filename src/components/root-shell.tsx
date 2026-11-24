@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { Inter, Roboto_Slab, EB_Garamond, Barlow_Condensed, Libertinus_Serif } from 'next/font/google'
 import '@/app/globals.css'
 // Bundled from the installed katex package (same version rehype-katex renders
 // with); Next emits the CSS and its woff2 fonts under /_next/static — no CDN.
@@ -8,6 +7,7 @@ import { Providers } from '@/components/providers'
 import { GitInfo } from '@/components/GitInfo'
 import { DevConsole } from '@/components/dev/dev-console'
 import { ChunkErrorRecovery } from '@/components/chunk-error-recovery'
+import { inter, modernBody, classicBody, latexBody, headingFont } from '@/lib/fonts'
 
 // Shared <html>/<body> shell for every root layout. There are three root
 // layouts (src/app/(app)/layout.tsx, src/app/[domain]/layout.tsx,
@@ -15,47 +15,6 @@ import { ChunkErrorRecovery } from '@/components/chunk-error-recovery'
 // tenant's pageLanguage into <html lang> from params + cached DB reads —
 // no headers()/cookies(), so ISR is unaffected. Navigating between routes
 // of different root layouts is a full page load (Next.js route-group rule).
-
-// --font-inter: also the body/heading font of the "sober" theme preset
-// (globals.css, Theme presets). Not --font-sans, which is Tailwind's own.
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-})
-
-// Modern typography (informatikgarten style)
-const modernBody = Roboto_Slab({
-  subsets: ['latin'],
-  weight: ['300', '600'], // 300 = body text, 600 = bold/strong
-  variable: '--font-modern-body',
-  preload: false, // Only used when user selects "modern" typography
-})
-
-// Classic typography (luz style)
-const classicBody = EB_Garamond({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'], // 600 = bold/strong (already loaded)
-  variable: '--font-classic-body',
-  preload: false, // Only used when user selects "classic" typography
-})
-
-// LaTeX theme preset body + headings (Libertinus = LaTeX's libertinus
-// package). Self-hosted by next/font like the others: no request leaves
-// Eduskript. Loaded only when a page uses it.
-const latexBody = Libertinus_Serif({
-  subsets: ['latin', 'latin-ext'],
-  weight: ['400', '600', '700'],
-  style: ['normal', 'italic'],
-  variable: '--font-latex-body',
-  preload: false,
-})
-
-// Shared heading font for both styles
-const headingFont = Barlow_Condensed({
-  subsets: ['latin'],
-  weight: '700',
-  variable: '--font-heading',
-})
 
 // Global default for resolving relative metadata URLs (file-based opengraph-image
 // is the main case). Without this, Next.js falls back to the request host —
