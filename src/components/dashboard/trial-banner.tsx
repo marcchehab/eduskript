@@ -2,8 +2,9 @@
  * Slim bar above the dashboard content while the teacher's subscription is
  * trialing: "Noch 9 Tage alle Funktionen", linking to the billing page.
  * Server component (one indexed subscription lookup per dashboard render);
- * renders nothing for paid, free or expired accounts. Turns amber in the last
- * three days. Expiry itself is handled by the daily cron (src/lib/trial.ts).
+ * renders nothing for paid, free or expired accounts, and nothing before the
+ * last SHOW_FROM_DAYS days (a countdown from day one reads pushy). Turns amber
+ * in the last three days. Expiry itself is handled by the daily cron (src/lib/trial.ts).
  */
 import Link from 'next/link'
 import { Clock } from 'lucide-react'
@@ -11,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { getUiLocale } from '@/lib/i18n/server'
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const SHOW_FROM_DAYS = 5
 
 // Ceil: 30 hours left reads "2 days", and the last day reads "1 day" rather
 // than "0 days". Outside the component so the render body stays pure
@@ -28,6 +30,7 @@ export async function TrialBanner({ userId }: { userId: string }) {
 
   const locale = await getUiLocale()
   const daysLeft = daysUntil(trial.currentPeriodEnd)
+  if (daysLeft > SHOW_FROM_DAYS) return null
   const urgent = daysLeft <= 3
 
   const text =
