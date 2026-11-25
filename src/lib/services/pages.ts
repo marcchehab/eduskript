@@ -406,10 +406,14 @@ export async function updatePageForUser(
     typeof rawPatch.title === 'string' && rawPatch.title.trim().length === 0
       ? undefined
       : rawPatch.title
+  // Same normalisation as createPage: "Präsentation" → "praesentation". A raw
+  // "ä" in the slug was stored as is and the page 404ed.
   const slug =
     typeof rawPatch.slug === 'string' && rawPatch.slug.trim().length === 0
       ? undefined
-      : rawPatch.slug
+      : typeof rawPatch.slug === 'string'
+        ? generateSlug(rawPatch.slug)
+        : rawPatch.slug
   const description =
     typeof rawPatch.description === 'string' &&
     rawPatch.description.trim().length === 0
@@ -423,7 +427,7 @@ export async function updatePageForUser(
     throw new ValidationError('Title cannot be whitespace only')
   }
   if (slug !== undefined && !slug.trim()) {
-    throw new ValidationError('Slug cannot be whitespace only')
+    throw new ValidationError('Slug must contain letters or digits')
   }
 
   const existingPage = await loadPageForActor(pageId, userId, isAdmin)

@@ -146,6 +146,22 @@ describe('updatePageForUser — destructive-write guard', () => {
     expect(prisma.pageVersion.create).not.toHaveBeenCalled()
   })
 
+  it('normalises the slug like createPage ("Präsentation" → "praesentation")', async () => {
+    vi.mocked(prisma.page.findFirst)
+      .mockResolvedValueOnce(baseExistingPage as never)
+      .mockResolvedValueOnce(null)
+    vi.mocked(prisma.page.update).mockResolvedValue(baseExistingPage as never)
+
+    await updatePageForUser('user-1', 'page-1', { slug: 'Präsentation' })
+
+    const updateCall = vi.mocked(prisma.page.update).mock.calls[0][0]
+    expect(updateCall.data).toMatchObject({ slug: 'praesentation' })
+  })
+
+  it('rejects a slug with no letters or digits', async () => {
+    await expect(updatePageForUser('user-1', 'page-1', { slug: '!!!' })).rejects.toThrow(ValidationError)
+  })
+
   // Empty-string-as-no-change rule (the bug-report scenario):
   // an LLM that "passes everything to be safe" with title:"" and slug:""
   // should NOT trigger title/slug validation when only description is

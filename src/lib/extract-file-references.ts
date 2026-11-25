@@ -107,6 +107,23 @@ export function extractReferencedFilenames(source: string): string[] {
     for (const name of fileRefCandidates(match[1])) filenames.add(name)
   }
 
+  // 7. HTML image tags: <img src="me.webp">
+  for (const match of content.matchAll(/<img\b[^>]*?\bsrc="([^"]+)"/gi)) {
+    if (!isLocalRef(match[1]) || VIDEO_EXTENSIONS.test(match[1])) continue
+    for (const name of fileRefCandidates(match[1])) filenames.add(name)
+  }
+
+  // 8. Excalidraw tags: <excali src="chaos"> (with or without .excalidraw)
+  for (const match of content.matchAll(/<excali\b[^>]*?\bsrc="([^"]+)"/gi)) {
+    if (!isLocalRef(match[1])) continue
+    for (const ref of fileRefCandidates(match[1])) {
+      const name = ref.endsWith('.excalidraw') ? ref : `${ref}.excalidraw`
+      filenames.add(name)
+      filenames.add(`${name}.light.svg`)
+      filenames.add(`${name}.dark.svg`)
+    }
+  }
+
   return [...filenames]
 }
 

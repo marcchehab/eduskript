@@ -46,3 +46,23 @@ describe('extractReferencedVideoFilenames', () => {
     expect(extractReferencedVideoFilenames(md)).toEqual(['UPPER.MP4'])
   })
 })
+
+describe('extractReferencedFilenames: HTML tags', () => {
+  it('captures <img src>', () => {
+    expect(extractReferencedFilenames('<img src="me.webp" alt=""/>')).toContain('me.webp')
+  })
+
+  it('captures <excali src> with its light/dark SVGs, with or without extension', () => {
+    const md = '<excali src="chaos" alt="" />\n<excali src="isr.excalidraw" />'
+    const refs = extractReferencedFilenames(md)
+    for (const n of ['chaos', 'isr']) {
+      expect(refs).toContain(`${n}.excalidraw`)
+      expect(refs).toContain(`${n}.excalidraw.light.svg`)
+      expect(refs).toContain(`${n}.excalidraw.dark.svg`)
+    }
+  })
+
+  it('skips absolute <img> URLs', () => {
+    expect(extractReferencedFilenames('<img src="https://example.com/a.png">')).toEqual([])
+  })
+})
