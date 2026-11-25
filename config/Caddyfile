@@ -56,9 +56,16 @@
 	}
 }
 
-eduskript.org, www.eduskript.org, sites.eduskript.org, informatikgarten.ch, www.informatikgarten.ch, luz.to {
+eduskript.org, sites.eduskript.org, informatikgarten.ch, luz.to {
 	import own_dns_cert
 	import app
+}
+
+# www → apex: the session cookie is host-only, so a site reachable on both
+# hosts logged people out when they switched between them.
+www.eduskript.org, www.informatikgarten.ch {
+	import own_dns_cert
+	redir https://{labels.1}.{labels.0}{uri} 308
 }
 
 https:// {
