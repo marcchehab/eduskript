@@ -250,6 +250,20 @@ const TURTLE_CANVAS_SIZE = 2000
  * Returns null for an empty/unreadable canvas (caller falls back to the
  * element's own bounds).
  */
+/**
+ * Pointer position (clientX/Y, screen px) → layout px inside `el`'s padding
+ * box, the space the graphics-pane canvas transform works in. Undoes
+ * transforms on ancestors (page zoom is transform: scale() on <main>,
+ * zoom-context.tsx) by comparing the element's screen rect to its layout
+ * size; sizes themselves come from clientWidth/clientHeight.
+ */
+function toLayoutPoint(el: HTMLElement, clientX: number, clientY: number): { x: number; y: number } {
+  const r = el.getBoundingClientRect()
+  const sx = el.offsetWidth ? r.width / el.offsetWidth : 1
+  const sy = el.offsetHeight ? r.height / el.offsetHeight : 1
+  return { x: (clientX - r.left) / sx - el.clientLeft, y: (clientY - r.top) / sy - el.clientTop }
+}
+
 function getCanvasDrawnBounds(
   cv: HTMLCanvasElement,
 ): { left: number; top: number; width: number; height: number } | null {
@@ -2602,9 +2616,7 @@ export const CodeEditor = memo(function CodeEditor({
       const delta = e.deltaY > 0 ? 0.9 : 1.1
       const newScale = Math.max(0.1, Math.min(5, canvasTransform.scale * delta))
 
-      const rect = container.getBoundingClientRect()
-      const mouseX = e.clientX - rect.left
-      const mouseY = e.clientY - rect.top
+      const { x: mouseX, y: mouseY } = toLayoutPoint(container, e.clientX, e.clientY)
 
       const canvasX = (mouseX - canvasTransform.x) / canvasTransform.scale
       const canvasY = (mouseY - canvasTransform.y) / canvasTransform.scale
@@ -3956,21 +3968,24 @@ export const CodeEditor = memo(function CodeEditor({
   }
 
   // Canvas pan and zoom handlers
+  // Pointer positions in layout px (toLayoutPoint), like the transform.
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return // Only left click
     setIsDragging(true)
+    const p = toLayoutPoint(e.currentTarget, e.clientX, e.clientY)
     dragStartRef.current = {
-      x: e.clientX - canvasTransform.x,
-      y: e.clientY - canvasTransform.y
+      x: p.x - canvasTransform.x,
+      y: p.y - canvasTransform.y
     }
   }
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDragging) return
+    const p = toLayoutPoint(e.currentTarget, e.clientX, e.clientY)
     setCanvasTransform(prev => ({
       ...prev,
-      x: e.clientX - dragStartRef.current.x,
-      y: e.clientY - dragStartRef.current.y
+      x: p.x - dragStartRef.current.x,
+      y: p.y - dragStartRef.current.y
     }))
   }
 
@@ -4008,22 +4023,24 @@ export const CodeEditor = memo(function CodeEditor({
     const onTouchStart = (e: TouchEvent) => {
       e.stopPropagation()
       if (e.touches.length === 1) {
-        const t = e.touches[0]
+        const p = toLayoutPoint(container, e.touches[0].clientX, e.touches[0].clientY)
         touchStateRef.current = {
           mode: 'pan',
-          offsetX: t.clientX - canvasTransformRef.current.x,
-          offsetY: t.clientY - canvasTransformRef.current.y,
+          offsetX: p.x - canvasTransformRef.current.x,
+          offsetY: p.y - canvasTransformRef.current.y,
         }
         setIsDragging(true)
       } else if (e.touches.length >= 2) {
         const t1 = e.touches[0]
         const t2 = e.touches[1]
+        const c = toLayoutPoint(container, (t1.clientX + t2.clientX) / 2, (t1.clientY + t2.clientY) / 2)
         touchStateRef.current = {
           mode: 'pinch',
+          // Only the ratio of distances is used: screen px are fine.
           startDist: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY),
           startScale: canvasTransformRef.current.scale,
-          startCenterX: (t1.clientX + t2.clientX) / 2,
-          startCenterY: (t1.clientY + t2.clientY) / 2,
+          startCenterX: c.x,
+          startCenterY: c.y,
           startTransformX: canvasTransformRef.current.x,
           startTransformY: canvasTransformRef.current.y,
         }
@@ -4037,19 +4054,17 @@ export const CodeEditor = memo(function CodeEditor({
       if (!state) return
 
       if (state.mode === 'pan' && e.touches.length === 1) {
-        const t = e.touches[0]
+        const p = toLayoutPoint(container, e.touches[0].clientX, e.touches[0].clientY)
         setCanvasTransform(prev => ({
           ...prev,
-          x: t.clientX - state.offsetX,
-          y: t.clientY - state.offsetY,
+          x: p.x - state.offsetX,
+          y: p.y - state.offsetY,
         }))
       } else if (state.mode === 'pinch' && e.touches.length >= 2) {
-        const rect = container.getBoundingClientRect()
         const t1 = e.touches[0]
         const t2 = e.touches[1]
         const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
-        const centerX = (t1.clientX + t2.clientX) / 2
-        const centerY = (t1.clientY + t2.clientY) / 2
+        const { x: centerX, y: centerY } = toLayoutPoint(container, (t1.clientX + t2.clientX) / 2, (t1.clientY + t2.clientY) / 2)
 
         const scaleRatio = dist / state.startDist
         const newScale = Math.max(0.1, Math.min(5, state.startScale * scaleRatio))
@@ -4057,10 +4072,10 @@ export const CodeEditor = memo(function CodeEditor({
         // Keep the canvas point that was under the start midpoint roughly under
         // the current midpoint (so pinch zooms about the gesture's anchor while
         // the midpoint translation pans naturally with the fingers).
-        const canvasX = (state.startCenterX - rect.left - state.startTransformX) / state.startScale
-        const canvasY = (state.startCenterY - rect.top - state.startTransformY) / state.startScale
-        const newX = (centerX - rect.left) - canvasX * newScale
-        const newY = (centerY - rect.top) - canvasY * newScale
+        const canvasX = (state.startCenterX - state.startTransformX) / state.startScale
+        const canvasY = (state.startCenterY - state.startTransformY) / state.startScale
+        const newX = centerX - canvasX * newScale
+        const newY = centerY - canvasY * newScale
 
         setCanvasTransform({ x: newX, y: newY, scale: newScale })
       }
@@ -4071,11 +4086,11 @@ export const CodeEditor = memo(function CodeEditor({
       if (e.touches.length === 1) {
         // Lifted from pinch back to single-finger pan. Recalibrate the offset
         // so the remaining finger doesn't snap.
-        const t = e.touches[0]
+        const p = toLayoutPoint(container, e.touches[0].clientX, e.touches[0].clientY)
         touchStateRef.current = {
           mode: 'pan',
-          offsetX: t.clientX - canvasTransformRef.current.x,
-          offsetY: t.clientY - canvasTransformRef.current.y,
+          offsetX: p.x - canvasTransformRef.current.x,
+          offsetY: p.y - canvasTransformRef.current.y,
         }
         setIsDragging(true)
       } else if (e.touches.length === 0) {
@@ -4108,7 +4123,11 @@ export const CodeEditor = memo(function CodeEditor({
   const centerTurtleOrigin = () => {
     const container = canvasContainerRef.current
     if (!container) return
-    const { width, height } = container.getBoundingClientRect()
+    // Layout size (clientWidth/Height), not getBoundingClientRect: page zoom
+    // is a transform: scale() on <main> (zoom-context.tsx), and the rect is
+    // in scaled screen px while the canvas transform is in layout px.
+    const width = container.clientWidth
+    const height = container.clientHeight
     if (!width || !height) return
     // Keep the user's pan/zoom from the previous run; centre on the first one.
     const next = turtleViewRef.current ?? { x: (width - TURTLE_CANVAS_SIZE) / 2, y: (height - TURTLE_CANVAS_SIZE) / 2, scale: 1 }
@@ -4131,14 +4150,14 @@ export const CodeEditor = memo(function CodeEditor({
     if (canvas && container) {
       const turtleCanvas = canvas.querySelector('canvas')
       if (turtleCanvas) {
-        const containerRect = container.getBoundingClientRect()
-        // Layout size, not the bitmap size (.width/.height): they differ when
-        // the canvas bitmap is scaled for the device pixel ratio, and the
-        // origin then landed off-centre.
+        // Layout sizes throughout: not the bitmap size (.width/.height),
+        // which differs when the canvas bitmap is scaled for the device pixel
+        // ratio, and not the container's getBoundingClientRect, which page
+        // zoom scales (see centerTurtleOrigin).
         const canvasWidth = turtleCanvas.offsetWidth || turtleCanvas.width
         const canvasHeight = turtleCanvas.offsetHeight || turtleCanvas.height
-        const centerX = (containerRect.width - canvasWidth) / 2
-        const centerY = (containerRect.height - canvasHeight) / 2
+        const centerX = (container.clientWidth - canvasWidth) / 2
+        const centerY = (container.clientHeight - canvasHeight) / 2
         setCanvasTransform({ x: centerX, y: centerY, scale: 1 })
         return
       }
@@ -4185,7 +4204,9 @@ export const CodeEditor = memo(function CodeEditor({
       return
     }
 
-    const { width: containerW, height: containerH } = container.getBoundingClientRect()
+    // Layout size: the rect would be scaled by page zoom (see centerTurtleOrigin).
+    const containerW = container.clientWidth
+    const containerH = container.clientHeight
     const PADDING = 24
     const scale = Math.max(
       0.05,
