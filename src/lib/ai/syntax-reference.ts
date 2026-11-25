@@ -397,6 +397,13 @@ A centered paragraph below.
 
 The closing tag is required.`)
 
+  // Width, PDFs, audience
+  sections.push(`## Full width, PDF embeds, audience gates
+
+- \`<fullwidth>…</fullwidth>\` breaks out of the page margins for edge-to-edge content (e.g. a row of \`<flex>\` boxes). \`<nobr>…</nobr>\` keeps a phrase on one line.
+- \`<pdf src="handout.pdf" height="600" />\` embeds an uploaded PDF in the browser's PDF viewer (filename resolved from the skript's files).
+- \`<onlyfor auth>…</onlyfor>\` shows content to signed-in viewers only; \`anon\` to signed-out viewers only (e.g. a sign-in hint); \`students\` to the page owner's students; \`class="3a"\` to one class (name or invite code). Others see a short locked notice, \`prompt="…"\` sets its text. A soft gate: the content is hidden in the browser, not kept secret; use \`<solution teacher>\` for material students must not get. \`<onlyfor print>\` / \`<onlyfor screen>\` select the medium instead (see Printing).`)
+
   // Flex layouts
   sections.push(`## Flex Layouts (\`<flex>\` / \`<flex-item>\`)
 
@@ -990,6 +997,8 @@ export function getCondensedSyntaxReference(): string {
 **Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\` — add \`nozoom="true"\` to suppress the fullscreen/zoom button (also works on \`<excali>\`).
 
 **Text alignment:** wrap content in \`<left>\`, \`<center>\`, or \`<right>\` — markdown parses inside with or without surrounding blank lines. Closing tag required.
+
+**Full width / PDF / audience:** \`<fullwidth>\` edge-to-edge content; \`<pdf src="handout.pdf" height="600" />\` embeds an uploaded PDF; \`<onlyfor auth|anon|students|class="3a" [prompt="…"]>\` shows content only to that audience (soft gate, hidden in the browser, not secret; use \`<solution teacher>\` for that).
 
 **Videos (uploaded):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`, layout \`width="50%" align="left" wrap\`.
 
