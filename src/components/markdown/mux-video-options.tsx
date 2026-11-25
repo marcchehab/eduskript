@@ -24,7 +24,7 @@ interface MuxVideoOptionsProps {
 }
 
 /**
- * Serialize a `<muxvideo>` tag. Valueless attributes are used for the flags —
+ * Serialize an `<eduvideo>` tag (rewrites a legacy `<muxvideo>` to the new name). Valueless attributes are used for the flags —
  * rehype-raw turns them into empty strings / booleans, which the component's
  * reader accepts (see markdown-components.tsx).
  */
@@ -47,7 +47,7 @@ export function buildMuxVideoTag(
   }
   if (flags.pin) attrs.push('pin')
   if (layout) attrs.push(...mediaLayoutAttrs(layout))
-  return `<muxvideo ${attrs.join(' ')} />`
+  return `<eduvideo ${attrs.join(' ')} />`
 }
 
 const OPTIONS: Array<{

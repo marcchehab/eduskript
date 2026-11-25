@@ -645,7 +645,7 @@ export function createMarkdownComponents(
     )
   }
 
-  // <muxvideo> (uploaded, self-hosted video) - passes files through
+  // <eduvideo> / legacy <muxvideo> (uploaded, self-hosted video) - passes files through
   function MuxVideoComponent({ ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const src = (props['src'] as string) || ''
     const alt = (props['alt'] as string) || ''
@@ -1059,6 +1059,10 @@ export function createMarkdownComponents(
       if (tikzRender) return <TikzServerFigure source={source} render={tikzRender} />
       return <TikzFigureClient source={source} skriptId={skriptId} preambleUrl={resolveFile(files, TIKZ_PREAMBLE_FILE)?.url} />
     },
+    'eduvideo': (props: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) => (
+      <PrintFallback label="Video"><MuxVideoComponent {...props} /></PrintFallback>
+    ),
+    // Legacy name of <eduvideo> (from when videos were hosted on Mux).
     'muxvideo': (props: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) => (
       <PrintFallback label="Video"><MuxVideoComponent {...props} /></PrintFallback>
     ),

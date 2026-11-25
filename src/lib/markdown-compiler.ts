@@ -96,7 +96,8 @@ export const sanitizeSchema = {
     'tab-item',
     'youtube-embed',
     'flag-icon', // :flag-ch: / :flag-en-gb: / :flag-de-ch: inline icon (remarkFlagIcon)
-    'muxvideo',
+    'eduvideo', // Uploaded video with playback options (mux-video.tsx)
+    'muxvideo', // Legacy name of <eduvideo>, kept so existing pages render
     'excalidraw-image',
     'question',
     'question-prompt', // Inserted by rehypeMarkdownChildren around a question's re-parsed prompt text
@@ -179,6 +180,7 @@ export const sanitizeSchema = {
     // autoplay/loop are known HTML media properties, so property-information
     // hands them over camelCased (autoPlay) and as booleans — allow both
     // spellings (cf. the bool() reader in markdown-components.tsx).
+    'eduvideo': ['src', 'alt', 'poster', 'pin', 'gif', 'autoplay', 'autoPlay', 'loop', 'width', 'align', 'wrap'],
     'muxvideo': ['src', 'alt', 'poster', 'pin', 'gif', 'autoplay', 'autoPlay', 'loop', 'width', 'align', 'wrap'],
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap', 'print-width', 'printWidth'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)

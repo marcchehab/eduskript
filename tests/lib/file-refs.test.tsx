@@ -92,6 +92,7 @@ async function renderedTarget(md: string, files: SkriptFilesData): Promise<strin
     // CodeEditor and MuxVideo need a browser runtime, so capture what they
     // receive and run the lookups their wrappers run.
     'code-editor': (props: Record<string, string>) => { db = props['data-db'] ?? props.dataDb; return null },
+    eduvideo: (props: { src: string }) => { video = props.src; return null },
     muxvideo: (props: { src: string }) => { video = props.src; return null },
   }
   const tree = (await compileMarkdown(md, { components: components as never, fileNames: skriptFileNames(files) })) as ReactNode

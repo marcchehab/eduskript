@@ -468,10 +468,10 @@ Reference uploaded video files (Videos panel) by name.
 The alt text is the caption. Playback options are attributes on the tag form (valueless):
 
 \`\`\`html
-<muxvideo src="geogebra-class.mp4" gif />
-<muxvideo src="intro.mp4" alt="Overview" autoplay loop />
-<muxvideo src="lecture.mp4" poster="cover.png" pin />
-<muxvideo src="lecture.mp4" width="50%" align="left" wrap />
+<eduvideo src="geogebra-class.mp4" gif />
+<eduvideo src="intro.mp4" alt="Overview" autoplay loop />
+<eduvideo src="lecture.mp4" poster="cover.png" pin />
+<eduvideo src="lecture.mp4" width="50%" align="left" wrap />
 \`\`\`
 
 **Attributes:** \`gif\` — play it like an animated GIF (muted autoplay, looping, no controls, not clickable; browsers only autoplay muted video); \`autoplay\` (muted), \`loop\`, \`pin\` (pins into a corner overlay when scrolled past), \`poster\` (filename or URL overriding the auto thumbnail), \`alt\` (caption). Layout like \`<excali>\`: \`width="50%"\` (of the column), \`align="left|center|right"\`, \`wrap\` (text flows around).
@@ -1000,7 +1000,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Full width / PDF / audience:** \`<fullwidth>\` edge-to-edge content; \`<pdf src="handout.pdf" height="600" />\` embeds an uploaded PDF; \`<onlyfor auth|anon|students|class="3a" [prompt="…"]>\` shows content only to that audience (soft gate, hidden in the browser, not secret; use \`<solution teacher>\` for that).
 
-**Videos (uploaded):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`, layout \`width="50%" align="left" wrap\`.
+**Videos (uploaded):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<eduvideo>\` (old pages may use the legacy name \`<muxvideo>\`, same attributes): \`<eduvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`, layout \`width="50%" align="left" wrap\`.
 
 **Pinned content:** \`<stickme [id="x"] [width="800px|50%"]>…</stickme>\` — docks wrapped content to the right margin while scrolling; \`width\` = default pinned width (reader resize overrides), default one third of the page.
 

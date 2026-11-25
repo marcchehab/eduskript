@@ -77,7 +77,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'ping', info: 'Interactive ping terminal', apply: '<ping />' },
   { label: 'leaderboard', info: 'List fed by plugins with share="…"', apply: '<leaderboard source="class" />' },
   { label: 'next-stage', info: 'One-way divider that hands in the previous stage and reveals the next', apply: '<next-stage label="" />', cursorOffset: 19 },
-  { label: 'muxvideo', info: 'Uploaded video with playback options (gif, autoplay, loop, pin, poster)', apply: '<muxvideo src="" />', cursorOffset: 15 },
+  { label: 'eduvideo', info: 'Uploaded video with playback options (gif, autoplay, loop, pin, poster)', apply: '<eduvideo src="" />', cursorOffset: 15 },
   { label: 'left', info: 'Left-align block content', apply: '<left>\n\n</left>' },
   { label: 'center', info: 'Center-align block content', apply: '<center>\n\n</center>' },
   { label: 'right', info: 'Right-align block content', apply: '<right>\n\n</right>' },
@@ -280,7 +280,7 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'confirm', info: 'Confirm modal body text' },
     { label: 'cancel', info: 'Cancel button text' },
   ],
-  'muxvideo': [
+  'eduvideo': [
     { label: 'src', info: 'Video filename' },
     { label: 'gif', info: 'Muted autoplay loop, GIF-style' },
     { label: 'autoplay', info: 'Autoplay (muted)' },
@@ -537,6 +537,7 @@ const SRC_FILE_EXTENSIONS: Record<string, string[]> = {
   'excali': ['.excalidraw'],
   'img': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif'],
   'pdf': ['.pdf'],
+  'eduvideo': ['.mp4', '.mov'],
   'muxvideo': ['.mp4', '.mov'],
 }
 

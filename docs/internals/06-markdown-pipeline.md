@@ -60,7 +60,7 @@ The markdown transformation follows this **exact plugin order** (critical for pr
 4. **`remarkMuxVideo`** (`src/lib/remark-plugins/mux-video.ts`)
    - AST-only: transforms `.mp4`/`.mov` references to uploaded-video components (self-hosted HLS on Infomaniak S3, CH)
    - The component resolves the `Video` row (poster, HLS URL, captions) from the skript's files at render time
-   - Creates a custom `<muxvideo>` element (historic name; provider-independent since 2026-10)
+   - Creates a custom `<eduvideo>` element (`<muxvideo>` is the legacy name, still rendered)
 
 5. **`remarkCodeEditor`** (`src/lib/remark-plugins/code-editor.ts`)
    - Converts code blocks with `editor` keyword to interactive editors
@@ -284,7 +284,7 @@ make them work here:
 
 ## Gizmo source rewrites (preview → markdown)
 
-Preview gizmos (resize/align on images, `<excali>`, `<muxvideo>`, YouTube,
+Preview gizmos (resize/align on images, `<excali>`, `<eduvideo>`, YouTube,
 `<molecule>`; YouTube start time) change the markdown by searching the source
 for the element's tag, not by a real source range.
 

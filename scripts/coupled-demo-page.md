@@ -49,14 +49,14 @@ Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 
 Tests that the pin handles a non-16:9 aspect (handle stays at the real corner).
 
-<muxvideo src="demo.mp4" alt="Uploaded (non-16:9)" pin="true" />
+<eduvideo src="demo.mp4" alt="Uploaded (non-16:9)" pin="true" />
 
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 
 ## 5) Uploaded video — 16:9
 
-<muxvideo src="wide.mp4" alt="Uploaded (16:9)" pin="true" />
+<eduvideo src="wide.mp4" alt="Uploaded (16:9)" pin="true" />
 
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.

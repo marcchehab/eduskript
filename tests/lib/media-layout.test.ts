@@ -54,10 +54,10 @@ describe('media layout serialization', () => {
       .toBe('<youtube id="abc" startTime="120" caption="Say &quot;hi&quot;" width="50%" />')
   })
 
-  it('keeps layout when <muxvideo> flags are rewritten', () => {
+  it('keeps layout when <eduvideo> flags are rewritten', () => {
     expect(buildMuxVideoTag('a.mp4', 'Cap', undefined, { ...noFlags, loop: true }, { width: 70, align: 'right', wrap: true }))
-      .toBe('<muxvideo src="a.mp4" alt="Cap" loop width="70%" align="right" wrap />')
-    expect(buildMuxVideoTag('a.mp4', undefined, undefined, noFlags)).toBe('<muxvideo src="a.mp4" />')
+      .toBe('<eduvideo src="a.mp4" alt="Cap" loop width="70%" align="right" wrap />')
+    expect(buildMuxVideoTag('a.mp4', undefined, undefined, noFlags)).toBe('<eduvideo src="a.mp4" />')
   })
 })
 
@@ -66,11 +66,11 @@ describe('layout attributes survive the compile pipeline', () => {
     return renderToStaticMarkup((await compileMarkdown(md)) as ReactNode)
   }
 
-  it('<muxvideo width align wrap>', async () => {
-    const out = await html('<muxvideo src="a.mp4" width="50%" align="left" wrap />')
-    expect(out).toMatch(/<muxvideo[^>]*width="50%"/)
-    expect(out).toMatch(/<muxvideo[^>]*align="left"/)
-    expect(out).toMatch(/<muxvideo[^>]*wrap=""/)
+  it.each(['eduvideo', 'muxvideo'])('<%s width align wrap> (muxvideo = legacy name)', async (tag) => {
+    const out = await html(`<${tag} src="a.mp4" width="50%" align="left" wrap />`)
+    expect(out).toMatch(new RegExp(`<${tag}[^>]*width="50%"`))
+    expect(out).toMatch(new RegExp(`<${tag}[^>]*align="left"`))
+    expect(out).toMatch(new RegExp(`<${tag}[^>]*wrap=""`))
   })
 
   it('<youtube width align wrap> → data-* on <youtube-embed>', async () => {

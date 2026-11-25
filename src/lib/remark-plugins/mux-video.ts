@@ -14,7 +14,7 @@ import { escapeHtmlAttr, fileKind, isLocalFileRef } from '@/lib/file-refs'
  *   ![](my-video.mp4 "thumbnail.jpg")   ← poster from a skript file (or absolute URL)
  *
  * The standard markdown image-title field doubles as the poster filename. Authors
- * can also write the HTML directly: <muxvideo src="x.mp4" poster="thumb.jpg" />.
+ * can also write the HTML directly: <eduvideo src="x.mp4" poster="thumb.jpg" /> (legacy name: <muxvideo>).
  */
 
 export function remarkMuxVideo() {
@@ -40,7 +40,7 @@ export function remarkMuxVideo() {
 
       const mutableNode = node as unknown as Record<string, unknown>
       mutableNode.type = 'html'
-      mutableNode.value = `<muxvideo ${attrs.join(' ')}></muxvideo>`
+      mutableNode.value = `<eduvideo ${attrs.join(' ')}></eduvideo>`
       delete mutableNode.url
       delete mutableNode.alt
       delete mutableNode.title

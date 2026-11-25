@@ -127,7 +127,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
   }, [])
 
   // Stable callback: rewrite a video's tag when the options toolbar toggles a
-  // flag. Matches an existing <muxvideo …src="x"…> tag, or the image shorthand
+  // flag. Matches an existing <eduvideo …src="x"…> (or legacy <muxvideo>) tag, or the image shorthand
   // `![caption](x.mp4)` — the shorthand is replaced by a full tag, since the
   // flags have no place in the bracket syntax.
   const stableOnMuxVideoChange = useCallback((src: string, newMarkdown: string, line?: number) => {
@@ -136,7 +136,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     if (!notify || !currentContent || !src) return
 
     const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const tagPattern = new RegExp(`<muxvideo[^>]*\\bsrc="${escapedSrc}"[^>]*/?>`)
+    const tagPattern = new RegExp(`<(?:eduvideo|muxvideo)[^>]*\\bsrc="${escapedSrc}"[^>]*/?>`)
     const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(${fileRefPattern(src)}\\)`)
 
     const newContent =

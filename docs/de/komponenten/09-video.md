@@ -43,7 +43,7 @@ Der Poster-Wert kann sein:
 Dasselbe in HTML:
 
 ```markdown
-<muxvideo src="lecture.mp4" poster="thumbnail.jpg" />
+<eduvideo src="lecture.mp4" poster="thumbnail.jpg" />
 ```
 
 Beide Syntaxen führen zum selben Player. Gibst du kein Poster an, wird das automatisch generierte Vorschaubild als Fallback verwendet.
@@ -74,7 +74,7 @@ Nützlich für kurze Demo-Loops im Seitenhintergrund, Intro-Animationen oder vis
 In der Editor-Vorschau ziehst du am rechten Rand eines Videos, um es zu verkleinern, und richtest es mit den Knöpfen oben rechts aus — derselbe Gizmo wie bei Bildern und Zeichnungen. Er schreibt das Layout in den Tag:
 
 ```html
-<muxvideo src="lecture.mp4" width="50%" align="left" wrap />
+<eduvideo src="lecture.mp4" width="50%" align="left" wrap />
 <youtube id="dQw4w9WgXcQ" width="60%" align="right" />
 ```
 
@@ -117,5 +117,6 @@ Video-Hosting ist in den bezahlten Plänen enthalten. Ein Video aus einem andere
 | Eigenes Poster aus Skript-Dateien | `![](filename.mp4 "thumbnail.jpg")` |
 | Eigenes Poster von URL | `![](filename.mp4 "https://example.com/thumb.jpg")` |
 | Autoplay + Loop (stummer Hintergrund) | `![autoplay loop](bg.mp4 "preview.jpg")` |
-| Direkte HTML-Form | `<muxvideo src="x.mp4" poster="thumb.jpg" />` |
-| Halbe Breite, links, Text fliesst herum | `<muxvideo src="x.mp4" width="50%" align="left" wrap />` |
+| Direkte HTML-Form | `<eduvideo src="x.mp4" poster="thumb.jpg" />` |
+| Halbe Breite, links, Text fliesst herum | `<eduvideo src="x.mp4" width="50%" align="left" wrap />` |
+| Alter Name (ältere Seiten) | `<muxvideo …>` funktioniert gleich wie `<eduvideo …>` |

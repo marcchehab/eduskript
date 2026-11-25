@@ -590,10 +590,11 @@ console.log("second")
       return tree
     }
 
-    it('transforms a basic ![](video.mp4) into a <muxvideo> element', async () => {
+    it('transforms a basic ![](video.mp4) into an <eduvideo> element', async () => {
       const tree = await runMux('![](lecture.mp4)')
       const html = findNode(tree, (n: any) => n.type === 'html')?.value as string | undefined
       expect(html).toBeDefined()
+      expect(html).toMatch(/^<eduvideo /)
       expect(getHtmlAttr(html!, 'src')).toBe('lecture.mp4')
       expect(html).not.toMatch(/poster=/)
     })

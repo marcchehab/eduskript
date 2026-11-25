@@ -167,7 +167,7 @@ LIMIT 5;
 | Automatisch bewertet | ` ```python-check for="..." ` | — |
 | Bild | `![alt](file.png)` | `<image src="file.png">` |
 | Excalidraw | `![alt](file.excalidraw)` | — |
-| Video | `![alt](file.mp4)` | `<muxvideo src="file.mp4">` |
+| Video | `![alt](file.mp4)` | `<eduvideo src="file.mp4">` |
 | Plugin | — | `<plugin src="owner/plugin">` |
 | PhET-Simulation | — | `<phet sim="projectile-motion" locale="de">` |
 | Quiz | — | `<question type="single">...<answer>` |

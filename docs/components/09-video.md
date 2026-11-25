@@ -44,7 +44,7 @@ The poster value can be:
 The same thing in HTML:
 
 ```markdown
-<muxvideo src="lecture.mp4" poster="thumbnail.jpg" />
+<eduvideo src="lecture.mp4" poster="thumbnail.jpg" />
 ```
 
 Both syntaxes converge on the same player. If you don't specify a poster, the auto-generated thumbnail is used as a fallback.
@@ -75,7 +75,7 @@ Useful for short demo loops in the page background, intro animations, or visual 
 In the editor preview, drag the right edge of a video to resize it, and use the align/wrap buttons in its top-right corner — the same gizmo as for images and drawings. It writes the layout into the tag:
 
 ```html
-<muxvideo src="lecture.mp4" width="50%" align="left" wrap />
+<eduvideo src="lecture.mp4" width="50%" align="left" wrap />
 <youtube id="dQw4w9WgXcQ" width="60%" align="right" />
 ```
 
@@ -118,5 +118,6 @@ Video hosting is included in paid plans. Importing a video from another skript (
 | Custom poster from skript files | `![](filename.mp4 "thumbnail.jpg")` |
 | Custom poster from URL | `![](filename.mp4 "https://example.com/thumb.jpg")` |
 | Autoplay + loop (silent background) | `![autoplay loop](bg.mp4 "preview.jpg")` |
-| Direct HTML form | `<muxvideo src="x.mp4" poster="thumb.jpg" />` |
-| Half width, left, text wraps around | `<muxvideo src="x.mp4" width="50%" align="left" wrap />` |
+| Direct HTML form | `<eduvideo src="x.mp4" poster="thumb.jpg" />` |
+| Half width, left, text wraps around | `<eduvideo src="x.mp4" width="50%" align="left" wrap />` |
+| Legacy name (older pages) | `<muxvideo …>` works the same as `<eduvideo …>` |

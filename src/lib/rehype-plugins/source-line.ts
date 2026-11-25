@@ -64,7 +64,8 @@ export function rehypeSourceLine(lineMap?: number[]) {
       'spacer', // <spacer> writing area
       'ai-feedback', // keys the editor's "Provide solution" gizmo
       'leaderboard', 'plugin', // key the editor's list gizmo
-      'muxvideo', // Video embeds
+      'eduvideo', // Video embeds
+      'muxvideo', // Legacy name of eduvideo
       'youtube-embed', // keys the YouTube resize/start-time gizmos
       'molecule', // keys the molecule resize gizmo
       'image', // Custom Image component
